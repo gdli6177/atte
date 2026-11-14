@@ -33,12 +33,12 @@ P2（BR-5、VI-3、VI-4）推进。没有源码的独立官网或商店条目不
 | settings-scope | 已拍板：只重排，不删除、不合并任何设置功能，统一显式保存行为。 |
 | positioning-publication | 已拍板：「注意力中心 · The attention layer」，不发布外部内容。 |
 | origin-publication | 已拍板：名字由来只在内部 docs 记录，不进入关于页、README 或对外物料。 |
+| logo-and-brand-color | 已拍板：品牌标识为 Six Vectors，使用墨 `#171A1E`、暖白 `#F3F1EA`、琥珀 `#F5A524`、图标底 `#14181B`；原像素吉祥物保留为角色插画。 |
 
 ## 仍开放的设计评审
 
 | 标记 | 当前状态 |
 | --- | --- |
-| TODO(atte-decision: logo-and-brand-color) | 三套 Logo 方向及现有像素吉祥物主色均未定稿；备选见 [Logo 备选](../design/logo-options/README.md)。 |
 | TODO(atte-decision: design-reference) | awesome-design-md 的 Linear、Raycast、Vercel 三份同页比较稿已备好；最终参考站点未选定，见 [基线对比](../design/baseline-compare/README.md)。 |
 
 ## Skill 文案 eval
@@ -64,11 +64,13 @@ CLI 的 `goal rework` 是保留的显式状态协议，不是交互按钮或命�
 
 ## 图标准备（BR-4）
 
-界面使用 `BrandMark`，应用、Dock、菜单栏、favicon 与打包器已切换到 `atte-*`
-挂点。提供 1024、512、256、128、64、32px PNG 与 ICNS，来源及 SHA-256
-记录在 `apps/desktop/assets/brand/atte-assets.json`；原图完整保留。
-本轮没有创造新图形，输出状态为 `baseline-preparation`。
-这满足本轮缩小后的资产准备范围，最终 logo 升级与“全新图形已验收”尚未完成。
+界面使用 `BrandMark`，应用、Dock、菜单栏、favicon 与打包器均切换到
+Six Vectors 的 `atte-*` 挂点。提供 1024、512、256、128、64、32px 应用图标 PNG、
+16–1024px ICNS、16/32px favicon 与深浅托盘图标；来源及 SHA-256 记录在
+`apps/desktop/assets/brand/atte-assets.json`。
+
+品牌标识与角色插画分工见[品牌总览](../brand/README.md)。原像素吉祥物完整保留，
+只用于首页、首启和管家卡片，不进入应用图标或菜单栏。
 
 ## 简约界面与 token（VI-1、VI-2）
 

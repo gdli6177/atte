@@ -659,7 +659,7 @@ function App() {
         </div>
         <div className="concierge">
           <div className="concierge-orb">
-            <BrandMark decorative />
+            <BrandMark variant="mascot" decorative />
             <i />
           </div>
           <strong>所有事，找管家。</strong>
@@ -772,7 +772,7 @@ function App() {
         )}
           {!workspace ? (
             <section className="welcome">
-              <BrandMark />
+              <BrandMark variant="mascot" />
               <span className="eyebrow">Atte · 注意力中心 · The attention layer</span>
               <h1>
                 把注意力留给重要的事。
@@ -820,7 +820,7 @@ function App() {
                   </p>
                 </div>
                 <div className="pixel-scene" aria-hidden="true">
-                  <BrandMark decorative />
+                  <BrandMark variant="mascot" decorative />
                 </div>
               </section>
               <section className="attention-section">

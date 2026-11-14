@@ -8,12 +8,14 @@ description: 注意力中心 · The attention layer；单列、留白、字阶�
 
 产品定位是「注意力中心 · The attention layer」。人做决定、验收和必要介入，
 管家协调并行 Agent。
-这是本轮已经落地的界面规范。最终品牌色、logo 和外部站点参考仍按
+这是本轮已经落地的界面规范。品牌标识已定稿为 Six Vectors；外部站点参考仍按
 [仍开放的设计评审](docs/product/atte-iteration.md#仍开放的设计评审) 审核。
 
 ## 颜色
 
-保留已有墨青与海沫青配色，不在本轮确定新品牌色。所有色值集中在
+界面继续使用已有墨青与海沫青语义色。品牌标识本身只使用墨 `#171A1E`、
+暖白 `#F3F1EA`、琥珀 `#F5A524` 与图标底 `#14181B`，规范见
+[Six Vectors](docs/brand/six-vectors.md)。界面色值集中在
 `apps/desktop/src/tokens.css`，页面只消费语义变量。
 
 | 语义 | Dark | Light |
@@ -111,6 +113,6 @@ token 分为 primitive、semantic、component 三层，包含颜色、字体、�
 本文件是当前实现的事实基线，尚未把任何外部站点选为最终参考。
 
 三套同页静态比较稿位于
-[设计基线对比](docs/design/baseline-compare/README.md)；Logo 的三个未定稿方向
-位于 [Logo 备选](docs/design/logo-options/README.md)。两者都只用于评审，
-不替换当前 `BrandMark`、应用图标或设计 token。
+[设计基线对比](docs/design/baseline-compare/README.md)。Logo 备选目录只保留
+为历史评审材料；当前 `BrandMark`、应用图标和 README 已使用定稿的
+[Six Vectors](docs/brand/six-vectors.md)。

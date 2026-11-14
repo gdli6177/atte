@@ -31,7 +31,7 @@ async function verifyDownloadedApp(appPath, label) {
   const iconResource = iconName.endsWith(".icns") ? iconName : `${iconName}.icns`;
   assert.deepEqual(
     await readFile(join(appPath, "Contents/Resources", iconResource)),
-    await readFile(join(repo, "apps/desktop/assets/brand/atte-icon-baseline.icns")),
+    await readFile(join(repo, "apps/desktop/assets/brand/atte-app-icon.icns")),
     `${label}: shipped application must use the current Dock icon`,
   );
   await exec("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath]);

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, Notification, session, shell, Tray } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, Tray } from "electron";
 import { existsSync, watch, type FSWatcher } from "node:fs";
 import { access, chmod, lstat, mkdir, readFile, readlink, realpath, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -99,6 +99,16 @@ let lastSnapshotSignature: string | undefined;
 let automaticCacheCleanupStarted = false;
 let cacheMaintenanceQueue: Promise<unknown> = Promise.resolve();
 const here = __dirname;
+function trayIcon() {
+  const variant = nativeTheme.shouldUseDarkColors ? "atte-tray-reversed" : "atte-tray",
+    image = nativeImage.createFromPath(join(here, "assets", `${variant}-16.png`));
+  image.addRepresentation({
+    scaleFactor: 2,
+    buffer: nativeImage.createFromPath(join(here, "assets", `${variant}-32.png`)).toPNG(),
+  });
+  image.setTemplateImage(false);
+  return image;
+}
 // Native window chrome needs a startup color before renderer CSS is available.
 // Keep this synchronized with the dark `--bg` design token and DESIGN.md.
 const WINDOW_BACKGROUND = "#0d1214";
@@ -1971,10 +1981,10 @@ app.whenReady().then(async () => {
   });
   // BrowserWindow.icon is ignored by the macOS Dock in development.
   // Packaged builds embed the same artwork as their CFBundleIconFile.
-  app.dock?.setIcon(nativeImage.createFromPath(join(here, "assets/atte-icon.png")));
+  app.dock?.setIcon(nativeImage.createFromPath(join(here, "assets/atte-app-icon.png")));
   process.env.PATH = (await tools.paths()).join(":");
   const width = Number(environmentValue(process.env, "TEST_WINDOW_WIDTH")), height = Number(environmentValue(process.env, "TEST_WINDOW_HEIGHT"));
-  window = new BrowserWindow({ width: Number.isFinite(width) && width >= 900 ? width : 1440, height: Number.isFinite(height) && height >= 700 ? height : 960, minWidth: 900, minHeight: 700, title: "Atte", titleBarStyle: "hiddenInset", backgroundColor: WINDOW_BACKGROUND, icon: join(here, "assets/atte-icon.png"), webPreferences: { preload: join(here, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  window = new BrowserWindow({ width: Number.isFinite(width) && width >= 900 ? width : 1440, height: Number.isFinite(height) && height >= 700 ? height : 960, minWidth: 900, minHeight: 700, title: "Atte", titleBarStyle: "hiddenInset", backgroundColor: WINDOW_BACKGROUND, icon: join(here, "assets/atte-app-icon.png"), webPreferences: { preload: join(here, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" })); window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   window.on("close", (event) => { if (!quitting) { event.preventDefault(); window.hide(); } });
@@ -2270,12 +2280,10 @@ app.whenReady().then(async () => {
     if (failure) throw new Error(`无法打开旧版备份：${failure}`);
   });
   ipcMain.handle("atte:show-cli", async (event) => { sender(event); shell.showItemInFolder((await cliStatus()).path); });
-  // Use the approved application artwork, with a Retina representation.
-  const traySource = nativeImage.createFromPath(join(here, "assets/atte-icon.png"));
-  const trayIcon = traySource.resize({ width: 18, height: 18, quality: "best" });
-  trayIcon.addRepresentation({ scaleFactor: 2, buffer: traySource.resize({ width: 36, height: 36, quality: "best" }).toPNG() });
-  trayIcon.setTemplateImage(false);
-  tray = new Tray(trayIcon); tray.setToolTip("Atte"); tray.setContextMenu(Menu.buildFromTemplate([{ label: "打开 Atte", click: () => { window.show(); window.focus(); } }, { type: "separator" }, { label: "退出", click: () => app.quit() }])); tray.on("click", () => { window.show(); window.focus(); });
+  tray = new Tray(trayIcon()); tray.setToolTip("Atte"); tray.setContextMenu(Menu.buildFromTemplate([{ label: "打开 Atte", click: () => { window.show(); window.focus(); } }, { type: "separator" }, { label: "退出", click: () => app.quit() }])); tray.on("click", () => { window.show(); window.focus(); });
+  nativeTheme.on("updated", () => {
+    if (tray && !tray.isDestroyed()) tray.setImage(trayIcon());
+  });
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "Atte", submenu: [{ role: "about" }, { type: "separator" }, { role: "hide" }, { role: "quit" }] }, { role: "editMenu" }, { role: "viewMenu" }]));
   await window.loadURL(rendererURL);
   if (environmentValue(process.env, "TEST_SKIP_HERDR_SETUP") !== "1")

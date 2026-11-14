@@ -1,47 +1,129 @@
 {
-  "status": "baseline-preparation",
+  "status": "final-six-vectors",
+  "palette": {
+    "ink": "#171A1E",
+    "warmWhite": "#F3F1EA",
+    "amber": "#F5A524",
+    "appIconBackground": "#14181B"
+  },
   "sources": [
     {
-      "path": "crewvane-mage.png",
-      "sha256": "c1d4a7d13c8f540bee3f43a1bfdfddc398258dddd08190b0214839e991161343"
+      "path": "atte-mark.svg",
+      "sha256": "9ac7a9372ae2726adb53bb40c7eb23c4d610273d60b79954bc0d6db307e2ec16"
     },
     {
-      "path": "crewvane-macos-source.png",
-      "sha256": "ad26687dbf811640a657f9304f52bfeeca9ab502d1442eb639343bbf8553f817"
+      "path": "atte-mark-reversed.svg",
+      "sha256": "c08e7cfcf472390b350e31a9d22f0749f4f40bbaf2a8ca79a4df3d8922642c7a"
+    },
+    {
+      "path": "atte-mark-mono.svg",
+      "sha256": "2066f3eacb6fb915c1a393514dc7cadec0591f9577ede8357d5b10ae42730804"
+    },
+    {
+      "path": "atte-mark-mono-reversed.svg",
+      "sha256": "82012a89bd4eba9aed6eb21e11a7d34810e86327cf9a731b4a32dd21999114ee"
+    },
+    {
+      "path": "atte-mark-small.svg",
+      "sha256": "285c1643b6a0c0deb51dedef0b5e561d2d7aff76761965d0e5bbfa83528d7bbb"
+    },
+    {
+      "path": "atte-mark-small-reversed.svg",
+      "sha256": "242ed594c860424d0213b602a7e01411f4095a0e2b37008f6356d7d85102c124"
+    },
+    {
+      "path": "atte-mark-16-source.png",
+      "sha256": "c46afb56f4eb255bfa20f2be9a218d8b70d88dc658182050ab5c5b3e00a009a2"
+    },
+    {
+      "path": "atte-mark-16-reversed-source.png",
+      "sha256": "77d7fb671ec9e5e1a1657980aac9e4493ba6b4fa1a81f94ed4204cab956f4ed0"
+    },
+    {
+      "path": "atte-mark-32-source.png",
+      "sha256": "bec81979f9d03bfa1de47ec88b8e82b0ad231b104abcf1895185b3ca6b10e96a"
+    },
+    {
+      "path": "atte-mark-32-reversed-source.png",
+      "sha256": "589b9946f35466cbdaa04bd7993ac49d29b59a776fd73b4313c316e158ff6026"
+    },
+    {
+      "path": "atte-app-icon.svg",
+      "sha256": "3d39159812abb42cf174d714b922144cb6bf974e92864bf11c3566f8fb189496"
+    },
+    {
+      "path": "atte-app-icon-source.png",
+      "sha256": "e2bff500ca31577e49680339cea2a892927f2d8cbccc3396d8a4a7c6b94fbd2c"
+    },
+    {
+      "path": "atte-wordmark.svg",
+      "sha256": "1a54751aa44a048b80ce45f7bb47f3dbb5de0dc6020e4a1b47338116674834fb"
+    },
+    {
+      "path": "atte-wordmark-reversed.svg",
+      "sha256": "1fae146421920c1c22f7a9f1c5bfd9f1c0337271ae69b4db437bb5156986b185"
+    },
+    {
+      "path": "atte-wordmark-stacked.svg",
+      "sha256": "9a13f67d4a5c88e64c7d75e61b3187f0aa8983206e2c4eaac8569735411b86bb"
+    },
+    {
+      "path": "atte-wordmark-stacked-reversed.svg",
+      "sha256": "8ddc3936c1bcfd6db9a11ee54832ba50de503f340d1e4bedeec5e0292f3860c5"
     }
   ],
   "files": [
     {
-      "path": "atte-mascot-baseline-512.png",
-      "sha256": "c1d4a7d13c8f540bee3f43a1bfdfddc398258dddd08190b0214839e991161343"
+      "path": "atte-app-icon-32.png",
+      "sha256": "bf88a9c66006c1692398d9b98554bdbd2689972344bddb9cb258793e3a9d7783"
     },
     {
-      "path": "atte-icon-baseline-32.png",
-      "sha256": "c553858765a841c4ee77c83cfcbe26a86c499e06885d09d4aca4ba239cf4bce4"
+      "path": "atte-app-icon-64.png",
+      "sha256": "91b94228205ceb50f38fd3b521d28b6b8085c92883eb085a99bf4b661ee86916"
     },
     {
-      "path": "atte-icon-baseline-64.png",
-      "sha256": "2037d65f7b9e3ae39decbd2a5ccb5d3288f51440d4fa7c21756f7b5a483d394c"
+      "path": "atte-app-icon-128.png",
+      "sha256": "7110a3f5c6ce5ae94480cebac4039f746ccdf0098ebd766f80493137a940bad3"
     },
     {
-      "path": "atte-icon-baseline-128.png",
-      "sha256": "1d1a3ea6758d8bfb0114443b2c3611f71c360a062cffc003bbbc08ae3d301a09"
+      "path": "atte-app-icon-256.png",
+      "sha256": "3dd8e490e2a756a46fb4c08e60365cb33756b5d84a3bab21e761fd6505941704"
     },
     {
-      "path": "atte-icon-baseline-256.png",
-      "sha256": "e6a30f0fe43a506f0fb51d67d7a19405b1b00a78a78a910add4510dab16829eb"
+      "path": "atte-app-icon-512.png",
+      "sha256": "fe7a66b78654893fcdf07daf5a0d6c5915a5764d2fb9e61b9cbe072b4514ac83"
     },
     {
-      "path": "atte-icon-baseline-512.png",
-      "sha256": "e17f6bd30388c346889f3c17c5e622b33f6ca5f4c9e4450b48d8045ab7420374"
+      "path": "atte-app-icon-1024.png",
+      "sha256": "e2bff500ca31577e49680339cea2a892927f2d8cbccc3396d8a4a7c6b94fbd2c"
     },
     {
-      "path": "atte-icon-baseline-1024.png",
-      "sha256": "628f9b31fe9b568b28858b7c51ebfed99b2fa4f5fc51c37e4c2e6459c30ded3e"
+      "path": "atte-app-icon.icns",
+      "sha256": "6e08b7269ae802724e56f84a3194711874155804fa5dd2b02a409c08be8f1ee8"
     },
     {
-      "path": "atte-icon-baseline.icns",
-      "sha256": "5854f31598063ab3ad9596d74c53c88bca25b9ba6823dd5abae0baa98eafdd80"
+      "path": "atte-favicon-16.png",
+      "sha256": "c46afb56f4eb255bfa20f2be9a218d8b70d88dc658182050ab5c5b3e00a009a2"
+    },
+    {
+      "path": "atte-tray-16.png",
+      "sha256": "c46afb56f4eb255bfa20f2be9a218d8b70d88dc658182050ab5c5b3e00a009a2"
+    },
+    {
+      "path": "atte-tray-reversed-16.png",
+      "sha256": "77d7fb671ec9e5e1a1657980aac9e4493ba6b4fa1a81f94ed4204cab956f4ed0"
+    },
+    {
+      "path": "atte-favicon-32.png",
+      "sha256": "bec81979f9d03bfa1de47ec88b8e82b0ad231b104abcf1895185b3ca6b10e96a"
+    },
+    {
+      "path": "atte-tray-32.png",
+      "sha256": "bec81979f9d03bfa1de47ec88b8e82b0ad231b104abcf1895185b3ca6b10e96a"
+    },
+    {
+      "path": "atte-tray-reversed-32.png",
+      "sha256": "589b9946f35466cbdaa04bd7993ac49d29b59a776fd73b4313c316e158ff6026"
     }
   ]
 }

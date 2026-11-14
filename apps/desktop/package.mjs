@@ -47,7 +47,7 @@ try {
   });
   const addonPackage = dirname(createRequire(join(nativePackage, "package.json")).resolve("node-addon-api/package.json"));
   await cp(addonPackage, join(stage, "node_modules/node-addon-api"), { recursive: true });
-  await cp(join(here, "assets/brand/atte-icon-baseline-1024.png"), join(stage, "dist/assets/atte-icon.png"));
+  await cp(join(here, "assets/brand/atte-app-icon-1024.png"), join(stage, "dist/assets/atte-app-icon.png"));
   const bundledSkills = join(stage, "atte-skills");
   await mkdir(bundledSkills, { recursive: true });
   await cp(join(here, "../../skills/atte"), join(bundledSkills, "atte"), { recursive: true });
@@ -79,7 +79,7 @@ try {
     appBundleId: "dev.atte.desktop",
     platform: "darwin",
     arch: "arm64",
-    icon: join(here, "assets/brand/atte-icon-baseline.icns"),
+    icon: join(here, "assets/brand/atte-app-icon.icns"),
     asar: { unpack: "{**/dist/cli/**,**/node_modules/node-pty/**}" },
     extraResource: [cliNode, join(here, "herdr-plugin"), bundledSkills, herdrBinary],
     ignore: [/^\/cli-node$/, /^\/dist\/.*\.map$/],

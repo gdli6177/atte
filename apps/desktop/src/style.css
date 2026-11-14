@@ -95,6 +95,12 @@ button svg { vertical-align: middle; }
 .sidebar { position: sticky; top: 0; z-index: 4; display: flex; flex-direction: column; height: 100vh; padding: var(--space-6) var(--space-4) var(--space-4); background: var(--sidebar); border-right: var(--size-1) solid var(--line); }
 .brand { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-2); height: var(--size-44); -webkit-app-region: drag; }
 .brand img { width: var(--size-42); height: var(--size-34); object-fit: contain; filter: none; }
+.brand .brand-mark img { width: var(--size-34); height: var(--size-34); }
+.brand-mark { display: inline-grid; flex: none; place-items: center; }
+.brand-mark img { grid-area: 1 / 1; }
+.brand-mark-on-dark { display: none; }
+:root[data-theme="dark"] .brand-mark-on-dark { display: block; }
+:root[data-theme="dark"] .brand-mark-on-light { display: none; }
 .brand strong { display: block; font-size: var(--fs-title); font-weight: var(--weight-semibold); letter-spacing: calc(-1 * var(--size-_65)); }
 .brand span { display: block; margin-top: var(--size-2); color: var(--muted); font-size: var(--fs-caption); letter-spacing: var(--size-3); }
 .workspace-switch { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--size-58); margin-top: var(--space-6); padding: var(--space-2); border: var(--size-1) solid var(--line); border-radius: var(--r-md); text-align: left; background: color-mix(in srgb, var(--surface) 34%, transparent); }
