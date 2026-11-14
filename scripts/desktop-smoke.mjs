@@ -156,6 +156,8 @@ const app = await electron.launch({
     HOME: home,
     XDG_CONFIG_HOME: join(home, ".config"),
     XDG_STATE_HOME: join(home, ".local/state"),
+    ATTE_HERDR_SESSION: "atte-desktop-smoke",
+    CREWVANE_HERDR_SESSION: "atte-desktop-smoke",
     PATH: "/usr/bin:/bin",
   },
   timeout: 60_000,
@@ -497,9 +499,14 @@ try {
   await page.screenshot({ path: join(home, "webhook-dark.png"), animations: "disabled" });
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.getByRole("button", { name: "设置", exact: true }).click();
-  await page.getByText(/herdr session attach atte-/).waitFor();
+  await page.getByText("herdr session attach atte-desktop-smoke", { exact: true }).waitFor()
+    .catch(async error => {
+      throw new Error(`${error.message}\nSettings: ${await page.locator(".settings").innerText()}\n` +
+        `Herdr status: ${JSON.stringify(await page.evaluate(() => window.atte.herdrStatus()))}`);
+    });
   const externalHerdr = page.getByRole("group", { name: "在外部终端打开同一 Herdr 会话" });
-  const attachCommand = await externalHerdr.locator("code").filter({ hasText: "herdr session attach atte-" }).innerText();
+  const attachCommand = await externalHerdr.locator("code")
+    .filter({ hasText: "herdr session attach atte-desktop-smoke" }).innerText();
   await externalHerdr.getByRole("button", { name: "复制外部终端 attach 命令", exact: true }).click();
   assert.equal(await page.evaluate(() => window.atte.readClipboardText()), attachCommand);
   await externalHerdr.getByRole("button", { name: "复制外部终端 attach 命令", exact: true }).getByText("已复制").waitFor();
@@ -614,7 +621,9 @@ try {
     "auto",
   );
   await page.screenshot({ path: join(home, "settings-scrolled-fixed-topbar-dark.png"), animations: "disabled" });
-  await page.getByText(new RegExp(`Atte ${appVersion.replaceAll(".", "\\.")} · 一位管家`)).waitFor();
+  await page.getByText(new RegExp(
+    `Atte ${appVersion.replaceAll(".", "\\.")} · 注意力中心 · The attention layer`,
+  )).waitFor();
   await page.getByRole("button", { name: "浅色模式" }).click();
   await page.getByRole("button", { name: "注意力", exact: true }).click();
   const riskGoal = await page.evaluate(() => window.atte.command({
