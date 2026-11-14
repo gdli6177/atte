@@ -31,7 +31,7 @@ export interface SkillPackManifest {
   name: string;
   description: string;
   version: string;
-  minimumCrewvane: string;
+  minimumAtte: string;
   kind: "process";
   roles: LocalSkillRole[];
   entry: string;
@@ -793,7 +793,7 @@ type WorkspaceCommand =
   | { type: "bot.binding.revoke"; botId: string; actor: string }
   | {
       type: "bot.request";
-      schema: "crewvane.bot.v1";
+      schema: "atte.bot.v1";
       requestId: string;
       operation: BotOperation;
       botId: string;
@@ -832,7 +832,7 @@ type WorkspaceCommand =
 
 // Optimistic guards bind a reply to the exact question and human response.
 // They are checked under the same lock as the state change.
-export type CrewvaneCommand = WorkspaceCommand & {
+export type AtteCommand = WorkspaceCommand & {
   attentionId?: string;
   sceneReplyId?: string;
   requestId?: string;

@@ -6,6 +6,7 @@ import type { ManagedSessionContext } from "../../core/src/index.js";
 import { atomicJSON, childPath, privateDirectory, readJSON, record } from "./io.js";
 import { SessionError } from "./contracts.js";
 import { localProcesses } from "./process.js";
+import { environmentValue } from "../../core/src/index.js";
 
 export interface RecoveryRequest {
   context: ManagedSessionContext;
@@ -25,7 +26,10 @@ export class SessionRecoveryChannel {
     this.directory = join(directory, "recovery", randomUUID());
   }
   get environment() {
-    return { CREWVANE_RECOVERY_DIRECTORY: this.directory, CREWVANE_RECOVERY_TOKEN: this.token };
+    return {
+      ATTE_RECOVERY_DIRECTORY: this.directory, ATTE_RECOVERY_TOKEN: this.token,
+      CREWVANE_RECOVERY_DIRECTORY: this.directory, CREWVANE_RECOVERY_TOKEN: this.token,
+    };
   }
   async start() {
     await privateDirectory(this.directory);
@@ -73,7 +77,8 @@ export class SessionRecoveryChannel {
 
 export async function requestSessionRecovery(environment: NodeJS.ProcessEnv, request: RecoveryRequest,
   timeoutMs = 75_000): Promise<unknown> {
-  const directory = environment.CREWVANE_RECOVERY_DIRECTORY, token = environment.CREWVANE_RECOVERY_TOKEN;
+  const directory = environmentValue(environment, "RECOVERY_DIRECTORY"),
+    token = environmentValue(environment, "RECOVERY_TOKEN");
   if (!directory || !token) throw new SessionError("backend_switch_in_progress", "普通调用不能在交接期间启动或投递现场。");
   const info = await lstat(directory);
   if (!info.isDirectory() || info.isSymbolicLink() || info.mode & 0o077 ||

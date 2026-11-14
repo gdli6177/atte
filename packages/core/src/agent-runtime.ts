@@ -8,6 +8,8 @@ import type {
   AgentRuntimeEventType,
   AgentRuntimeText,
 } from "./types.js";
+import { workspaceDataDirectory } from "./compatibility.js";
+import { prepareWorkspaceState } from "./state-migration.js";
 
 export const AGENT_RUNTIME_TEXT_LIMIT = 12_000;
 export const AGENT_HOOK_CONNECT_TIMEOUT_MS = 500;
@@ -17,7 +19,7 @@ export const AGENT_HOOK_SPOOL_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
 export function agentReceiptMarker(attemptId: string, turnId: string) {
   const digest = createHash("sha256")
     .update(`${attemptId}:${turnId}`).digest("hex").slice(0, 24);
-  return `[CREWVANE_RECEIPT:${digest}]`;
+  return `[ATTE_RECEIPT:${digest}]`;
 }
 
 export function agentRuntimeSocketPath(workspace: string) {
@@ -28,7 +30,7 @@ export function agentRuntimeSocketPath(workspace: string) {
     .update(resolve(workspace))
     .digest("hex")
     .slice(0, 24);
-  return join(tmpdir(), `crewvane-${owner}`, `${digest}.sock`);
+  return join(tmpdir(), `atte-${owner}`, `${digest}.sock`);
 }
 
 const adapters = new Set<AgentRuntimeAdapterId>([
@@ -278,7 +280,8 @@ export function agentRuntimeCapabilities(
 export async function nextAgentRuntimeSequence(root: string, attemptId: string) {
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(attemptId))
     throw new Error("无效的 Agent attempt ID");
-  const directory = join(root, ".crewvane", "runtime");
+  const { directory: stateDirectory } = await prepareWorkspaceState(root);
+  const directory = join(stateDirectory, "runtime");
   await mkdir(directory, { recursive: true, mode: 0o700 });
   return withLock(join(directory, "sequence-locks"), async () => {
     const path = join(directory, `${attemptId}.sequence`);

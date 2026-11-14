@@ -12,7 +12,7 @@ import type {
   AgentRuntimeText,
   BotBinding,
   BotOperation,
-  CrewvaneCommand,
+  AtteCommand,
   Delivery,
   DeliveryCandidate,
   Evidence,
@@ -27,6 +27,7 @@ import type {
   WorkflowStep,
 } from "./types.js";
 import { SkillRegistry } from "./skill-registry.js";
+import { environmentValue } from "./compatibility.js";
 import { sameScene, validatedScene, type ManagedSessionContext } from "./session-types.js";
 import { agentReceiptMarker, isAgentRuntimeAdapter } from "./agent-runtime.js";
 import {
@@ -399,7 +400,7 @@ export class WorkspaceService {
   async read() {
     return this.store.read();
   }
-  private async removeGoalAttachment(command: Extract<CrewvaneCommand, { type: "goal.attachment.remove" }>) {
+  private async removeGoalAttachment(command: Extract<AtteCommand, { type: "goal.attachment.remove" }>) {
     const attachmentId = id(command.attachmentId),
       actor = command.actor?.trim() ? text(command.actor, "操作者", 120) : "你",
       result = await this.store.update(command.type, async state => {
@@ -425,7 +426,7 @@ export class WorkspaceService {
     await removeAttachmentFiles(this.root, [result.attachment]);
     return result.goal;
   }
-  private async deleteEndedGoal(command: Extract<CrewvaneCommand, { type: "goal.delete" }>) {
+  private async deleteEndedGoal(command: Extract<AtteCommand, { type: "goal.delete" }>) {
     const result = await this.store.update(command.type, state => {
       const goalId = id(command.goalId),
         index = state.goals.findIndex(goal => goal.id === goalId),
@@ -441,7 +442,7 @@ export class WorkspaceService {
     await removeAttachmentFiles(this.root, result.attachments ?? []);
     return { deleted: result.id };
   }
-  private async cleanupAttachments(command: Extract<CrewvaneCommand, { type: "attachments.cleanup" }>) {
+  private async cleanupAttachments(command: Extract<AtteCommand, { type: "attachments.cleanup" }>) {
     const retentionDays = command.retentionDays ?? 30;
     if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 3650)
       throw new Error("附件保留天数必须是 1 到 3650 的整数");
@@ -474,9 +475,11 @@ export class WorkspaceService {
     return { removed: removed.length, orphans };
   }
   private async executeBotRequest(
-    command: Extract<CrewvaneCommand, { type: "bot.request" }>,
+    command: Extract<AtteCommand, { type: "bot.request" }>,
   ) {
-    if (command.schema !== "crewvane.bot.v1")
+    if ((command.schema as string) === "crewvane.bot.v1")
+      command = { ...command, schema: "atte.bot.v1" };
+    if (command.schema !== "atte.bot.v1")
       throw new Error("Bot 协议版本不受支持");
     const botId = id(command.botId),
       requestId = text(command.requestId, "Bot 请求 ID", 200),
@@ -518,7 +521,7 @@ export class WorkspaceService {
     });
     if (reservation.duplicate) {
       return {
-        schema: "crewvane.bot.v1",
+        schema: "atte.bot.v1",
         requestId,
         operation,
         duplicate: true,
@@ -578,7 +581,7 @@ export class WorkspaceService {
             type: "goal.boundary",
             goalId,
             change: data.change as Extract<
-              CrewvaneCommand,
+              AtteCommand,
               { type: "goal.boundary" }
             >["change"],
             actor: `Bot · ${binding.name}`,
@@ -591,7 +594,7 @@ export class WorkspaceService {
             type: "goal.review",
             goalId,
             delivery: delivery as Extract<
-              CrewvaneCommand,
+              AtteCommand,
               { type: "goal.review" }
             >["delivery"],
             actor: `Bot · ${binding.name}`,
@@ -607,7 +610,7 @@ export class WorkspaceService {
         return current;
       });
       return {
-        schema: "crewvane.bot.v1",
+        schema: "atte.bot.v1",
         requestId,
         operation,
         duplicate: false,
@@ -626,7 +629,7 @@ export class WorkspaceService {
       throw error;
     }
   }
-  async execute(command: CrewvaneCommand): Promise<unknown> {
+  async execute(command: AtteCommand): Promise<unknown> {
     if (
       !command ||
       typeof command !== "object" ||
@@ -967,7 +970,7 @@ export class WorkspaceService {
           state.backendEpoch = binding.epoch;
           if (state.concierge.scene)
             state.concierge.legacyScene = undefined;
-          state.concierge = { session: "crewvane", status: "not_ready" };
+          state.concierge = { session: "atte", status: "not_ready" };
           for (const item of state.goals) {
             const handoff = command.handoffs[item.id];
             if (handoff) item.backendHandoff = structuredClone(handoff);
@@ -1960,7 +1963,8 @@ export class WorkspaceService {
             throw new Error("缺少委托摘要，不能提交自主复核");
           const delivery = item.delivery,
             reviewer = text(
-              command.reviewer || command.actor || process.env.CREWVANE_AGENT_NAME,
+              command.reviewer || command.actor ||
+                environmentValue(process.env, "AGENT_NAME"),
               "复核人",
               120,
             );
@@ -3227,7 +3231,7 @@ export class WorkspaceService {
             // Legacy Herdr presence writers must not erase the neutral launch
             // identity. They update observations, not ownership.
             ...state.concierge,
-            session: reference?.session ?? "crewvane",
+            session: reference?.session ?? "atte",
             ...(reference?.workspaceId === undefined ? {} : { workspaceId: reference.workspaceId }),
             ...(reference?.tabId === undefined ? {} : { tabId: reference.tabId }),
             ...(reference?.paneId === undefined ? {} : { paneId: reference.paneId }),

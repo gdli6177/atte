@@ -2,9 +2,10 @@ import { lstat, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { atomicJSON, readJSON, record } from "./io.js";
 import { SessionRecoveryChannel, requestSessionRecovery, type RecoveryRequest } from "./recovery-channel.js";
+import { workspaceDataDirectory } from "../../core/src/index.js";
 
 function descriptorPath(workspace: string) {
-  return join(workspace, ".crewvane", "runtime", "session-host.json");
+  return join(workspaceDataDirectory(workspace), "runtime", "session-host.json");
 }
 
 /** Discover the current desktop on every call, including after an app restart.
@@ -16,8 +17,9 @@ export async function publishSessionHost(workspace: string, channel: SessionReco
 export async function unpublishSessionHost(workspace: string, channel: SessionRecoveryChannel) {
   const path = descriptorPath(workspace);
   const current = await readJSON(path).catch(() => undefined);
-  if (record(current) && current.CREWVANE_RECOVERY_DIRECTORY === channel.directory &&
-    current.CREWVANE_RECOVERY_TOKEN === channel.token)
+  if (record(current) &&
+    (current.ATTE_RECOVERY_DIRECTORY ?? current.CREWVANE_RECOVERY_DIRECTORY) === channel.directory &&
+    (current.ATTE_RECOVERY_TOKEN ?? current.CREWVANE_RECOVERY_TOKEN) === channel.token)
     await rm(path, { force: true });
 }
 
@@ -34,12 +36,13 @@ Promise<{ handled: false } | { handled: true; result: unknown }> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { handled: false };
     throw error;
   }
-  if (!record(value) || value.version !== 1 || typeof value.CREWVANE_RECOVERY_DIRECTORY !== "string" ||
-    typeof value.CREWVANE_RECOVERY_TOKEN !== "string")
+  const directory = record(value) ? value.ATTE_RECOVERY_DIRECTORY ?? value.CREWVANE_RECOVERY_DIRECTORY : undefined;
+  const token = record(value) ? value.ATTE_RECOVERY_TOKEN ?? value.CREWVANE_RECOVERY_TOKEN : undefined;
+  if (!record(value) || value.version !== 1 || typeof directory !== "string" || typeof token !== "string")
     throw new Error("会话 Host 描述文件损坏；请重新打开 Atte。");
   const result = await requestSessionRecovery({
-    CREWVANE_RECOVERY_DIRECTORY: value.CREWVANE_RECOVERY_DIRECTORY,
-    CREWVANE_RECOVERY_TOKEN: value.CREWVANE_RECOVERY_TOKEN,
+    ATTE_RECOVERY_DIRECTORY: directory,
+    ATTE_RECOVERY_TOKEN: token,
   }, request);
   return { handled: true, result };
 }

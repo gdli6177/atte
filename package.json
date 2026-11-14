@@ -1,18 +1,18 @@
 {
-  "name": "crewvane",
+  "name": "atte",
   "version": "0.11.0",
   "description": "Atte — 注意力中心",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "crewvane": "./cli/bin/crewvane.js"
+    "atte": "./cli/bin/atte.js"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gdli6177/crewvane.git"
+    "url": "git+https://github.com/gdli6177/atte.git"
   },
   "scripts": {
-    "test": "pnpm --dir cli test && pnpm --filter @crewvane/core test && pnpm --filter @crewvane/sessions test && pnpm --filter @crewvane/desktop test",
+    "test": "pnpm --dir cli test && pnpm --filter @atte/core test && pnpm --filter @atte/sessions test && pnpm --filter @atte/desktop test",
     "typecheck": "pnpm -r typecheck",
     "desktop:dev": "pnpm --dir apps/desktop dev",
     "desktop:build": "pnpm --dir apps/desktop build",

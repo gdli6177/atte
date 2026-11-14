@@ -47,7 +47,7 @@ export const initialState = (recovery?: WorkspaceRecovery): WorkspaceState => ({
   decisions: [],
   autonomy: defaultWorkspaceAutonomy(),
   ...(recovery ? { recovery } : {}),
-  concierge: { session: "crewvane", status: "not_ready" },
+  concierge: { session: "atte", status: "not_ready" },
 });
 export const goalKind = (goal: Goal): GoalKind => goal.kind ?? "delivery";
 export const goalRevision = (goal: Goal) => goal.revision ?? 1;
