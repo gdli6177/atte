@@ -1923,6 +1923,11 @@ app.whenReady().then(async () => {
     ["crewvane", "crewvane-local-pack-author"],
   );
   app.setName("Atte");
+  app.setAboutPanelOptions({
+    applicationName: "Atte",
+    applicationVersion: app.getVersion(),
+    copyright: "注意力中心",
+  });
   // BrowserWindow.icon is ignored by the macOS Dock in development.
   // Packaged builds embed the same artwork as their CFBundleIconFile.
   app.dock?.setIcon(nativeImage.createFromPath(join(here, "assets/crewvane-icon.png")));

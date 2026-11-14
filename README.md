@@ -4,7 +4,7 @@
 
 # Atte
 
-**The attention layer for parallel AI work.**
+**注意力中心**
 
 One workspace. Many projects. One concierge. Only what needs you reaches you.
 

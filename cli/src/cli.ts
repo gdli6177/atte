@@ -52,7 +52,7 @@ async function managedRuntime(workspace: string, managedContext: ReturnType<type
     }),
   });
 }
-const usage = `Atte — 把所有事整理成清晰的下一步
+const usage = `Atte — 注意力中心
 
 人的消息入口（保存原话，不从文本推断批准或完成）：
   crewvane status [--json]

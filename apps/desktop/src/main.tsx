@@ -539,7 +539,7 @@ function App() {
           <img src={pixelMark} alt="Atte" />
           <div>
             <strong>Atte</strong>
-            <span>协 航</span>
+            <span>注意力中心</span>
           </div>
         </div>
         <button
@@ -769,14 +769,12 @@ function App() {
           {!workspace ? (
             <section className="welcome">
               <img src={pixelMark} alt="Atte" />
-              <span className="eyebrow">YOUR MIND, CLEARER</span>
+              <span className="eyebrow">Atte · 注意力中心</span>
               <h1>
-                把事情放下，
-                <br />
-                把方向留住。
+                把注意力留给重要的事。
               </h1>
               <p>
-                一位管家，整理所有项目与个人事项。
+                人只做拍板，Agent 并行推进。
                 <br />
                 只有真正需要你的时刻，才打扰你。
               </p>
@@ -1740,7 +1738,7 @@ function Settings({
     <div className="content settings">
       <section className="intro">
         <div>
-          <span className="eyebrow">YOUR MIND, CLEARER</span>
+          <span className="eyebrow">Atte · 注意力中心</span>
           <h1>只设置必要的。</h1>
           <p>选择真实工作现场，保留你已有的终端、CLI、模型与工作方式。</p>
         </div>
@@ -2022,8 +2020,14 @@ function Settings({
         </SettingsSection>
           </div>
         </section>
+        <SettingsSection icon={<Bot />} title="关于 Atte" description="注意力中心">
+          <div className="settings-facts">
+            <p>人只做拍板，Agent 并行推进。管家把决定、验收和需要介入的事项带到你面前。</p>
+            <p>当前版本：{version}</p>
+          </div>
+        </SettingsSection>
         <p className="settings-foot">
-          Atte {version} · 一位管家 · {state.projects.length} 个项目 ·{" "}
+          Atte {version} · 注意力中心 · {state.projects.length} 个项目 ·{" "}
           {state.goals.length} 个目标
         </p>
       </div>

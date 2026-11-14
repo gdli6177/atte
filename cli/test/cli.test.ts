@@ -56,7 +56,7 @@ test("the executable presents Atte while keeping the public crewvane command", a
     { cwd: new URL("../../", import.meta.url), timeout: 30_000 },
   );
   assert.equal(stderr, "");
-  assert.match(stdout, /^Atte —/);
+  assert.match(stdout, /^Atte — 注意力中心/);
   assert.match(stdout, /crewvane goal message ID --text TEXT/);
   assert.doesNotMatch(stdout, /Crewvane/);
 });

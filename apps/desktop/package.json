@@ -1,7 +1,7 @@
 {
   "name": "@crewvane/desktop",
   "version": "0.11.0",
-  "description": "Atte",
+  "description": "Atte — 注意力中心",
   "private": true,
   "type": "module",
   "main": "dist/main.cjs",
