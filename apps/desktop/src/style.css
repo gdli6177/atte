@@ -653,6 +653,13 @@ h1 em { color: var(--accent); font-style: normal; }
 @keyframes ui-loading-spin { to { transform: rotate(360deg); } }
 
 .settings-groups { display: grid; gap: var(--space-10); }
+.settings-navigation { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: var(--space-2); padding-block: var(--space-3); border-bottom: var(--size-1) solid var(--line); background: var(--bg); }
+.settings-navigation a { padding: var(--space-2) var(--space-3); border-radius: var(--r-sm); color: var(--secondary); font-size: var(--fs-meta); text-decoration: none; }
+.settings-navigation a:hover, .settings-navigation a:focus-visible { color: var(--accent); background: var(--accent-soft); }
+.settings-save-hint { margin-block: var(--space-4) var(--space-8); color: var(--secondary); font-size: var(--fs-meta); line-height: var(--leading-body); }
+.settings-group { scroll-margin-top: calc(var(--topbar-height) + var(--space-4)); }
+.settings-group:focus-visible { outline: var(--size-2) solid var(--accent); outline-offset: var(--space-2); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 .settings-group { display: grid; gap: var(--space-4); }
 .settings-group__head { display: flex; align-items: flex-start; gap: var(--space-3); padding: 0 var(--size-2); }
 .settings-group__head > span { display: inline-grid; flex: 0 0 auto; width: var(--size-27); height: var(--size-27); margin-top: var(--size-1); place-items: center; border: var(--size-1) solid color-mix(in srgb, var(--accent) 22%, var(--line)); border-radius: var(--r-sm); color: var(--accent); background: var(--accent-soft); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; font-weight: var(--weight-bold); }

@@ -201,6 +201,8 @@
     --lh-hero: 56px;
     --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
     --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
+    --font-display: var(--font-sans);
+    --focus: var(--accent);
     --overlay-backdrop: var(--palette-scrim);
     --terminal-bg: var(--palette-terminal-bg);
     --terminal-text: var(--palette-terminal-text);

@@ -20,6 +20,7 @@
     "desktop:dist": "pnpm --dir apps/desktop dist",
     "test:installers": "node scripts/installer-smoke.mjs",
     "test:desktop": "tsx scripts/desktop-smoke.mjs",
+    "test:atte-ui": "tsx scripts/atte-ui-smoke.mjs",
     "test:methods": "node scripts/method-library-smoke.mjs",
     "test:terminal": "node scripts/herdr-terminal-smoke.mjs",
     "test:onboarding": "tsx scripts/onboarding-smoke.mjs",

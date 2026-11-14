@@ -122,6 +122,30 @@ export function LoadingState({
   );
 }
 
+export function SettingsGroup({
+  id,
+  title,
+  description,
+  children,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section id={id} tabIndex={-1} className="settings-group" aria-labelledby={`${id}-heading`}>
+      <header className="settings-group__head">
+        <div>
+          <h2 id={`${id}-heading`}>{title}</h2>
+          <p>{description}</p>
+        </div>
+      </header>
+      <div className="ui-settings-grid">{children}</div>
+    </section>
+  );
+}
+
 export function SettingsSection({
   icon,
   title,
