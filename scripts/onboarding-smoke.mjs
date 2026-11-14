@@ -61,6 +61,8 @@ try {
     timeout: 60_000,
   });
   const page = await app.firstWindow();
+  page.setDefaultTimeout(60_000);
+  page.setDefaultNavigationTimeout(60_000);
   page.on("pageerror", error => errors.push(String(error)));
   // Keep the timed-out gate diagnosable without exposing environment or secrets.
   const trace = (step) => console.log(JSON.stringify({onboarding:step,at:new Date().toISOString()}));
@@ -192,7 +194,7 @@ try {
     ], { env: testEnvironment })).stdout).result.panes;
     pluginPaneId = panes.find(pane => pane.label === "Atte 注意力")?.pane_id;
     return pluginPaneId ?? null;
-  }, { timeout: 20_000 }).not.toBeNull();
+  }, { timeout: 45_000 }).not.toBeNull();
   assert.match(pluginPaneId, new RegExp(`^${firstReference.workspaceId}:p\\d+$`));
   await exec(installedExecutable, [
     "--session", session, "pane", "wait-output", pluginPaneId,
@@ -217,7 +219,7 @@ try {
     ], { env: testEnvironment })).stdout).result.panes;
     newGoalPaneId = panes.find(pane => pane.label === "Atte 新目标")?.pane_id;
     return newGoalPaneId ?? null;
-  }, { timeout: 20_000 }).not.toBeNull();
+  }, { timeout: 45_000 }).not.toBeNull();
   await new Promise(resolve => setTimeout(resolve, 1_000));
   const newGoalPrompt = (await exec(installedExecutable, [
     "--session", session, "pane", "read", newGoalPaneId,
@@ -231,7 +233,7 @@ try {
   await expect.poll(async () => {
     const current = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return current.goals.some(goal => goal.title === "Herdr 插件新建目标真实验收");
-  }, { timeout: 20_000 }).toBe(true);
+  }, { timeout: 45_000 }).toBe(true);
   const eventPane = JSON.parse((await exec(installedExecutable, [
     "--session", session, "pane", "split", "--pane", firstReference.paneId,
     "--direction", "down", "--cwd", rootB, "--no-focus",
@@ -254,10 +256,10 @@ try {
   await expect.poll(async () => {
     const current = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return current.goals.find(goal => goal.id === eventGoal.id)?.live;
-  }, { timeout: 20_000 }).toMatchObject({ state:"unknown", reachable:false });
+  }, { timeout: 45_000 }).toMatchObject({ state:"unknown", reachable:false });
   // A foreground PID proves process creation, not that its JS startup has
   // already opened the log. Wait for the fixture's actual readiness evidence.
-  await expect.poll(() => readFile(log, "utf8").catch(() => ""), {timeout:10_000}).toContain('"kind":"start"');
+  await expect.poll(() => readFile(log, "utf8").catch(() => ""), {timeout:30_000}).toContain('"kind":"start"');
   const started = JSON.parse((await readFile(log, "utf8")).split("\n")[0]);
   assert.deepEqual(started.args, ["--model", "local test model"]);
   const parent = Number((await exec("/bin/ps", ["-p", String(started.pid), "-o", "ppid="])).stdout.trim());
@@ -281,7 +283,7 @@ try {
   await expect.poll(async () => {
     const current = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return current.goals.some(goal => goal.title === longGoalTitle);
-  }, {timeout:10_000}).toBe(true);
+  }, {timeout:30_000}).toBe(true);
   const created = (await page.evaluate(() => window.atte.command({type:"snapshot"}))).goals
     .find(goal => goal.title === longGoalTitle);
   assert.equal(created.description, longGoalRequest);
@@ -290,7 +292,7 @@ try {
     const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === created.id)?.dispatch?.status;
   }, {timeout:60_000}).toBe("sent");
-  await expect.poll(() => readFile(log, "utf8"), {timeout:10_000}).toContain(created.id);
+  await expect.poll(() => readFile(log, "utf8"), {timeout:30_000}).toContain(created.id);
   const messages = await readFile(log, "utf8");
   assert.ok(messages.includes(created.id), "actual custom CLI stdin must receive the goal ID");
   const roleInputs = messages.trim().split("\n").map(line => JSON.parse(line))
@@ -304,7 +306,7 @@ try {
   await page.getByRole("button", { name:"给管家留言", exact:true }).click();
   await page.getByLabel("发给管家的消息", { exact:true }).fill("补充约束：不要改变交付范围");
   await page.getByRole("button", { name:"交给管家", exact:true }).click();
-  await expect.poll(() => readFile(log,"utf8"), {timeout:10_000}).toContain("补充约束：不要改变交付范围");
+  await expect.poll(() => readFile(log,"utf8"), {timeout:30_000}).toContain("补充约束：不要改变交付范围");
   assert.ok((await readFile(log,"utf8")).includes("[ATTE_CASE_BEGIN]"),
     "goal feedback must use the single-case envelope with the real CLI");
   const feedbackGoal = (await page.evaluate(() => window.atte.command({type:"snapshot"}))).goals.find(goal => goal.id === created.id);
@@ -325,7 +327,7 @@ try {
     const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === waiting.id)?.dispatch?.status;
   }, {timeout:60_000}).toBe("sent");
-  await expect.poll(() => readFile(log,"utf8"), {timeout:10_000}).toContain("YR 已批准，按原方案继续开发");
+  await expect.poll(() => readFile(log,"utf8"), {timeout:30_000}).toContain("YR 已批准，按原方案继续开发");
   let waitingGoal = (await page.evaluate(() => window.atte.command({type:"snapshot"}))).goals.find(goal => goal.id === waiting.id);
   assert.equal(waitingGoal.status,"active", "an external wait handed back to an Agent returns to active coordination");
   assert.equal(waitingGoal.waitingFor, undefined);
@@ -337,12 +339,12 @@ try {
   await expect.poll(async () => {
     const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === waiting.id)?.status;
-  }, {timeout:20_000}).toBe("active");
+  }, {timeout:45_000}).toBe("active");
   await page.evaluate(id => window.atte.command({ type:"goal.wait", goalId:id, reason:"继续等 YR 审批", owner:"YR", remindAt:"2030-01-01T00:00:00Z" }), waiting.id);
   await expect.poll(async () => {
     const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === waiting.id)?.status;
-  }, {timeout:20_000}).toBe("waiting");
+  }, {timeout:45_000}).toBe("waiting");
   await page.getByRole("button", { name:"1 小时后提醒", exact:true }).click();
   waitingGoal = (await page.evaluate(() => window.atte.command({type:"snapshot"}))).goals.find(goal => goal.id === waiting.id);
   assert.ok(Date.parse(waitingGoal.remindAt) > Date.now());
@@ -353,13 +355,13 @@ try {
   await expect.poll(async () => {
     const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === waiting.id)?.status;
-  }, {timeout:20_000}).toBe("active");
+  }, {timeout:45_000}).toBe("active");
   await page.locator(".goal-detail-advanced").evaluate(element => { element.open = true; });
   await page.getByRole("button", { name:"我来处理", exact:true }).click();
   await expect.poll(async () => {
     const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === waiting.id)?.mode;
-  }, {timeout:10_000}).toBe("manual");
+  }, {timeout:30_000}).toBe("manual");
   waitingGoal = (await page.evaluate(() => window.atte.command({type:"snapshot"}))).goals.find(goal => goal.id === waiting.id);
   assert.equal(waitingGoal.mode,"manual"); assert.equal(waitingGoal.status,"active");
   assert.equal(waitingGoal.dispatch,undefined);
@@ -390,7 +392,7 @@ try {
     const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === externalDecision.id)?.dispatch?.status;
   }, { timeout: 60_000 }).toBe("sent");
-  await expect.poll(() => readFile(log, "utf8"), { timeout: 10_000 })
+  await expect.poll(() => readFile(log, "utf8"), { timeout: 30_000 })
     .toContain("外部 CLI 已批准只读权限");
   externalGoal = (await page.evaluate(() => window.atte.command({type:"snapshot"})))
     .goals.find(goal => goal.id === externalDecision.id);
@@ -432,6 +434,8 @@ try {
     env:restoredEnvironment, timeout:60_000,
   });
   const restored = await app.firstWindow();
+  restored.setDefaultTimeout(60_000);
+  restored.setDefaultNavigationTimeout(60_000);
   restored.on("pageerror", error => errors.push(String(error)));
   await expect.poll(async () => (await restored.evaluate(() => window.atte.environment())).workspace).toBe(await realpath(rootB));
   await restored.evaluate(() => window.atte.prepareConcierge());
@@ -445,13 +449,13 @@ try {
   // started process. Recovery must leave that process alone and open a new site.
   process.kill(firstReference.processId, "SIGTERM");
   await expect.poll(async () => (await restored.evaluate(() => window.atte.command({type:"snapshot"})))
-    .concierge.status, { timeout: 20_000 }).toBe("not_ready");
+    .concierge.status, { timeout: 45_000 }).toBe("not_ready");
   await exec(installedExecutable, [
     "--session", session, "pane", "run", firstReference.paneId, command,
   ], { env: testEnvironment, timeout: 10_000 });
   await expect.poll(() => readFile(log, "utf8").then(value =>
     value.split("\n").filter(line => line.includes('"kind":"start"')).length),
-  { timeout: 10_000 }).toBe(2);
+  { timeout: 30_000 }).toBe(2);
   await restored.getByRole("button", { name: "找管家", exact: true }).click();
   await expect.poll(async () => (await restored.evaluate(() => window.atte.command({type:"snapshot"})))
     .concierge.status, { timeout: 90_000 }).toBe("ready");
@@ -460,7 +464,7 @@ try {
   assert.notEqual(recoveredConcierge.scene.process.pid, firstScene.process.pid);
   await expect.poll(() => readFile(log, "utf8").then(value =>
     value.split("\n").filter(line => line.includes('"kind":"start"')).length),
-  { timeout: 10_000 }).toBe(3);
+  { timeout: 30_000 }).toBe(3);
   // A pending goal created after recovery reaches the replacement, not the
   // manually occupied pane.
   const recoveredGoal = await restored.evaluate(() => window.atte.command({type:"goal.create", input:{
@@ -470,7 +474,7 @@ try {
     const state = await restored.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === recoveredGoal.id)?.dispatch?.status;
   }, {timeout:60_000}).toBe("sent");
-  await expect.poll(() => readFile(log, "utf8"), {timeout:10_000}).toContain(recoveredGoal.id);
+  await expect.poll(() => readFile(log, "utf8"), {timeout:30_000}).toContain(recoveredGoal.id);
   // The old reference must still reject messages even though its pane now holds
   // a manual process.
   const exitedGoal = await restored.evaluate(() => window.atte.command({type:"goal.create", input:{

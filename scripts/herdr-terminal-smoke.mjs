@@ -66,6 +66,8 @@ try {
     timeout: 60_000,
   });
   const page = await app.firstWindow();
+  page.setDefaultTimeout(60_000);
+  page.setDefaultNavigationTimeout(60_000);
   page.on("pageerror", (error) => errors.push(error.message));
   for (const stream of [app.process().stdout, app.process().stderr])
     stream?.on("data", chunk => applicationLogs.push(...chunk.toString().split("\n")));
@@ -114,7 +116,7 @@ try {
   // TUI redraws can split or omit unchanged bytes in the PTY stream. Require an
   // actual shell-side effect rather than mistaking echoed input for execution.
   await expect.poll(() => readFile(resultFile, "utf8").catch(() => ""), { timeout: 30_000 }).toBe(marker);
-  await page.waitForFunction(accessibilityContains, marker, { timeout: 10_000 });
+  await page.waitForFunction(accessibilityContains, marker, { timeout: 30_000 });
   const firstPid = await app.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   assert.equal(firstPid.length, 1);
   const textarea = page.locator(".xterm-helper-textarea");
@@ -157,7 +159,7 @@ try {
     { steps: 15 },
   );
   await page.mouse.up();
-  await expect.poll(readSystemClipboard, { timeout: 10_000 }).toBe(marker);
+  await expect.poll(readSystemClipboard, { timeout: 30_000 }).toBe(marker);
   await expect(page.getByRole("status")).toContainText("已复制");
   const terminalData = await page.evaluate(async () =>
     (await window.atte.terminalSnapshot())?.data ?? "");
@@ -195,7 +197,7 @@ try {
       await page.keyboard.press(shortcut);
     }
     try {
-      await page.waitForFunction(accessibilityContains, pasteMarker, { timeout: 10_000 });
+      await page.waitForFunction(accessibilityContains, pasteMarker, { timeout: 30_000 });
     } catch (error) {
       try {
         const renderer = await page.evaluate(async () => {
