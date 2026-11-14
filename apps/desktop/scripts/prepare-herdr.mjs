@@ -70,7 +70,7 @@ async function requestHerdr(url, options, timeout, action) {
           ? cause.message
           : "网络请求失败";
     throw new Error(
-      `${action}失败：${reason}。可设置 CREWVANE_HERDR_BINARY 使用已验证的本地 Herdr 离线打包。`,
+      `${action}失败：${reason}。可设置 ATTE_HERDR_BINARY 使用已验证的本地 Herdr 离线打包。`,
       { cause },
     );
   }
@@ -82,12 +82,12 @@ async function requestHerdr(url, options, timeout, action) {
  * is available for offline packaging and is still checked by its --version.
  */
 export async function prepareHerdr(env = process.env) {
-  const cacheDir = resolve(env.CREWVANE_HERDR_CACHE_DIR ?? cacheRoot);
+  const cacheDir = resolve(env.ATTE_HERDR_CACHE_DIR ?? cacheRoot);
   const cached = join(cacheDir, "herdr");
-  if (env.CREWVANE_HERDR_BINARY) {
-    const source = resolve(env.CREWVANE_HERDR_BINARY);
+  if (env.ATTE_HERDR_BINARY) {
+    const source = resolve(env.ATTE_HERDR_BINARY);
     if (!(await stat(source)).isFile())
-      throw new Error(`CREWVANE_HERDR_BINARY 不是文件：${source}`);
+      throw new Error(`ATTE_HERDR_BINARY 不是文件：${source}`);
     const found = await checkedVersion(source, cacheDir);
     await mkdir(cacheDir, { recursive: true });
     await writeFile(cached, await readFile(source), { mode: 0o700 });
@@ -102,7 +102,7 @@ export async function prepareHerdr(env = process.env) {
   }, 30_000, "读取 Herdr 最新版本");
   if (!response.ok)
     throw new Error(
-      `无法读取 Herdr 最新版本（HTTP ${response.status}）。CI 中请提供只读 GITHUB_TOKEN，或设置 CREWVANE_HERDR_BINARY 使用已验证的本地 Herdr 离线打包。`,
+      `无法读取 Herdr 最新版本（HTTP ${response.status}）。CI 中请提供只读 GITHUB_TOKEN，或设置 ATTE_HERDR_BINARY 使用已验证的本地 Herdr 离线打包。`,
     );
   const data = await response.json();
   const expectedVersion = /^v?(\d+\.\d+\.\d+)$/.exec(data.tag_name ?? "")?.[1];

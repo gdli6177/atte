@@ -9,7 +9,7 @@ import {
   SquareTerminal,
   UserRound,
 } from "lucide-react";
-import type { CrewvaneCommand, Goal } from "../../../../../packages/core/src/types.js";
+import type { AtteCommand, Goal } from "../../../../../packages/core/src/types.js";
 import {
   GoalReplyComposer,
   type GoalReplyMode,
@@ -45,7 +45,7 @@ export function GoalActionDock({
     ? goal.autonomy.boundaryChange
     : undefined;
 
-  async function act(command: CrewvaneCommand, receipt?: string) {
+  async function act(command: AtteCommand, receipt?: string) {
     try {
       const attentionId = attentionRequest(goal)?.id;
       await service.command(attentionId ? { ...command, attentionId } : command);

@@ -1,7 +1,7 @@
 import { hasGoalScene } from "../goals/goalEntry.js";
 import { useState } from "react";
 import { Check, Clock3, Send } from "lucide-react";
-import type { CrewvaneCommand, Goal } from "../../../../../packages/core/src/types.js";
+import type { AtteCommand, Goal } from "../../../../../packages/core/src/types.js";
 import { attentionRequest } from "../../../../../packages/core/src/model.js";
 import type { GoalDetailService } from "../goals/goalService.js";
 import { GoalAttachments } from "../goals/GoalAttachments.js";
@@ -24,7 +24,7 @@ export function TaskDetail({ goal, service, busy, error, close, delegated, notif
   const later = goal.status === "backlog";
   const ended = goal.status === "completed" || goal.status === "dropped";
   const request = attentionRequest(goal);
-  async function act(command: CrewvaneCommand, message: string, done?: () => void) {
+  async function act(command: AtteCommand, message: string, done?: () => void) {
     try {
       await service.command(request ? { ...command, attentionId: request.id } : command);
       notify(message);

@@ -24,7 +24,7 @@ if (process.env.GITHUB_REF_TYPE === "tag" && process.env.GITHUB_REF_NAME !== `v$
 const output = join(here, "release", "installers");
 const app = join(here, "release", "Atte-darwin-arm64", "Atte.app");
 const stem = `Atte-${metadata.version}-macOS-arm64`;
-const stage = await mkdtemp(join(tmpdir(), "crewvane-installer-"));
+const stage = await mkdtemp(join(tmpdir(), "atte-installer-"));
 const dmg = join(output, `${stem}.dmg`);
 
 async function createDmg() {
@@ -55,7 +55,7 @@ try {
     "适用于 Apple Silicon Mac。本内测版采用完整 ad-hoc 签名，但尚未使用 Apple Developer ID 签名与公证。\n" +
     "若提示“无法验证开发者”，请在 macOS 系统设置 > 隐私与安全性中选择“仍要打开”。\n" +
     "若提示“已损坏”，请核对 SHA-256 并从 GitHub Releases 重新下载当前版本，不要继续使用 v0.3.0。\n" +
-    "使用说明：https://github.com/gdli6177/crewvane/blob/main/docs/crewvane.md\n");
+    "使用说明：https://github.com/gdli6177/atte/blob/main/docs/atte.md\n");
   await createDmg();
   await exec("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app,
     join(output, `${stem}.zip`)], { timeout: 180_000 });

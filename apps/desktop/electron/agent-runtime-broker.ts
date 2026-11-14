@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { appendFile, chmod, mkdir, readFile, readdir, rename, stat, unlink } from "node:fs/promises";
+import { appendFile, chmod, lstat, mkdir, readFile, readdir, rename, stat, unlink } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname, join } from "node:path";
 import type {
@@ -8,7 +8,7 @@ import type {
   Goal,
   WorkspaceService,
 } from "../../../packages/core/src/index.js";
-import { agentReceiptMarker, agentRuntimeSocketPath } from "../../../packages/core/src/index.js";
+import { agentReceiptMarker, agentRuntimeSocketPath, workspaceDataDirectory } from "../../../packages/core/src/index.js";
 import type { AgentHookManager, ManagedAdapterId } from "./agent-hook-manager.js";
 
 const MAX_REQUEST_BYTES = 1_000_000;
@@ -52,7 +52,7 @@ function runtimeReminder(goal: Goal, runtime: AgentRuntimeState) {
   // reminders can remain visible in the input box without being submitted, so
   // keep the transport prompt compact and leave full protocol guidance in the
   // owner's persistent Atte instructions.
-  return `${agentReceiptMarker(runtime.attempt.attemptId, runtime.receipt!.turnId)} Atte 未收到目标 ${goal.id} 本回合的结构化写回。请立即用 crewvane goal show ${goal.id} --json 核对实际结果，并按事实运行 crewvane goal progress/decide/wait/review 之一；不要只回复，也不要把这条系统提醒记成用户新目标。`;
+  return `${agentReceiptMarker(runtime.attempt.attemptId, runtime.receipt!.turnId)} Atte 未收到目标 ${goal.id} 本回合的结构化写回。请立即用 atte goal show ${goal.id} --json 核对实际结果，并按事实运行 atte goal progress/decide/wait/review 之一；不要只回复，也不要把这条系统提醒记成用户新目标。`;
 }
 
 export class AgentRuntimeBroker {
@@ -79,7 +79,7 @@ export class AgentRuntimeBroker {
 
   private spoolPath(workspace = this.options.workspace()) {
     if (!workspace) throw new Error("尚未打开 Atte 工作区");
-    return join(workspace, ".crewvane", "runtime", "spool");
+    return join(workspaceDataDirectory(workspace), "runtime", "spool");
   }
 
   async start() {
@@ -104,7 +104,7 @@ export class AgentRuntimeBroker {
       });
     });
     await chmod(path, 0o600);
-    this.ready = this.drainSpool().then(() => this.recover());
+    this.ready = this.recover();
     await this.ready;
   }
 
@@ -347,22 +347,26 @@ export class AgentRuntimeBroker {
   async drainSpool() {
     const workspace = this.options.workspace();
     if (!workspace) return;
-    const spool = this.spoolPath(workspace);
-    const files = (await readdir(spool).catch(() => [] as string[]))
-      .filter(name => /^\d{13}-[a-zA-Z0-9_-]+\.json$/.test(name))
-      .sort().slice(0, 200);
+    const spools = [...new Set([this.spoolPath(workspace),
+      join(workspace, ".crewvane", "runtime", "spool")])];
+    const files = (await Promise.all(spools.map(async spool => {
+      const info = await lstat(spool).catch(() => undefined);
+      if (!info?.isDirectory() || info.isSymbolicLink()) return [];
+      return (await readdir(spool)).filter(name => /^\d{13}-[a-zA-Z0-9_-]+\.json$/.test(name))
+        .sort().slice(0, 200).map(name => join(spool, name));
+    }))).flat();
     const queued: { path: string; request: HookRequest; index: number }[] = [];
     const remaining = new Map<string, { count: number; accepted: boolean }>();
-    for (const name of files) {
+    for (const path of files) {
       try {
-        const path = join(spool, name);
-        const info = await stat(path);
+        const info = await lstat(path);
+        if (!info.isFile() || info.isSymbolicLink()) continue;
         if (this.now() - info.mtimeMs > 7 * 24 * 60 * 60_000 ||
           info.size > MAX_REQUEST_BYTES) {
           await unlink(path);
           continue;
         }
-        const parsed = JSON.parse(await readFile(join(spool, name), "utf8")) as HookRequest | HookRequest[];
+        const parsed = JSON.parse(await readFile(path, "utf8")) as HookRequest | HookRequest[];
         const requests = Array.isArray(parsed) ? parsed : [parsed];
         if (!requests.length) continue;
         const flattened = requests.flatMap(request =>
@@ -373,9 +377,9 @@ export class AgentRuntimeBroker {
         for (const request of flattened)
           queued.push({ path, request, index: queued.length });
       } catch {
-        const info = await stat(join(spool, name)).catch(() => undefined);
+        const info = await lstat(path).catch(() => undefined);
         if (info && this.now() - info.mtimeMs > 7 * 24 * 60 * 60_000)
-          await unlink(join(spool, name)).catch(() => {});
+          await unlink(path).catch(() => {});
       }
     }
     // File suffixes are random and not an ordering guarantee. Replay each
@@ -423,6 +427,7 @@ export class AgentRuntimeBroker {
   async refresh(goalId?: string) {
     const service = this.options.service();
     if (!service) return;
+    await this.drainSpool();
     const state = await service.read();
     for (const goal of state.goals) {
       if (goalId && goal.id !== goalId) continue;
@@ -446,7 +451,7 @@ export class AgentRuntimeBroker {
   private async recordDiagnostic(event: AgentRuntimeEventV1, reason: string) {
     const workspace = this.options.workspace();
     if (!workspace) return;
-    const directory = join(workspace, ".crewvane", "runtime");
+    const directory = join(workspaceDataDirectory(workspace), "runtime");
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const path = join(directory, "diagnostics.jsonl");
     const info = await stat(path).catch(() => undefined);

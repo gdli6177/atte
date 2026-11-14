@@ -448,7 +448,7 @@ export function GoalDetail({
                       ) : (
                         <p>
                           还没有可用的本地工作方法。可在设置安装，或让 Agent 使用
-                          「crewvane-local-pack-author」创建。
+                          「atte-local-pack-author」创建。
                         </p>
                       )}
                     </div>

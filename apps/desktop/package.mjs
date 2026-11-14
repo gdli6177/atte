@@ -22,11 +22,11 @@ const here = dirname(fileURLToPath(import.meta.url)),
   desktopPackage = JSON.parse(
     await readFile(join(here, "package.json"), "utf8"),
   ),
-  signingIdentity = process.env.CREWVANE_MACOS_SIGN_IDENTITY,
-  electronZipDir = process.env.CREWVANE_ELECTRON_ZIP_DIR
-    ? resolve(process.env.CREWVANE_ELECTRON_ZIP_DIR)
+  signingIdentity = process.env.ATTE_MACOS_SIGN_IDENTITY,
+  electronZipDir = process.env.ATTE_ELECTRON_ZIP_DIR
+    ? resolve(process.env.ATTE_ELECTRON_ZIP_DIR)
     : undefined,
-  stage = await mkdtemp(join(tmpdir(), "crewvane-package-"));
+  stage = await mkdtemp(join(tmpdir(), "atte-package-"));
 
 try {
   if (process.platform !== "darwin" || process.arch !== "arm64")
@@ -48,12 +48,12 @@ try {
   const addonPackage = dirname(createRequire(join(nativePackage, "package.json")).resolve("node-addon-api/package.json"));
   await cp(addonPackage, join(stage, "node_modules/node-addon-api"), { recursive: true });
   await cp(join(here, "assets/brand/atte-icon-baseline-1024.png"), join(stage, "dist/assets/atte-icon.png"));
-  const bundledSkills = join(stage, "crewvane-skills");
+  const bundledSkills = join(stage, "atte-skills");
   await mkdir(bundledSkills, { recursive: true });
-  await cp(join(here, "../../skills/crewvane"), join(bundledSkills, "crewvane"), { recursive: true });
+  await cp(join(here, "../../skills/atte"), join(bundledSkills, "atte"), { recursive: true });
   await cp(
-    join(here, "../../skills/crewvane-local-pack-author"),
-    join(bundledSkills, "crewvane-local-pack-author"),
+    join(here, "../../skills/atte-local-pack-author"),
+    join(bundledSkills, "atte-local-pack-author"),
     { recursive: true },
   );
   const cliNode = join(stage, "cli-node");
@@ -62,7 +62,7 @@ try {
   await writeFile(
     join(stage, "package.json"),
     JSON.stringify({
-      name: "crewvane",
+      name: "atte",
       version: desktopPackage.version,
       description: desktopPackage.description,
       productName: "Atte",
@@ -76,7 +76,7 @@ try {
     out: join(here, "release"),
     name: "Atte",
     electronVersion,
-    appBundleId: "dev.crewvane.desktop",
+    appBundleId: "dev.atte.desktop",
     platform: "darwin",
     arch: "arm64",
     icon: join(here, "assets/brand/atte-icon-baseline.icns"),

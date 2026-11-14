@@ -1,11 +1,11 @@
 import type {
-  CrewvaneCommand,
+  AtteCommand,
   GoalAttachment,
   SkillPackView,
 } from "../../../../../packages/core/src/types.js";
 
 export interface GoalDetailService {
-  command(command: CrewvaneCommand): Promise<unknown>;
+  command(command: AtteCommand): Promise<unknown>;
   importAttachments(
     inputs: { name: string; bytes: ArrayBuffer }[],
   ): Promise<GoalAttachment[]>;

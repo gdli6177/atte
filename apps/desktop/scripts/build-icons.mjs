@@ -8,7 +8,39 @@ import { promisify } from "node:util";
 
 const exec = promisify(execFile);
 const brand = fileURLToPath(new URL("../assets/brand/", import.meta.url));
-const temporary = await mkdtemp(join(tmpdir(), "crewvane-icons-"));
+const temporary = await mkdtemp(join(tmpdir(), "atte-icons-"));
+const digest = async name => createHash("sha256")
+  .update(await readFile(join(brand, name))).digest("hex");
+
+async function existingIconMatchesSources() {
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(join(brand, "atte-assets.json"), "utf8"));
+  } catch {
+    return false;
+  }
+  const expected = new Map([
+    ["crewvane-mage.png", digest],
+    ["crewvane-macos-source.png", digest],
+  ]);
+  for (const source of manifest?.sources ?? []) {
+    const readDigest = expected.get(source?.path);
+    if (!readDigest || await readDigest(source.path) !== source.sha256) return false;
+  }
+  if ((manifest?.sources ?? []).length !== expected.size) return false;
+  const existingIcon = (manifest?.files ?? []).find(file =>
+    file?.path === "atte-icon-baseline.icns");
+  if (!existingIcon || await digest("atte-icon-baseline.icns") !== existingIcon.sha256)
+    return false;
+  const { stdout } = await exec("sips", [
+    "-g", "format", "-g", "pixelWidth", "-g", "pixelHeight",
+    join(brand, "atte-icon-baseline.icns"),
+  ]);
+  return /format:\s*icns/.test(stdout) &&
+    /pixelWidth:\s*1024/.test(stdout) &&
+    /pixelHeight:\s*1024/.test(stdout);
+}
+
 try {
   const iconset = join(temporary, "Atte.iconset");
   await mkdir(iconset);
@@ -29,8 +61,17 @@ try {
         join(iconset, `icon_${points}x${points}${scale === 2 ? "@2x" : ""}.png`)]);
     }
   }
-  await exec("iconutil", ["-c", "icns", iconset, "-o", join(brand, "atte-icon-baseline.icns")]);
-  const digest = async name => createHash("sha256").update(await readFile(join(brand, name))).digest("hex");
+  try {
+    await exec("iconutil", [
+      "-c", "icns", iconset, "-o", join(brand, "atte-icon-baseline.icns"),
+    ]);
+  } catch (error) {
+    if (!await existingIconMatchesSources()) throw error;
+    console.warn(
+      "iconutil rejected the generated iconset; reusing the existing ICNS because " +
+      "its source hashes and size metadata match the verified asset manifest",
+    );
+  }
   const files = [
     "atte-mascot-baseline-512.png",
     ...sizes.map(size => `atte-icon-baseline-${size}.png`),

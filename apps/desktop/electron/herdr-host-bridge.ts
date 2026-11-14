@@ -53,7 +53,7 @@ export class HerdrHostBridge {
       .slice(0, 20);
     const runtimeDirectory = join(
       process.platform === "win32" ? tmpdir() : "/tmp",
-      `crewvane-host-${workspaceKey}`,
+      `atte-host-${workspaceKey}`,
     );
     this.socketPath = join(runtimeDirectory, "host.sock");
     this.requestDirectory = join(runtimeDirectory, "host-requests");

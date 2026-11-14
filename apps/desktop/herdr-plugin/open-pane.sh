@@ -9,7 +9,7 @@ if [ "${HERDR_ENV:-}" != "1" ]; then
   exit 1
 fi
 set -- plugin pane open \
-  --plugin dev.crewvane \
+  --plugin dev.atte \
   --entrypoint "$entrypoint" \
   --placement overlay \
   --focus

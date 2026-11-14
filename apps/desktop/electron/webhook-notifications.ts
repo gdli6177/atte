@@ -237,8 +237,8 @@ export class WebhookNotifier {
           headers: {
             "content-type": "application/json",
             "user-agent": `Atte/${this.appVersion}`,
-            "x-crewvane-event": event.body.event,
-            "x-crewvane-delivery": event.id,
+            "x-atte-event": event.body.event,
+            "x-atte-delivery": event.id,
             ...(webhook.token ? { authorization: `Bearer ${webhook.token}` } : {}),
           },
           body: JSON.stringify(webhookPayload(webhook.url, event.body)),
@@ -299,8 +299,8 @@ export class WebhookNotifier {
           headers: {
             "content-type": "application/json",
             "user-agent": `Atte/${this.appVersion}`,
-            "x-crewvane-event": event.body.event,
-            "x-crewvane-delivery": event.id,
+            "x-atte-event": event.body.event,
+            "x-atte-delivery": event.id,
             ...(webhook.token ? { authorization: `Bearer ${webhook.token}` } : {}),
           },
           body: JSON.stringify(webhookPayload(webhook.url, event.body)),
@@ -347,12 +347,12 @@ export class WebhookNotifier {
           headers: {
             "content-type": "application/json",
             "user-agent": `Atte/${this.appVersion}`,
-            "x-crewvane-event": "notification.test",
-            "x-crewvane-delivery": createHash("sha256").update(`${now.toISOString()}:${webhook.url}`).digest("hex"),
+            "x-atte-event": "notification.test",
+            "x-atte-delivery": createHash("sha256").update(`${now.toISOString()}:${webhook.url}`).digest("hex"),
             ...(webhook.token ? { authorization: `Bearer ${webhook.token}` } : {}),
           },
           body: JSON.stringify(webhookPayload(webhook.url, {
-            schema: "crewvane.notification.v1",
+            schema: "atte.notification.v1",
             event: "notification.test",
             occurredAt: now.toISOString(),
             workspace: { name: workspaceName },
@@ -395,7 +395,7 @@ export class WebhookNotifier {
     return {
       id,
       body: {
-        schema: "crewvane.notification.v1",
+        schema: "atte.notification.v1",
         event: "attention.required",
         deliveryId: id,
         occurredAt,
@@ -427,7 +427,7 @@ export class WebhookNotifier {
     return {
       id,
       body: {
-        schema: "crewvane.notification.v1",
+        schema: "atte.notification.v1",
         event: "goal.status_changed",
         deliveryId: id,
         occurredAt: goal.updatedAt,

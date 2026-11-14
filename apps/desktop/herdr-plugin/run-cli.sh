@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-cli=${CREWVANE_CLI_PATH:-${HOME}/.local/bin/crewvane}
+cli=${ATTE_CLI_PATH:-${HOME}/.local/bin/atte}
 if [ ! -x "$cli" ]; then
   printf '%s\n' \
     "Atte CLI is not available at $cli." \

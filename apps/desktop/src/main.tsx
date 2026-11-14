@@ -39,7 +39,7 @@ import {
 } from "../../../packages/core/src/model.js";
 import { taskPoolGoals } from "../../../packages/core/src/task-pool.js";
 import type {
-  CrewvaneCommand,
+  AtteCommand,
   AcceptanceMode,
   AgentPreferences,
   Goal,
@@ -53,6 +53,7 @@ import type {
   WorkspaceState,
 } from "../../../packages/core/src/types.js";
 import { api, type BackendControlStatus } from "./api.js";
+import { migratePreference } from "./storage-compat.js";
 type HerdrEnvironmentStatus = Awaited<ReturnType<typeof api.herdrStatus>>;
 import { GoalIntakeForm } from "./features/intake/GoalIntakeForm.js";
 import { AppearanceSettings } from "./features/settings/AppearanceSettings.js";
@@ -154,9 +155,10 @@ function App() {
     [version, setVersion] = useState(""),
     [page, setPage] = useState<keyof typeof pages>("home");
   const [theme, setTheme] = useState<string>(
-      localStorage.getItem("crewvane.theme") === "light" ? "light" : "dark",
+      migratePreference(localStorage, "theme") === "light" ? "light" : "dark",
     ),
-    [collapsed, setCollapsed] = useState(() => localStorage.getItem("crewvane.sidebar-collapsed") === "true");
+    [collapsed, setCollapsed] = useState(() =>
+      migratePreference(localStorage, "sidebar-collapsed") === "true");
   const [projectId, setProjectId] = useState(""),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState("all");
@@ -250,9 +252,9 @@ function App() {
   const sceneContext = sceneGoal ? presentSceneContext(sceneGoal, state) : undefined;
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("crewvane.theme", theme);
+    localStorage.setItem("atte.theme", theme);
   }, [theme]);
-  useEffect(() => { localStorage.setItem("crewvane.sidebar-collapsed", String(collapsed)); }, [collapsed]);
+  useEffect(() => { localStorage.setItem("atte.sidebar-collapsed", String(collapsed)); }, [collapsed]);
   useEffect(() => {
     api
       .environment()
@@ -376,7 +378,7 @@ function App() {
     setToast(text);
     toastTimer.current = setTimeout(() => setToast(""), 3500);
   }
-  async function execute(command: CrewvaneCommand) {
+  async function execute(command: AtteCommand) {
     setBusy(true);
     setError("");
     try {
@@ -541,7 +543,7 @@ function App() {
           <BrandMark />
           <div>
             <strong>Atte</strong>
-            <span>注意力中心</span>
+            <span>注意力中心 · The attention layer</span>
           </div>
         </div>
         <button
@@ -771,7 +773,7 @@ function App() {
           {!workspace ? (
             <section className="welcome">
               <BrandMark />
-              <span className="eyebrow">Atte · 注意力中心</span>
+              <span className="eyebrow">Atte · 注意力中心 · The attention layer</span>
               <h1>
                 把注意力留给重要的事。
               </h1>
@@ -1281,7 +1283,7 @@ function App() {
                 disabled={busy}
                 placeholder={webhook.configured
                   ? "留空保持不变"
-                  : "https://hooks.example.com/crewvane"}
+                  : "https://hooks.example.com/atte"}
               />
             </Field>
             <Field
@@ -1494,7 +1496,7 @@ type GoalFormProps = {
   goal: Goal;
   error: string;
   busy: boolean;
-  execute: (command: CrewvaneCommand) => Promise<unknown>;
+  execute: (command: AtteCommand) => Promise<unknown>;
   onClose: () => void;
   onSaved: () => void;
 };
@@ -1780,7 +1782,7 @@ function Settings({
           <SettingsSection
             icon={<Folder />}
             title="工作区存储位置"
-            description="目标保存在此目录的 .crewvane 中。切换工作区后，界面会显示该目录自己的目标。"
+            description="目标保存在此目录的 .atte 中。切换工作区后，界面会显示该目录自己的目标。"
           >
             <div className="settings-facts">
               <code>{workspace}</code>
@@ -2012,7 +2014,7 @@ function Settings({
             </div>
           </SettingsSection>
         </SettingsGroup>
-        <SettingsSection icon={<Bot />} title="关于 Atte" description="注意力中心">
+        <SettingsSection icon={<Bot />} title="关于 Atte" description="注意力中心 · The attention layer">
           <div className="about-mark"><BrandMark variant="icon" /></div>
           <div className="settings-facts">
             <p>人只做拍板，Agent 并行推进。管家把决定、验收和需要介入的事项带到你面前。</p>
@@ -2020,7 +2022,7 @@ function Settings({
           </div>
         </SettingsSection>
         <p className="settings-foot">
-          Atte {version} · 注意力中心 · {state.projects.length} 个项目 ·{" "}
+          Atte {version} · 注意力中心 · The attention layer · {state.projects.length} 个项目 ·{" "}
           {state.goals.length} 个目标
         </p>
       </div>
@@ -2307,7 +2309,7 @@ function MethodLibrary({
   async function copyAuthorPrompt() {
     try {
       await api.writeClipboardText(
-        `请使用 crewvane-local-pack-author，把我接下来描述的工作方法创建成 Atte 本地能力包。先问我真正缺少的信息，使用 crewvane skill draft / validate 创建草稿，展示名称、适用范围、步骤、检查清单和 script SHA-256；得到我明确确认后再 install。工作区：${workspace}`,
+        `请使用 atte-local-pack-author，把我接下来描述的工作方法创建成 Atte 本地能力包。先问我真正缺少的信息，使用 atte skill draft / validate 创建草稿，展示名称、适用范围、步骤、检查清单和 script SHA-256；得到我明确确认后再 install。工作区：${workspace}`,
       );
       notify("创建说明已复制，可发给任意已安装 Atte Skills 的 Agent。");
     } catch (reason) {

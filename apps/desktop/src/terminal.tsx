@@ -15,7 +15,7 @@ import type { GoalSceneContext } from "./features/goals/goalPresentation.js";
 import "@xterm/xterm/css/xterm.css";
 
 type TerminalGeometry = { x: number; y: number; width: number; height: number };
-const geometryKey = "crewvane.terminal.geometry";
+const geometryKey = "atte.terminal.geometry";
 const minWidth = 480, minHeight = 260;
 function savedGeometry(): TerminalGeometry | undefined {
   try {

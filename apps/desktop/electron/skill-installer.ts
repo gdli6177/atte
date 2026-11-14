@@ -12,8 +12,13 @@ import {
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 
-const marker = ".crewvane-managed.json";
-const managedBy = "crewvane";
+const marker = ".atte-managed.json";
+const legacyMarker = ".crewvane-managed.json";
+const managedBy = "atte";
+const legacyNames: Record<string, string> = {
+  atte: "crewvane",
+  "atte-local-pack-author": "crewvane-local-pack-author",
+};
 
 export type SkillTargetPhase =
   | "installed"
@@ -56,11 +61,12 @@ async function exists(path: string) {
 
 async function managedVersion(path: string) {
   try {
-    const value = JSON.parse(await readFile(join(path, marker), "utf8")) as {
+    const current = await readFile(join(path, marker), "utf8").catch(() => undefined);
+    const value = JSON.parse(current ?? await readFile(join(path, legacyMarker), "utf8")) as {
       managedBy?: unknown;
       version?: unknown;
     };
-    return value.managedBy === managedBy && typeof value.version === "string"
+    return [managedBy, "crewvane"].includes(String(value.managedBy)) && typeof value.version === "string"
       ? value.version
       : undefined;
   } catch {
@@ -81,7 +87,7 @@ async function sourceDigest(directory: string): Promise<string> {
   return hash.digest("hex");
 }
 
-export class CrewvaneSkillInstaller {
+export class AtteSkillInstaller {
   private readonly skills: Array<{ name: string; source: string }>;
   constructor(
     readonly sourceDirectory: string,
@@ -91,10 +97,10 @@ export class CrewvaneSkillInstaller {
   ) {
     this.skills = skillNames?.length
       ? skillNames.map(name => ({ name, source: join(sourceDirectory, name) }))
-      : [{ name: "crewvane", source: sourceDirectory }];
+      : [{ name: "atte", source: sourceDirectory }];
   }
 
-  targetPath(parent: string, skillName = "crewvane") {
+  targetPath(parent: string, skillName = "atte") {
     return join(this.homeDirectory, parent, "skills", skillName);
   }
 
@@ -102,7 +108,7 @@ export class CrewvaneSkillInstaller {
     const present = await exists(path),
       storedVersion = present ? await managedVersion(path) : undefined,
       storedDigest = present
-        ? await readFile(join(path, marker), "utf8")
+        ? await readFile(join(path, marker), "utf8").catch(() => readFile(join(path, legacyMarker), "utf8"))
           .then(text => JSON.parse(text).sourceDigest)
           .catch(() => undefined)
         : undefined,
@@ -161,7 +167,16 @@ export class CrewvaneSkillInstaller {
       const definition = targetDefinitions.find(candidate => candidate.id === target.id)!;
       for (const skill of this.skills) {
         const path = this.targetPath(definition.parent, skill.name),
+          legacy = this.targetPath(definition.parent, legacyNames[skill.name] ?? skill.name);
+        let phase = await this.phaseFor(path, skill.source);
+        if (phase === "not-installed" && legacy !== path && await managedVersion(legacy) !== undefined) {
+          const legacyDigest = await sourceDigest(legacy);
+          await rename(legacy, path);
+          await writeFile(join(path, marker), `${JSON.stringify({
+            managedBy, version: this.version, sourceDigest: legacyDigest,
+          }, null, 2)}\n`, { mode: 0o600 });
           phase = await this.phaseFor(path, skill.source);
+        }
         if (phase === "conflict") {
           errors.push({
             id: target.id,
@@ -186,7 +201,7 @@ export class CrewvaneSkillInstaller {
   private async installTarget(target: string, source: string) {
     const parent = join(target, "..");
     await mkdir(parent, { recursive: true });
-    const staging = await mkdtemp(join(parent, ".crewvane-skill-"));
+    const staging = await mkdtemp(join(parent, ".atte-skill-"));
     try {
       await cp(source, staging, { recursive: true });
       await writeFile(

@@ -259,13 +259,15 @@
 }
 @layer tokens.components {
   :root {
+    --brand-home-baseline: 96px;
+    --brand-home-preview-scale: 1;
     --sidebar-width: 236px;
     --sidebar-collapsed-width: 80px;
     --topbar-height: 72px;
     --content-width: 1210px;
     --detail-width: 1120px;
     --attention-width: 700px;
-    --brand-home-size: 96px;
+    --brand-home-size: calc(var(--brand-home-baseline) * var(--brand-home-preview-scale));
     --brand-welcome-size: 130px;
     --brand-about-size: 64px;
   }

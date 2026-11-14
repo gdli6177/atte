@@ -1,6 +1,7 @@
 import { lstat, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { staleSessionStorage } from "../../../packages/sessions/src/maintenance.js";
+import { workspaceDataDirectory } from "../../../packages/core/src/index.js";
 
 const BROWSER_CACHE_DIRECTORIES = [
   "Cache",
@@ -84,7 +85,7 @@ function temporaryRoots(paths: CacheMaintenancePaths) {
     },
     ...(paths.workspaceRoot
       ? [{
-          root: join(paths.workspaceRoot, ".crewvane"),
+          root: workspaceDataDirectory(paths.workspaceRoot),
           matches: (name: string) => WORKSPACE_TEMP_FILE.test(name),
         }]
       : []),
