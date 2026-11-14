@@ -418,14 +418,20 @@ try {
   assert.equal(await page.locator(".goal-detail-modal").count(), 0);
   await page.getByText("成果与证据", { exact: true }).waitFor();
   await page.screenshot({ path: join(home, "review-dark.png") });
-  await page.getByRole("button", { name: "退回修改", exact: true }).click();
-  await page.getByLabel("退回说明", { exact: true }).fill("请补充桌面端的实际验收说明");
-  await page.getByRole("button", { name: "退回并交给管家", exact: true }).click();
-  await page.locator(".goal-attention-modal").waitFor({ state: "detached" });
+  await expect(page.getByRole("button", { name: "退回修改", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "问管家", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "给管家发消息", exact: true }).click();
+  await page.getByLabel("发给管家的消息", { exact: true }).fill("请补充桌面端的实际验收说明");
+  await page.getByRole("button", { name: "交给管家", exact: true }).click();
   await page.waitForFunction(async id => {
     const snapshot = await window.crewvane.command({ type: "snapshot" });
-    return snapshot.goals.find(goal => goal.id === id)?.status === "active";
+    const current = snapshot.goals.find(goal => goal.id === id);
+    return current?.status === "review" &&
+      current.activities.some(item => item.kind === "message" && item.text === "请补充桌面端的实际验收说明");
   }, goalId);
+  await expect(page.getByRole("button", { name: "验收通过", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await service.execute({ type: "goal.rework", goalId, note: "管家根据补充要求明确安排修改", actor: "管家" });
   await service.execute({
     type: "goal.review",
     goalId,

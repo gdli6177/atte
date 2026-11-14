@@ -2765,7 +2765,7 @@ export class WorkspaceService {
               summary: "成果已提交，等待你的验收。",
               since: at,
             };
-            item.next = "查看实际成果和检查结果，选择验收通过或退回修改。";
+            item.next = "查看实际成果和检查结果，验收通过或给管家发消息。";
           }
           activity(
             item,
@@ -2883,7 +2883,7 @@ export class WorkspaceService {
           if (item.autonomy?.boundaryChange?.status === "pending")
             throw new Error("边界变更必须使用边界变更批准或拒绝命令");
           if (item.attention?.kind === "review")
-            throw new Error("成果请使用验收通过或退回修改");
+            throw new Error("成果请使用验收通过或给管家发消息");
           if (!item.attention && !hasDueReminder(item))
             throw new Error("当前没有需要解决的注意力事项");
           const at = nowIso(), note = command.note?.trim() ? text(command.note, "决定", 4000) : "";

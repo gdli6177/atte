@@ -16,7 +16,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Atte owns the small status set: Waiting for you, Waiting externally, Ready for review, Needs troubleshooting, In progress, Handed off, and Ended.
 - The action dock is selected only by status. It must never infer approval, acceptance, or a chosen option from message wording or the user's free-form reply.
 - Reply sends the exact text and optional attachments to the global concierge. A reply does not change target status by itself.
-- Review exposes explicit Accept and Return commands. Return requires free-form reasoning, not a form schema.
+- Review exposes Accept and one message entry for the concierge. Sending feedback preserves review until the concierge explicitly updates state.
 - Waiting externally shows that no action is required and offers a secondary way to report a new update.
 - Troubleshooting exposes Open Workspace as the primary action because the responsible Agent cannot continue in the current environment.
 - The human talks only to the global concierge. Opening the Herdr scene is a secondary troubleshooting or takeover path, not a normal chat with an execution Agent.

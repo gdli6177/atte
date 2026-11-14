@@ -178,7 +178,7 @@ Herdr 的 OMP 传输对超过 10 行或 1,000 UTF-16 code units 的正文使用 
 
 应用包内包含一个本地 Herdr 插件 `dev.crewvane`。Herdr 可用后，应用把插件原子部署到 `userData/herdr-plugin`，通过固定 ID 注册或更新，并在设置中显示就绪状态。插件随 Atte 安装和升级，不需要用户另装 Node、从 GitHub 再下载或手工执行 `plugin link`；应用只使用打包内的固定源码，不静默更新远程代码。插件源码摘要变化时即使应用版本未变也会重新登记，避免新增动作或事件钩子停留在旧清单。
 
-插件提供三个动作与两个 terminal Pane：打开注意力控制台、直接进入一行新建目标，以及按真实 Agent 名称回到全局管家。控制台直接调用内置 `crewvane board`，读取 `.crewvane/state.json` 的同一份 core 数据，展示需要决定、验收、到期跟进和介入的事项。它支持补充意见、提交决定、请求跟进、等待事项交给管家或人工接管、验收通过、退回修改、聚焦真实负责人 Tab，以及 `g` 回到管家；新建入口调用同一 `crewvane ask`。这些入口都不维护第二份状态，也不自行执行目标。
+插件提供三个动作与两个 terminal Pane：打开注意力控制台、直接进入一行新建目标，以及按真实 Agent 名称回到全局管家。控制台直接调用内置 `crewvane board`，读取 `.crewvane/state.json` 的同一份 core 数据，展示需要决定、验收、到期跟进和介入的事项。它支持给管家发消息、提交决定、请求跟进、等待事项交给管家或人工接管、验收通过、聚焦真实负责人 Tab，以及 `g` 回到管家；验收反馈不直接改状态，新建入口调用同一 `crewvane ask`。这些入口都不维护第二份状态，也不自行执行目标。
 
 Herdr 的 `pane.agent_status_changed`、`pane.exited`、`pane.closed`、`pane.moved`、`tab.closed` 和 `workspace.closed` 事件由插件脚本送入内部 `crewvane event herdr`。CLI 兼容 Herdr 原生的 `{ event, data }` envelope，再按真实 Pane、Tab 或 Workspace ID 查找已登记负责人现场，只有命中目标时才执行 core 的 `live.event`。Pane 移动时用 Herdr 返回的新 Pane、Tab、Workspace 与 Agent 身份原子更新目标，旧 ID 立即停止匹配，避免后续关闭或状态事件落到失效引用。事件是桌面 10 秒 Agent 列表轮询的即时通道和断线补偿，不改变 `idle` / `done` 不等于完成的规则。
 

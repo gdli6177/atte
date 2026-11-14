@@ -317,7 +317,7 @@ test("review requires checks and preserves rework and acceptance history", async
         goalId: item.id,
         note: "假装验收",
       }),
-    /验收通过或退回修改/,
+    /验收通过或给管家发消息/,
   );
   await service.execute({
     type: "goal.rework",

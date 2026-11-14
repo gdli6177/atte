@@ -15,7 +15,7 @@ import type { Goal } from "../../../../../packages/core/src/types.js";
 import type { GoalDetailService } from "./goalService.js";
 import { attentionRequest } from "../../../../../packages/core/src/model.js";
 
-export type GoalReplyMode = "message" | "return" | "drop" | "restart";
+export type GoalReplyMode = "message" | "drop" | "restart";
 type ReplyImage = { key: string; file: File; preview: string };
 
 const attachmentFormats = new Set([
@@ -90,12 +90,6 @@ export function GoalReplyComposer({
         toConcierge
           ? "你只描述情况；等待、推进、验收或结束由管家判断。"
           : "只写入当前目标记录",
-    },
-    return: {
-      heading: "退回说明",
-      placeholder: "说清哪里需要修改；管家会转给原负责人。",
-      submit: "退回并交给管家",
-      note: "退回是明确状态操作",
     },
     drop: {
       heading: "放弃目标",
@@ -172,16 +166,6 @@ export function GoalReplyComposer({
       if (mode === "restart") {
         await service.restartGoal(goal.id, body);
         onComplete("目标已重新打开；正在恢复原负责人会话并交给管家");
-        return;
-      }
-      if (mode === "return") {
-        await service.command({
-          type: "goal.rework",
-          goalId: goal.id,
-          attentionId: attentionRequest(goal)?.id,
-          note: body,
-        });
-        onComplete("已退回，管家会带着你的原话继续协调");
         return;
       }
       if (mode === "drop") {
@@ -267,9 +251,7 @@ export function GoalReplyComposer({
           maxLength={12000}
           value={message}
           aria-label={
-            mode === "return"
-              ? "退回说明"
-              : mode === "drop"
+            mode === "drop"
                 ? "放弃原因"
                 : mode === "restart"
                   ? "给管家的重启说明"

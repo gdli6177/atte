@@ -829,7 +829,8 @@ test("Herdr board renders actionable attention without terminal escape codes", a
   }) as Goal;
   const reviewBoard = renderBoardPlain(await service.read(), reviewed.id);
   assert.match(reviewBoard, /a 验收通过/);
-  assert.match(reviewBoard, /r 退回修改/);
+  assert.match(reviewBoard, /c 给管家发消息/);
+  assert.doesNotMatch(reviewBoard, /退回修改/);
 
   const risky = await service.execute({ type: "goal.intake", text: "调整生产权限" }) as Goal;
   await service.execute({
@@ -838,6 +839,29 @@ test("Herdr board renders actionable attention without terminal escape codes", a
   });
   const riskyBoard = renderBoardPlain(await service.read(), risky.id);
   assert.match(riskyBoard, /高风险动作必须由你确认/);
+});
+test("review feedback through the executable keeps delivery and attention until an explicit concierge update", async () => {
+  const root = await fixture("crewvane-review-feedback-");
+  const created = await call(root, ["ask", "交付一个可以验收的页面"]);
+  const goalId = created.json.id;
+  const reviewed = await call(root, [
+    "goal", "review", goalId, "--summary", "页面和验证已交付",
+    "--check", "页面回归::pnpm test::passed",
+  ]);
+  assert.equal(reviewed.code, 0, reviewed.stderr);
+  const feedback = "请补充浅色截图；这个结果还没验收，不要直接完成。";
+  const sent = await callProcess(root, {}, ["goal", "message", goalId, "--text", feedback]);
+  assert.equal(sent.json.status, "review");
+  assert.deepEqual(sent.json.delivery, reviewed.json.delivery);
+  assert.deepEqual(sent.json.attention, reviewed.json.attention);
+  assert.equal(sent.json.dispatch.kind, "feedback");
+  assert.equal(sent.json.dispatch.note, feedback);
+  assert.equal(sent.json.activities.at(-1).text, feedback);
+  assert.equal(sent.json.activities.at(-1).kind, "message");
+  assert.equal(sent.json.activities.some((item: { kind: string }) => item.kind === "rework"), false);
+  const changed = await callProcess(root, {}, ["goal", "rework", goalId, "--note", feedback]);
+  assert.equal(changed.json.status, "active");
+  assert.equal(changed.json.activities.at(-1).kind, "rework");
 });
 
 test("coordinator CLI is limited to the current case and cannot read or mutate another goal", async () => {
