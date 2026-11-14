@@ -18,11 +18,27 @@ const png = Buffer.from(
   "base64",
 );
 function auditRenderedUi() {
+  // Measure settled paint: a running transition can report a transparent or
+  // mid-blend background and turn a passing button into a 1:1 contrast hit.
+  const settle = document.createElement("style");
+  settle.textContent = "*,*::before,*::after{transition:none!important;animation:none!important}";
+  document.head.append(settle);
+  void document.body.offsetHeight;
   const parse = color => {
-    const match = color.match(/rgba?\(([^)]+)\)/);
-    if (!match) return null;
-    const parts = match[1].split(",").map(Number);
-    return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
+    const rgba = color.match(/rgba?\(([^)]+)\)/);
+    if (rgba) {
+      const parts = rgba[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+      return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
+    }
+    // color-mix() serialises as color(srgb r g b / a); without this the audit
+    // skipped the painted layer and fell back to the body background.
+    const srgb = color.match(/color\(srgb ([^)]+)\)/);
+    if (srgb) {
+      const parts = srgb[1].split(/[\s/]+/).filter(Boolean).map(Number);
+      return { r: parts[0] * 255, g: parts[1] * 255, b: parts[2] * 255,
+        a: parts.length > 3 ? parts[3] : 1 };
+    }
+    return null;
   };
   const luminance = ({ r, g, b }) => {
     const channel = value => {
@@ -69,7 +85,7 @@ function auditRenderedUi() {
           key = `contrast|${text}|${Math.round(ratio * 100)}|${fontSize}`;
         if (ratio < required && !seen.has(key)) {
           seen.add(key);
-          issues.push({ kind: "contrast", text, fontSize, ratio: Math.round(ratio * 100) / 100, required });
+          issues.push({ kind: "contrast", text, fontSize, ratio: Math.round(ratio * 100) / 100, required, foreground: style.color, background: `rgb(${Math.round(background.r)}, ${Math.round(background.g)}, ${Math.round(background.b)})` });
         }
         if (fontSize < 11 && !seen.has(`tiny|${text}|${fontSize}`)) {
           seen.add(`tiny|${text}|${fontSize}`);
@@ -90,6 +106,7 @@ function auditRenderedUi() {
   }
   if (document.documentElement.scrollWidth > document.documentElement.clientWidth + 2)
     issues.push({ kind: "horizontal-scroll", over: document.documentElement.scrollWidth - document.documentElement.clientWidth });
+  settle.remove();
   return issues;
 }
 const home = await mkdtemp("/tmp/cv-desktop-"),
@@ -898,6 +915,15 @@ try {
   // the persisted snapshot so the row and action card cannot disagree when
   // FSEvents arrives after the direct state read.
   await page.reload();
+  // Wait for the renderer to rehydrate from the persisted snapshot before
+  // navigating: clicking straight after reload can reach a store that has not
+  // loaded the dispatch failure yet, which reads as a missing attention card.
+  await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
+  await page.waitForFunction(async goalId => {
+    const snapshot = await window.atte.command({ type: "snapshot" });
+    const current = snapshot.goals.find(goal => goal.id === goalId);
+    return current?.attention?.source === "dispatch" && current.dispatch?.status === "failed";
+  }, offline.id);
   await page.getByRole("button", { name: "全部目标", exact: true }).click();
   const offlineRow = page.locator(".goal-row").filter({ hasText: "联系管家失败界面" });
   await offlineRow.getByText("恢复联系", { exact: true }).waitFor();

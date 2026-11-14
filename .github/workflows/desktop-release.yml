@@ -86,30 +86,28 @@ jobs:
         run: |
           set -euo pipefail
           cat > notes.md <<'NOTES'
-          Atte 0.12.0 · macOS Apple Silicon
+          Atte 0.13.0 · macOS Apple Silicon
 
           ## 本版更新
 
-          - 正式更名为 Atte，统一应用、桌面与安装包展示；定位为「注意力中心 · The attention layer」。
-          - 应用、Dock、菜单栏、favicon 与打包图标启用 Six Vectors 新标识；原像素吉祥物保留为角色插画。
-          - 验收卡、目标详情与终端控制台统一为一个「给管家发消息」反馈入口，保留独立「验收通过」。
-          - 设计 token 按 primitive / semantic / component 分层，首页、详情与设置共用原语；收敛装饰、阴影和悬停动效。
-          - 设置按工作区与外观、执行现场、Agent 与工作方法、授权与自主推进、通知重排；字段修改需显式保存。
-          - 内部标识全量改名：npm 包使用 @atte/*，CLI 使用 atte，用户安装目录使用 ~/.atte，工作区使用 .atte，插件 ID 使用 dev.atte。
+          - 界面换到 Vercel 式极简基线：深色墨底、暖白文字、琥珀作为唯一强调色；去掉装饰性阴影与渐变。
+          - 品牌色落地为设计 token（墨 #14181B / 暖白 #F3F1EA / 琥珀 #F5A524；浅色主题琥珀用 #B4761A 保证对比度），仍按 primitive / semantic / component 三层组织。
+          - 按钮统一为胶囊形：深色主题主按钮暖白底墨字、浅色主题墨底暖白字；次按钮改为 1px 描边透明底。
+          - 卡片改为 1px 描边、12px 圆角、无阴影；状态颜色只出现在小圆点与左侧竖条上。
+          - 留白与字阶调整：主区左右 40px、卡片间距 16px、区块间距 40px；标题行高收紧到 1.05。
+          - 键盘焦点环统一为 2px 琥珀外环 + 2px 偏移，并放在样式表末尾，避免被组件级重置覆盖。
+          - 正文对比度实测：深色 4.80:1、浅色 4.70:1；66 组颜色配对与 8 档字阶一致性检查通过。
 
-          ## 破坏性变更与迁移
+          ## 兼容性
 
-          - 不再提供 crewvane 命令别名。安装后在设置中重新安装 Atte CLI；旧外部脚本需要改用 atte。
-          - ~/.crewvane、旧工作区与应用数据采用复制、SHA-256 校验后迁移；旧目录完整保留，迁移失败时继续使用旧目录。
-          - 旧 Herdr 插件 dev.crewvane 不自动删除，也不再使用；新版只注册 dev.atte，旧插件条目可手动清理。
-          - 旧 Hook / Skill 需要在设置中重新安装，以更新命令、环境变量和协议标识；重新安装不会删除第三方配置。
+          - 无破坏性变更：工作区、CLI、Hook、Skill 与 0.12.0 兼容，升级后不需要重装 CLI 或 Skill。
 
           ## 安装
 
           仅支持 Apple Silicon Mac（arm64）。从 Assets 下载 .dmg，将 Atte.app 拖入 Applications；也可下载 .zip 解压安装。
           SHA256SUMS.txt 可用于校验下载文件。GitHub 自动生成的 Source code 是源码，不是安装包。
           安装或替换应用后，请在设置中重新安装 Atte CLI，并检查“Agent 接入”和“工作方法”。
-          旧版 Hook / Skill 请重新安装，以同时获得 Atte 主协议和本地能力包创建器。
+          从 0.11 及更早版本升级时，请重新安装 Atte CLI 与 Skill，以更新命令、环境变量与协议标识。
           Codex 首次使用受管 Hook 时，请按 Codex 提示在 /hooks 中审核并信任 Atte 条目。
           当前安装包没有 Apple Developer ID 签名与公证，macOS 可能提示无法验证开发者。
           核对发布来源后，可在系统设置 > 隐私与安全性中按提示选择仍要打开。

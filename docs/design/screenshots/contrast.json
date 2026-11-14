@@ -1,0 +1,1194 @@
+{
+  "source": "tokens.css；按 sRGB 相对亮度计算，未代替浏览器合成和真实截图走查",
+  "measurements": [
+    {
+      "theme": "dark",
+      "foreground": "--text",
+      "background": "--bg",
+      "foregroundColor": [
+        243,
+        241,
+        234
+      ],
+      "backgroundColor": [
+        20,
+        24,
+        27
+      ],
+      "ratio": 15.7973,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--secondary",
+      "background": "--bg",
+      "foregroundColor": [
+        199,
+        195,
+        185
+      ],
+      "backgroundColor": [
+        20,
+        24,
+        27
+      ],
+      "ratio": 10.1469,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--muted",
+      "background": "--bg",
+      "foregroundColor": [
+        155,
+        151.24,
+        142.48000000000002
+      ],
+      "backgroundColor": [
+        20,
+        24,
+        27
+      ],
+      "ratio": 6.1462,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--link-text",
+      "background": "--bg",
+      "foregroundColor": [
+        255,
+        193,
+        92
+      ],
+      "backgroundColor": [
+        20,
+        24,
+        27
+      ],
+      "ratio": 11.0817,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--accent",
+      "background": "--bg",
+      "foregroundColor": [
+        245,
+        165,
+        36
+      ],
+      "backgroundColor": [
+        20,
+        24,
+        27
+      ],
+      "ratio": 8.7484,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--text",
+      "background": "--sidebar",
+      "foregroundColor": [
+        243,
+        241,
+        234
+      ],
+      "backgroundColor": [
+        16,
+        19,
+        22
+      ],
+      "ratio": 16.4907,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--secondary",
+      "background": "--sidebar",
+      "foregroundColor": [
+        199,
+        195,
+        185
+      ],
+      "backgroundColor": [
+        16,
+        19,
+        22
+      ],
+      "ratio": 10.5923,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--muted",
+      "background": "--sidebar",
+      "foregroundColor": [
+        155,
+        151.24,
+        142.48000000000002
+      ],
+      "backgroundColor": [
+        16,
+        19,
+        22
+      ],
+      "ratio": 6.416,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--link-text",
+      "background": "--sidebar",
+      "foregroundColor": [
+        255,
+        193,
+        92
+      ],
+      "backgroundColor": [
+        16,
+        19,
+        22
+      ],
+      "ratio": 11.5681,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--accent",
+      "background": "--sidebar",
+      "foregroundColor": [
+        245,
+        165,
+        36
+      ],
+      "backgroundColor": [
+        16,
+        19,
+        22
+      ],
+      "ratio": 9.1324,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--text",
+      "background": "--surface",
+      "foregroundColor": [
+        243,
+        241,
+        234
+      ],
+      "backgroundColor": [
+        26,
+        31,
+        35
+      ],
+      "ratio": 14.6981,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--secondary",
+      "background": "--surface",
+      "foregroundColor": [
+        199,
+        195,
+        185
+      ],
+      "backgroundColor": [
+        26,
+        31,
+        35
+      ],
+      "ratio": 9.4409,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--muted",
+      "background": "--surface",
+      "foregroundColor": [
+        155,
+        151.24,
+        142.48000000000002
+      ],
+      "backgroundColor": [
+        26,
+        31,
+        35
+      ],
+      "ratio": 5.7185,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--link-text",
+      "background": "--surface",
+      "foregroundColor": [
+        255,
+        193,
+        92
+      ],
+      "backgroundColor": [
+        26,
+        31,
+        35
+      ],
+      "ratio": 10.3106,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--accent",
+      "background": "--surface",
+      "foregroundColor": [
+        245,
+        165,
+        36
+      ],
+      "backgroundColor": [
+        26,
+        31,
+        35
+      ],
+      "ratio": 8.1396,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--text",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        243,
+        241,
+        234
+      ],
+      "backgroundColor": [
+        32,
+        38,
+        43
+      ],
+      "ratio": 13.5279,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--secondary",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        199,
+        195,
+        185
+      ],
+      "backgroundColor": [
+        32,
+        38,
+        43
+      ],
+      "ratio": 8.6892,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--muted",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        155,
+        151.24,
+        142.48000000000002
+      ],
+      "backgroundColor": [
+        32,
+        38,
+        43
+      ],
+      "ratio": 5.2633,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--link-text",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        255,
+        193,
+        92
+      ],
+      "backgroundColor": [
+        32,
+        38,
+        43
+      ],
+      "ratio": 9.4897,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--accent",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        245,
+        165,
+        36
+      ],
+      "backgroundColor": [
+        32,
+        38,
+        43
+      ],
+      "ratio": 7.4916,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--text",
+      "background": "--surface-hover",
+      "foregroundColor": [
+        243,
+        241,
+        234
+      ],
+      "backgroundColor": [
+        38,
+        45,
+        51
+      ],
+      "ratio": 12.3416,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--secondary",
+      "background": "--surface-hover",
+      "foregroundColor": [
+        199,
+        195,
+        185
+      ],
+      "backgroundColor": [
+        38,
+        45,
+        51
+      ],
+      "ratio": 7.9272,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--muted",
+      "background": "--surface-hover",
+      "foregroundColor": [
+        155,
+        151.24,
+        142.48000000000002
+      ],
+      "backgroundColor": [
+        38,
+        45,
+        51
+      ],
+      "ratio": 4.8017,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--link-text",
+      "background": "--surface-hover",
+      "foregroundColor": [
+        255,
+        193,
+        92
+      ],
+      "backgroundColor": [
+        38,
+        45,
+        51
+      ],
+      "ratio": 8.6575,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--accent",
+      "background": "--surface-hover",
+      "foregroundColor": [
+        245,
+        165,
+        36
+      ],
+      "backgroundColor": [
+        38,
+        45,
+        51
+      ],
+      "ratio": 6.8346,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--text",
+      "background": "--surface-raised",
+      "foregroundColor": [
+        243,
+        241,
+        234
+      ],
+      "backgroundColor": [
+        31,
+        37,
+        42
+      ],
+      "ratio": 13.6997,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--secondary",
+      "background": "--surface-raised",
+      "foregroundColor": [
+        199,
+        195,
+        185
+      ],
+      "backgroundColor": [
+        31,
+        37,
+        42
+      ],
+      "ratio": 8.7995,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--muted",
+      "background": "--surface-raised",
+      "foregroundColor": [
+        155,
+        151.24,
+        142.48000000000002
+      ],
+      "backgroundColor": [
+        31,
+        37,
+        42
+      ],
+      "ratio": 5.3301,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--link-text",
+      "background": "--surface-raised",
+      "foregroundColor": [
+        255,
+        193,
+        92
+      ],
+      "backgroundColor": [
+        31,
+        37,
+        42
+      ],
+      "ratio": 9.6102,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--accent",
+      "background": "--surface-raised",
+      "foregroundColor": [
+        245,
+        165,
+        36
+      ],
+      "backgroundColor": [
+        31,
+        37,
+        42
+      ],
+      "ratio": 7.5867,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--muted",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        155,
+        151.24,
+        142.48000000000002
+      ],
+      "backgroundColor": [
+        32,
+        38,
+        43
+      ],
+      "ratio": 5.2633,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--btn-primary-text",
+      "background": "--btn-primary-bg",
+      "foregroundColor": [
+        20,
+        24,
+        27
+      ],
+      "backgroundColor": [
+        243,
+        241,
+        234
+      ],
+      "ratio": 15.7973,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "--btn-primary-text",
+      "background": "--btn-primary-hover-bg",
+      "foregroundColor": [
+        20,
+        24,
+        27
+      ],
+      "backgroundColor": [
+        228.42,
+        226.54,
+        219.95999999999998
+      ],
+      "ratio": 13.8434,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--text",
+      "background": "--bg",
+      "foregroundColor": [
+        20,
+        24,
+        27
+      ],
+      "backgroundColor": [
+        247,
+        246,
+        243
+      ],
+      "ratio": 16.5201,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--secondary",
+      "background": "--bg",
+      "foregroundColor": [
+        74,
+        79,
+        84
+      ],
+      "backgroundColor": [
+        247,
+        246,
+        243
+      ],
+      "ratio": 7.6574,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--muted",
+      "background": "--bg",
+      "foregroundColor": [
+        96.56,
+        101.44,
+        107.08
+      ],
+      "backgroundColor": [
+        247,
+        246,
+        243
+      ],
+      "ratio": 5.4055,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--link-text",
+      "background": "--bg",
+      "foregroundColor": [
+        143,
+        92,
+        16
+      ],
+      "backgroundColor": [
+        247,
+        246,
+        243
+      ],
+      "ratio": 5.2428,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--accent",
+      "background": "--bg",
+      "foregroundColor": [
+        180,
+        118,
+        26
+      ],
+      "backgroundColor": [
+        247,
+        246,
+        243
+      ],
+      "ratio": 3.5031,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--text",
+      "background": "--sidebar",
+      "foregroundColor": [
+        20,
+        24,
+        27
+      ],
+      "backgroundColor": [
+        239,
+        238,
+        234
+      ],
+      "ratio": 15.3781,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--secondary",
+      "background": "--sidebar",
+      "foregroundColor": [
+        74,
+        79,
+        84
+      ],
+      "backgroundColor": [
+        239,
+        238,
+        234
+      ],
+      "ratio": 7.1281,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--muted",
+      "background": "--sidebar",
+      "foregroundColor": [
+        96.56,
+        101.44,
+        107.08
+      ],
+      "backgroundColor": [
+        239,
+        238,
+        234
+      ],
+      "ratio": 5.0319,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--link-text",
+      "background": "--sidebar",
+      "foregroundColor": [
+        143,
+        92,
+        16
+      ],
+      "backgroundColor": [
+        239,
+        238,
+        234
+      ],
+      "ratio": 4.8804,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--accent",
+      "background": "--sidebar",
+      "foregroundColor": [
+        180,
+        118,
+        26
+      ],
+      "backgroundColor": [
+        239,
+        238,
+        234
+      ],
+      "ratio": 3.2609,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--text",
+      "background": "--surface",
+      "foregroundColor": [
+        20,
+        24,
+        27
+      ],
+      "backgroundColor": [
+        255,
+        255,
+        255
+      ],
+      "ratio": 17.8537,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--secondary",
+      "background": "--surface",
+      "foregroundColor": [
+        74,
+        79,
+        84
+      ],
+      "backgroundColor": [
+        255,
+        255,
+        255
+      ],
+      "ratio": 8.2756,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--muted",
+      "background": "--surface",
+      "foregroundColor": [
+        96.56,
+        101.44,
+        107.08
+      ],
+      "backgroundColor": [
+        255,
+        255,
+        255
+      ],
+      "ratio": 5.8419,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--link-text",
+      "background": "--surface",
+      "foregroundColor": [
+        143,
+        92,
+        16
+      ],
+      "backgroundColor": [
+        255,
+        255,
+        255
+      ],
+      "ratio": 5.6661,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--accent",
+      "background": "--surface",
+      "foregroundColor": [
+        180,
+        118,
+        26
+      ],
+      "backgroundColor": [
+        255,
+        255,
+        255
+      ],
+      "ratio": 3.7859,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--text",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        20,
+        24,
+        27
+      ],
+      "backgroundColor": [
+        242,
+        241,
+        237
+      ],
+      "ratio": 15.7967,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--secondary",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        74,
+        79,
+        84
+      ],
+      "backgroundColor": [
+        242,
+        241,
+        237
+      ],
+      "ratio": 7.3221,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--muted",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        96.56,
+        101.44,
+        107.08
+      ],
+      "backgroundColor": [
+        242,
+        241,
+        237
+      ],
+      "ratio": 5.1688,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--link-text",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        143,
+        92,
+        16
+      ],
+      "backgroundColor": [
+        242,
+        241,
+        237
+      ],
+      "ratio": 5.0133,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--accent",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        180,
+        118,
+        26
+      ],
+      "backgroundColor": [
+        242,
+        241,
+        237
+      ],
+      "ratio": 3.3497,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--text",
+      "background": "--surface-hover",
+      "foregroundColor": [
+        20,
+        24,
+        27
+      ],
+      "backgroundColor": [
+        235,
+        234,
+        229
+      ],
+      "ratio": 14.8211,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--secondary",
+      "background": "--surface-hover",
+      "foregroundColor": [
+        74,
+        79,
+        84
+      ],
+      "backgroundColor": [
+        235,
+        234,
+        229
+      ],
+      "ratio": 6.8699,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--muted",
+      "background": "--surface-hover",
+      "foregroundColor": [
+        96.56,
+        101.44,
+        107.08
+      ],
+      "backgroundColor": [
+        235,
+        234,
+        229
+      ],
+      "ratio": 4.8496,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--link-text",
+      "background": "--surface-hover",
+      "foregroundColor": [
+        143,
+        92,
+        16
+      ],
+      "backgroundColor": [
+        235,
+        234,
+        229
+      ],
+      "ratio": 4.7036,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--accent",
+      "background": "--surface-hover",
+      "foregroundColor": [
+        180,
+        118,
+        26
+      ],
+      "backgroundColor": [
+        235,
+        234,
+        229
+      ],
+      "ratio": 3.1428,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--text",
+      "background": "--surface-raised",
+      "foregroundColor": [
+        20,
+        24,
+        27
+      ],
+      "backgroundColor": [
+        255,
+        255,
+        255
+      ],
+      "ratio": 17.8537,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--secondary",
+      "background": "--surface-raised",
+      "foregroundColor": [
+        74,
+        79,
+        84
+      ],
+      "backgroundColor": [
+        255,
+        255,
+        255
+      ],
+      "ratio": 8.2756,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--muted",
+      "background": "--surface-raised",
+      "foregroundColor": [
+        96.56,
+        101.44,
+        107.08
+      ],
+      "backgroundColor": [
+        255,
+        255,
+        255
+      ],
+      "ratio": 5.8419,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--link-text",
+      "background": "--surface-raised",
+      "foregroundColor": [
+        143,
+        92,
+        16
+      ],
+      "backgroundColor": [
+        255,
+        255,
+        255
+      ],
+      "ratio": 5.6661,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--accent",
+      "background": "--surface-raised",
+      "foregroundColor": [
+        180,
+        118,
+        26
+      ],
+      "backgroundColor": [
+        255,
+        255,
+        255
+      ],
+      "ratio": 3.7859,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--muted",
+      "background": "--surface-soft",
+      "foregroundColor": [
+        96.56,
+        101.44,
+        107.08
+      ],
+      "backgroundColor": [
+        242,
+        241,
+        237
+      ],
+      "ratio": 5.1688,
+      "required": 3,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--btn-primary-text",
+      "background": "--btn-primary-bg",
+      "foregroundColor": [
+        247,
+        246,
+        243
+      ],
+      "backgroundColor": [
+        20,
+        24,
+        27
+      ],
+      "ratio": 16.5201,
+      "required": 4.5,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "--btn-primary-text",
+      "background": "--btn-primary-hover-bg",
+      "foregroundColor": [
+        247,
+        246,
+        243
+      ],
+      "backgroundColor": [
+        18.799999999999997,
+        22.56,
+        25.38
+      ],
+      "ratio": 16.7404,
+      "required": 4.5,
+      "passed": true
+    }
+  ],
+  "failed": []
+}

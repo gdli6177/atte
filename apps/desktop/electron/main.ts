@@ -111,7 +111,8 @@ function trayIcon() {
 }
 // Native window chrome needs a startup color before renderer CSS is available.
 // Keep this synchronized with the dark `--bg` design token and DESIGN.md.
-const WINDOW_BACKGROUND = "#0d1214";
+declare const ATTE_WINDOW_BACKGROUND: string;
+const WINDOW_BACKGROUND = ATTE_WINDOW_BACKGROUND;
 const terminals = new TerminalHost((event) => {
   if (window && !window.isDestroyed()) window.webContents.send("atte:event", event);
 }, process.env);
