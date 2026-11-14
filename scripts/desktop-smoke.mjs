@@ -165,6 +165,10 @@ const app = await electron.launch({
 const errors = [];
 try {
   const page = await app.firstWindow();
+  // Hosted macOS runners are slower than local machines; keep assertions and
+  // only widen the wait budget so timing alone cannot fail the smoke.
+  page.setDefaultTimeout(60_000);
+  page.setDefaultNavigationTimeout(60_000);
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
@@ -461,7 +465,7 @@ try {
   await page.getByRole("heading", { name: "只设置必要的。" }).waitFor();
   await page.getByRole("heading", { name: "缓存与本地维护", exact: true }).waitFor();
   await expect.poll(() => access(automaticTempFile).then(() => true).catch(() => false),
-    { timeout: 10_000 }).toBe(false);
+    { timeout: 30_000 }).toBe(false);
   const goalsBeforeCacheCleanup = (await service.read()).goals.length;
   await page.getByRole("button", { name: "清理缓存", exact: true }).click();
   await page.getByText(/已释放 .* 个缓存文件/).waitFor();

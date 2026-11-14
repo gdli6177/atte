@@ -1,5 +1,5 @@
 import { _electron as electron, expect } from "@playwright/test";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
@@ -8,6 +8,17 @@ import assert from "node:assert/strict";
 import { completeAutonomySetup } from "./lib/autonomy-setup.mjs";
 
 const exec = promisify(execFile);
+// Narrow terminals can split a marker across accessibility rows with Herdr
+// border characters between the fragments. Compare alphanumeric text only.
+function accessibilityContains(value) {
+  const normalizeTerminalText = (text) =>
+    String(text ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  return normalizeTerminalText(document.querySelector(".xterm-accessibility-tree")?.textContent)
+    .includes(normalizeTerminalText(value));
+}
+function diagnosticTail(value, length = 1200) {
+  return String(value ?? "").slice(-length);
+}
 async function readSystemClipboard() {
   return (await exec("/usr/bin/pbpaste", [], {
     timeout: 5_000,
@@ -33,6 +44,7 @@ async function writeSystemClipboard(value) {
 const originalClipboard = await readSystemClipboard().catch(() => undefined);
 // Keep the isolated Herdr socket below macOS AF_UNIX's sun_path limit.
 const home = await mkdtemp("/tmp/cv-terminal-");
+const diagnosticLog = join(home, "terminal-smoke.log");
 const workspace = join(home, "workspace"), session = `atte-tty-${randomUUID().slice(0, 8)}`;
 const herdrEnvironment = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"),
   XDG_STATE_HOME: join(home, ".local/state"), XDG_DATA_HOME: join(home, ".local/share"),
@@ -40,6 +52,7 @@ const herdrEnvironment = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(hom
 await mkdir(workspace);
 let app, herdrExecutable;
 const errors = [];
+const applicationLogs = [];
 try {
   app = await electron.launch({
     executablePath: resolve(process.env.ATTE_APP_PATH ||
@@ -53,7 +66,11 @@ try {
     timeout: 60_000,
   });
   const page = await app.firstWindow();
+  page.setDefaultTimeout(60_000);
+  page.setDefaultNavigationTimeout(60_000);
   page.on("pageerror", (error) => errors.push(error.message));
+  for (const stream of [app.process().stdout, app.process().stderr])
+    stream?.on("data", chunk => applicationLogs.push(...chunk.toString().split("\n")));
   await page.waitForFunction(() => !!window.atte);
   await completeAutonomySetup(page);
   await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
@@ -99,7 +116,7 @@ try {
   // TUI redraws can split or omit unchanged bytes in the PTY stream. Require an
   // actual shell-side effect rather than mistaking echoed input for execution.
   await expect.poll(() => readFile(resultFile, "utf8").catch(() => ""), { timeout: 30_000 }).toBe(marker);
-  await page.locator(".xterm-accessibility").filter({ hasText: marker }).waitFor({ state: "attached" });
+  await page.waitForFunction(accessibilityContains, marker, { timeout: 30_000 });
   const firstPid = await app.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   assert.equal(firstPid.length, 1);
   const textarea = page.locator(".xterm-helper-textarea");
@@ -142,7 +159,7 @@ try {
     { steps: 15 },
   );
   await page.mouse.up();
-  await expect.poll(readSystemClipboard, { timeout: 10_000 }).toBe(marker);
+  await expect.poll(readSystemClipboard, { timeout: 30_000 }).toBe(marker);
   await expect(page.getByRole("status")).toContainText("已复制");
   const terminalData = await page.evaluate(async () =>
     (await window.atte.terminalSnapshot())?.data ?? "");
@@ -179,9 +196,43 @@ try {
     } else {
       await page.keyboard.press(shortcut);
     }
-    await page.waitForFunction((value) =>
-      document.querySelector(".xterm-accessibility-tree")?.textContent?.includes(value),
-    pasteMarker, { timeout: 10_000 });
+    try {
+      await page.waitForFunction(accessibilityContains, pasteMarker, { timeout: 30_000 });
+    } catch (error) {
+      try {
+        const renderer = await page.evaluate(async () => {
+          const snapshot = await window.atte.terminalSnapshot();
+          const active = document.activeElement;
+          return {
+            focused: document.hasFocus(), visibility: document.visibilityState,
+            activeElement: active ? `${active.tagName}.${active.className}` : null,
+            notice: document.querySelector(".terminal-clipboard-status")?.textContent,
+            accessibilityTail: document.querySelector(".xterm-accessibility-tree")?.textContent,
+            terminalTail: snapshot?.data, terminalSequence: snapshot?.sequence,
+            clipboardLength: (await window.atte.readClipboardContent()).text?.length,
+          };
+        });
+        const main = await app.evaluate(async ({ app, BrowserWindow, clipboard }) => ({
+          focused: BrowserWindow.getAllWindows().map(window => window.isFocused()),
+          clipboardLength: (await clipboard.readText()).length,
+          logsPath: app.getPath("logs"),
+        }));
+        const diagnostic = {
+          mode, renderer: { ...renderer,
+            accessibilityTail: diagnosticTail(renderer.accessibilityTail),
+            terminalTail: diagnosticTail(renderer.terminalTail) },
+          main,
+          systemClipboardLength: (await readSystemClipboard()).length,
+          applicationLogs: diagnosticTail(applicationLogs.join("\n")),
+          pageErrors: diagnosticTail(errors.join("\n")),
+        };
+        await appendFile(diagnosticLog, `${JSON.stringify(diagnostic)}\n`);
+        console.error("Terminal paste diagnostics:", JSON.stringify(diagnostic));
+      } catch (diagnosticError) {
+        console.error("Terminal paste diagnostics failed:", String(diagnosticError));
+      }
+      throw error;
+    }
     await page.keyboard.press("Enter");
     await expect.poll(() => readFile(pasteFile, "utf8").catch(() => ""), { timeout: 30_000 }).toBe(pasteMarker);
   }
@@ -302,8 +353,17 @@ try {
     "ended goal closes its real Herdr tab",
   ] }));
 } catch (error) {
-  if (app) await (await app.firstWindow()).screenshot({ path: join(home, "failure.png") }).catch(() => {});
-  console.error(JSON.stringify({ home, session, errors, error: String(error) }));
+  try {
+    if (app) await (await app.firstWindow()).screenshot({ path: join(home, "failure.png") }).catch(() => {});
+    const applicationLog = join(home, "application.log");
+    await appendFile(applicationLog, applicationLogs.join("\n"));
+    console.error(JSON.stringify({
+      home, session, pageErrors: diagnosticTail(errors.join("\n")),
+      error: diagnosticTail(error), applicationLog,
+    }));
+  } catch (diagnosticError) {
+    console.error("Terminal smoke diagnostics failed:", String(diagnosticError));
+  }
   throw error;
 } finally {
   if (app) {
