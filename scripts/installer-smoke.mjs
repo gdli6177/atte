@@ -60,7 +60,7 @@ async function launchInstalled(appPath, label) {
   await verifyDownloadedApp(appPath, label);
   assert.ok(
     (await readFile(join(appPath, "Contents/Resources/app.asar"))).includes(
-      Buffer.from("ATTE_TEST_HOME"),
+      Buffer.from("TEST_HOME"),
     ),
     "Installer predates isolated CLI testing; rebuild with pnpm desktop:dist before running",
   );
