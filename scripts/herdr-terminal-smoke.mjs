@@ -8,11 +8,13 @@ import assert from "node:assert/strict";
 import { completeAutonomySetup } from "./lib/autonomy-setup.mjs";
 
 const exec = promisify(execFile);
-// Narrow terminals can split a marker across accessibility rows. Ignore all
-// whitespace so the assertion reflects the rendered text rather than row width.
+// Narrow terminals can split a marker across accessibility rows with Herdr
+// border characters between the fragments. Compare alphanumeric text only.
 function accessibilityContains(value) {
-  return (document.querySelector(".xterm-accessibility-tree")?.textContent ?? "")
-    .replace(/\s+/g, "").includes(value.replace(/\s+/g, ""));
+  const normalizeTerminalText = (text) =>
+    String(text ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  return normalizeTerminalText(document.querySelector(".xterm-accessibility-tree")?.textContent)
+    .includes(normalizeTerminalText(value));
 }
 function diagnosticTail(value, length = 1200) {
   return String(value ?? "").slice(-length);
