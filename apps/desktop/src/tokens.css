@@ -19,7 +19,7 @@
     --palette-dark-surface-raised: #1F252A;
     --palette-dark-text: #F3F1EA;
     --palette-dark-secondary: #C7C3B9;
-    --palette-dark-muted: #8F8B82;
+    --palette-dark-muted: #9A968D;
     --palette-dark-line: #2A3137;
     --palette-dark-line-strong: #3C454C;
     --palette-dark-accent: #F5A524;
@@ -40,7 +40,7 @@
     --palette-light-surface-raised: #FFFFFF;
     --palette-light-text: #14181B;
     --palette-light-secondary: #4A4F54;
-    --palette-light-muted: #6B7076;
+    --palette-light-muted: #5F646B;
     --palette-light-line: #DCDAD3;
     --palette-light-line-strong: #B9B7B0;
     --palette-light-accent: #B4761A;
@@ -286,7 +286,7 @@
     --card-shadow: none;
     --section-gap: var(--space-10);
   }
-  body {
-    --muted: var(--meta-text);
-  }
+  /* `--meta-text` derives from `--muted`; redefining `--muted` from it on body
+     creates a reference cycle, which invalidates every descendant that reads
+     `--muted` (disabled buttons fell back to the surface colour). */
 }

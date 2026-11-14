@@ -35,7 +35,7 @@ Atte 的墨底、暖白和琥珀。信息架构、文案、交互及状态映射
 | `surface-raised` | #1F252A | #FFFFFF |
 | `text` | #F3F1EA | #14181B |
 | `secondary` | #C7C3B9 | #4A4F54 |
-| `muted` | #8F8B82 | #6B7076 |
+| `muted` | #9A968D | #5F646B |
 | `line` | #2A3137 | #DCDAD3 |
 | `line-strong` | #3C454C | #B9B7B0 |
 | `accent` | #F5A524 | #B4761A |
@@ -54,10 +54,10 @@ Atte 的墨底、暖白和琥珀。信息架构、文案、交互及状态映射
 状态文案保持中性色，不将整块状态卡染色，破坏性动作保留危险色。
 
 浅色 `accent` 在白底实测仅 3.79:1，不能用作小字号正文；文字链接使用
-`--link-text: var(--accent-strong)`。原始 `muted` 在部分侧栏和悬停底不满 4.5:1，
-组件层用 `--meta-text` 将 `muted` 与 `text` 按 88% / 12% 混合，再供 `body`
-内的页面和 Portal 浮层元信息消费；不改上表原始色板或语义名称。实测与限制见
-[改版验收记录](docs/design/screenshots/README.md)。
+`--link-text: var(--accent-strong)`。元信息直接用 `muted`（深色 `#9A968D`、浅色
+`#5F646B`），这两种值在侧栏与悬停底上仍 ≥ 4.7:1；`--meta-text` 只是可选的混合值，
+**不要**再用它回写 `--muted`（那会形成变量循环，让禁用态和次级文字退回同色）。
+实测与限制见[改版验收记录](docs/design/screenshots/README.md)。
 
 ## 字阶
 
