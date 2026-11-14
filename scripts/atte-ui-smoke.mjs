@@ -4,8 +4,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
 import { WorkspaceService } from "../packages/core/src/index.ts";
+import { auditVisualState, focusedVisualState } from "./lib/visual-audit.mjs";
 
 const artifacts = await mkdtemp(join(tmpdir(), "atte-ui-"));
+const screenshots = process.env.ATTE_UI_SCREENSHOT_DIR
+  ? resolve(process.env.ATTE_UI_SCREENSHOT_DIR) : join(artifacts, "screenshots");
+await mkdir(screenshots, { recursive: true });
 const home = join(artifacts, "home");
 const workspace = join(home, "workspace");
 await mkdir(workspace, { recursive: true });
@@ -44,22 +48,28 @@ const application = await electron.launch({
 });
 const errors = [];
 const measurements = [];
+const visualChecks = [];
+const keyboardChecks = [];
 try {
   const page = await application.firstWindow();
   page.on("pageerror", error => errors.push(error.message));
   await page.getByRole("button", { name: "注意力", exact: true }).waitFor();
   await expect(page).toHaveTitle("Atte");
-  const native = await application.evaluate(({ app, Menu }) => ({
+  const native = await application.evaluate(({ app, Menu, BrowserWindow }) => ({
     name: app.getName(),
     packaged: app.isPackaged,
     userData: app.getPath("userData"),
     menu: Menu.getApplicationMenu()?.items[0].label,
     about: Menu.getApplicationMenu()?.items[0].submenu?.items.some(item => item.role === "about"),
+    background: BrowserWindow.getAllWindows()[0].getBackgroundColor(),
   }));
   assert.equal(native.name, "Atte");
   assert.equal(native.menu, "Atte");
   assert.equal(native.about, true);
   assert.equal(native.userData, join(home, "userData"));
+  const tokenSource = await readFile(new URL("../apps/desktop/src/tokens.css", import.meta.url), "utf8");
+  const startupBackground = /--palette-dark-bg:\s*(#[\da-f]{6});/i.exec(tokenSource)?.[1];
+  assert.equal(native.background.toLowerCase(), startupBackground?.toLowerCase());
 
   async function theme(value) {
     await page.evaluate(next => {
@@ -68,8 +78,38 @@ try {
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", value);
   }
-  async function capture(name) {
-    await page.screenshot({ path: join(artifacts, `${name}.png`), animations: "disabled" });
+  async function capture(name, matrix = false, target = page) {
+    await target.screenshot({ path: join(matrix ? screenshots : artifacts, `${name}.png`), animations: "disabled" });
+    if (matrix) {
+      const audit = await target.evaluate(auditVisualState);
+      visualChecks.push({ name, ...audit });
+      assert.deepEqual(audit.failures, [], `${name}: 正文对比度`);
+      assert.equal(audit.horizontalOverflow, false, `${name}: 横向溢出`);
+      assert.ok(audit.primaryActions.length <= 1, `${name}: ${audit.primaryActions.join(" / ")}`);
+      if (target.viewportSize()?.width === 900) await keyboardFocus(target, name);
+    }
+  }
+  async function keyboardFocus(target, name) {
+    const count = await target.evaluate(() => {
+      const scope = [...document.querySelectorAll('[role="dialog"]')].at(-1) ?? document.body;
+      return [...scope.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), summary')]
+        .filter(element => element.checkVisibility() && !element.closest('[inert], [aria-hidden="true"]')).length;
+    });
+    const observed = [];
+    for (let index = 0; index < count; index += 1) {
+      await target.keyboard.press("Tab");
+      const focus = await target.evaluate(focusedVisualState);
+      if (!focus) continue;
+      assert.equal(focus.focused, true, JSON.stringify(focus));
+      assert.equal(focus.outlineWidth, "2px", JSON.stringify(focus));
+      assert.equal(focus.outlineStyle, "solid", JSON.stringify(focus));
+      assert.equal(focus.outlineOffset, "2px", JSON.stringify(focus));
+      assert.equal(focus.outlineColor, focus.expectedOutlineColor, JSON.stringify(focus));
+      assert.equal(focus.boxShadow, "none", JSON.stringify(focus));
+      observed.push(focus);
+    }
+    assert.ok(observed.length > 0, `${name}: 没有可观察的键盘焦点`);
+    keyboardChecks.push({ name, observed });
   }
   async function openReview() {
     await page.getByRole("button", { name: "注意力", exact: true }).click();
@@ -107,7 +147,24 @@ try {
       assert.equal(layout.markClipped, false);
       assert.equal(layout.overlapsTitle, false);
       measurements.push({ theme: value, height, ...layout });
-      await capture(`home-${value}-${width}`);
+      await capture(`home-${value}-${width}×${height}`, true);
+      await openReview();
+      await capture(`review-${value}-${width}×${height}`, true);
+      await page.getByRole("button", { name: "完整记录", exact: true }).click();
+      await page.locator(".goal-detail-modal").waitFor();
+      await capture(`detail-${value}-${width}×${height}`, true);
+      await page.getByRole("button", { name: "关闭", exact: true }).click();
+      await page.getByRole("button", { name: "设置", exact: true }).click();
+      await capture(`settings-${value}-${width}×${height}`, true);
+      if (width === 900) {
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        assert.equal(await page.locator(".ui-button").first().evaluate(element =>
+          getComputedStyle(element).transitionDuration), "0s");
+        assert.equal(await page.evaluate(() => document.getAnimations().filter(animation =>
+          animation.playState === "running").length), 0);
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+      }
+      await page.getByRole("button", { name: "注意力", exact: true }).click();
     }
     await page.setViewportSize({ width: 1440, height: 960 });
     await openReview();
@@ -180,8 +237,47 @@ try {
   await page.getByRole("button", { name: "注意力", exact: true }).click();
   await capture("final-home");
   assert.deepEqual(errors, []);
-  await writeFile(join(artifacts, "results.json"), JSON.stringify({ native, measurements, errors }, null, 2));
-  console.log(JSON.stringify({ result: "passed", artifacts, checks: ["branding", "review-message", "failed-send", "acceptance", "settings-save", "responsive", "reduced-motion"] }));
+  const onboardingHome = join(artifacts, "onboarding-home");
+  await mkdir(onboardingHome, { recursive: true });
+  const onboarding = await electron.launch({
+    executablePath: appPath,
+    args: [],
+    env: {
+      ...process.env,
+      HOME: onboardingHome,
+      XDG_CONFIG_HOME: join(onboardingHome, ".config"),
+      XDG_STATE_HOME: join(onboardingHome, ".local/state"),
+      PATH: "/usr/bin:/bin",
+      ATTE_TEST_HOME: onboardingHome,
+      ATTE_TEST_USER_DATA: join(onboardingHome, "userData"),
+      ATTE_TEST_WORKSPACE: "",
+      ATTE_TEST_ISOLATE_TOOLS: "1",
+      ATTE_TEST_SKIP_HERDR_SETUP: "1",
+    },
+    timeout: 60_000,
+  });
+  try {
+    const welcome = await onboarding.firstWindow();
+    welcome.on("pageerror", error => errors.push(error.message));
+    await welcome.locator(".welcome").waitFor();
+    for (const value of ["dark", "light"]) {
+      await welcome.evaluate(next => localStorage.setItem("atte.theme", next), value);
+      await welcome.reload();
+      await expect(welcome.locator("html")).toHaveAttribute("data-theme", value);
+      await welcome.locator(".welcome").waitFor();
+      for (const [width, height] of [[1440, 960], [1024, 768], [900, 700]]) {
+        await welcome.setViewportSize({ width, height });
+        await capture(`onboarding-${value}-${width}×${height}`, true, welcome);
+      }
+    }
+  } finally {
+    await onboarding.close();
+  }
+  assert.deepEqual(errors, []);
+  const result = { native, measurements, visualChecks, keyboardChecks, errors };
+  await writeFile(join(artifacts, "results.json"), JSON.stringify(result, null, 2));
+  await writeFile(join(screenshots, "ui-results.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify({ result: "passed", artifacts, screenshots, checks: ["branding", "review-message", "failed-send", "acceptance", "settings-save", "responsive", "reduced-motion", "contrast", "focus", "single-primary", "onboarding"] }));
   if (process.env.ATTE_ATTE_UI_HOLD === "1") {
     console.log("Inspection ready on CDP 9338; send a newline to close.");
     await new Promise(resolveInput => process.stdin.once("data", resolveInput));
