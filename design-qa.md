@@ -23,7 +23,7 @@
 
 ```sh
 pnpm desktop:dist
-CREWVANE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop
+ATTE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop
 ```
 
 脚本会打印临时证据目录，其中 `ui-audit/` 保留 30 张回归截图，其他截图覆盖深浅主题、回复图片、失败重试和窄窗口目标详情。

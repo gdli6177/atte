@@ -1,5 +1,5 @@
 ---
-name: crewvane-ui
+name: atte-ui
 description: Use when changing Atte desktop UI: layout, styles, buttons, cards, empty or loading states, settings, attention cards, goal detail surfaces, dialogs, or form fields. Enforces DESIGN.md tokens, shared React primitives, one primary CTA, single focus rings, and light/dark parity.
 ---
 

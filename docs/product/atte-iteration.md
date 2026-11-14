@@ -1,50 +1,54 @@
 # Atte 迭代与验收
 
 需求日期：2026-11-13（北京时间）。开发日期：2026-11-14。
-本轮展示名按需求使用 Atte，定位为「注意力中心」。这是本轮实现用语，不替代最终品牌决策。
+本轮展示名按需求使用 Atte，定位为「注意力中心 · The attention layer」。
+第二轮内部标识、目录迁移与首页尺寸的拍板见[升级说明](../upgrade-atte.md)；
+下文保留第一轮的决策过程，不再代表当前内部标识的兼容边界。
 
-## 兼容边界
+## 第一轮兼容边界（已被第二轮拍板取代）
 
-- 仓库地址、npm 包名 `crewvane` / `@crewvane/*`、CLI 可执行文件 `crewvane` 保留。
-  未添加 `atte` 命令或任何旧命令别名。
-- `.crewvane/`、`~/.crewvane`、`CREWVANE_*`、IPC / Bot 协议、插件 ID、
-  Skill 名称、代码类型与测试临时目录是内部标识，保留以保障兼容。
-- macOS 安装包、应用、菜单、窗口标题与对外文案使用 Atte。应用数据继续使用
-  `appData/Crewvane`，在 Electron 初始化前固定该路径，防止改展示名后产生空白配置。
-  `crewvane.theme`、`crewvane.sidebar-collapsed` 等持久键继续使用原值。
-- 已安装 CLI 的 `# Crewvane embedded CLI` 和 OMP 扩展的
-  `// Crewvane managed OMP extension` 是识别所有权的协议标记，不能随文案改名。
-- 原始品牌图片保留在原路径，作为后续升级来源；历史发布记录保留原文。
+以下只是第一轮当时的实现记录，均已被第二轮取代，不是当前行为：当时没有改仓库、
+npm 包、CLI、目录、环境变量、IPC、Bot 协议或插件 ID；应用数据仍读取
+`appData/Crewvane`，主题键仍是 `crewvane.*`，已安装 Hook 标记也保持旧写法。
+第二轮已改为 `@atte/*`、`atte`、`.atte`、`ATTE_*`、`atte:*`、`dev.atte` 与
+`atte.bot.v1`。旧目录、旧键和旧所有权标记只在一次性迁移或读取兼容路径保留。
 
-后续如批准目录迁移，建议先提供一次性迁移：检测旧目录、锁定、备份、原子迁移、
-校验后切换，失败回退；同一次启动不能同时创建两份状态。本轮不执行目录迁移。
+第二轮已批准全部内部标识改名，并实际提供一次性复制校验迁移；不再保留旧 CLI
+命令别名。已拍板事项见下表，仍开放的设计项另见
+[Logo 备选](../design/logo-options/README.md)与[基线对比](../design/baseline-compare/README.md)。
 
 ## 验收范围
 
 按 P0（BR-1、BR-2、IX-1）、P1（BR-3、BR-4、VI-1、VI-2、IX-2）、
 P2（BR-5、VI-3、VI-4）推进。没有源码的独立官网或商店条目不视为已发布，
-仅在仓库准备对应文案。验证记录在本文件收尾补齐。
+仅在仓库准备对应文案。实际结果和最终阻塞见[验收记录](../qa/atte-iteration.md)。
 
-## 待决策
+## 已关闭决策（历史）
 
 | 标记 | 本轮边界 |
 | --- | --- |
-| TODO(atte-decision: public-spelling-and-identifiers) | 最终对外大小写及仓库、包、命令、目录是否改名待确认；本轮展示 Atte，内部标识保留。 |
-| TODO(atte-decision: acceptance-primary-action) | 是否把验收通过也并入消息待确认；按本轮验收保留独立主按钮。 |
-| TODO(atte-decision: logo-and-brand-color) | 最终 logo 方向及主色待确认；仅准备现有像素吉祥物的导出与替换挂点，不创作新图形或更换品牌色。 |
-| TODO(atte-decision: home-mark-size) | 最终首页图形及尺寸待确认；通过独立 token 支持放大与调整，不把临时尺寸当定稿。 |
-| TODO(atte-decision: settings-scope) | 合并或删除设置功能待确认；本轮仅重排已有功能和统一保存反馈。 |
-| TODO(atte-decision: positioning-publication) | 英文、副标题及官网、商店发布范围待确认；本轮使用中文定位，不发布外部内容。 |
-| TODO(atte-decision: origin-publication) | 名字由来是否公开待确认；只在内部说明记录。 |
-| TODO(atte-decision: design-reference) | awesome-design-md 中最终参考站点待确认；不把参考候选当设计定稿。 |
+| public-spelling-and-identifiers | 已拍板：对外 `Atte`，内部全部改为 `atte`，不保留 CLI 别名。 |
+| acceptance-primary-action | 已拍板：验收保留独立主按钮，其余反馈合并为一个消息入口。 |
+| home-mark-size | 已拍板：本轮维持 96px 和原响应式显示规则，最终尺寸待设计评审。 |
+| settings-scope | 已拍板：只重排，不删除、不合并任何设置功能，统一显式保存行为。 |
+| positioning-publication | 已拍板：「注意力中心 · The attention layer」，不发布外部内容。 |
+| origin-publication | 已拍板：名字由来只在内部 docs 记录，不进入关于页、README 或对外物料。 |
+
+## 仍开放的设计评审
+
+| 标记 | 当前状态 |
+| --- | --- |
+| TODO(atte-decision: logo-and-brand-color) | 三套 Logo 方向及现有像素吉祥物主色均未定稿；备选见 [Logo 备选](../design/logo-options/README.md)。 |
+| TODO(atte-decision: design-reference) | awesome-design-md 的 Linear、Raycast、Vercel 三份同页比较稿已备好；最终参考站点未选定，见 [基线对比](../design/baseline-compare/README.md)。 |
 
 ## Skill 文案 eval
 
 | 输入场景 | 预期 |
 | --- | --- |
-| 用户请求安装主协议或本地方法 | 展示产品名 Atte，实际安装 `crewvane`、`crewvane-local-pack-author`，不创造命令别名。 |
+| 用户请求安装主协议或本地方法 | 展示产品名 Atte，实际安装 `atte`、`atte-local-pack-author`，不创造旧命令别名。 |
 | Agent 遇到已有 CLI / OMP 扩展 | 保留旧所有权标记，只合并受管条目，不覆盖第三方 Hook。 |
-| 用户询问 CLI 用法 | 帮助标题为 Atte，示例仍调用 `crewvane`，原协议字段不变。 |
+| 用户询问 CLI 用法 | 帮助标题为 Atte，示例调用 `atte`，新协议字段使用 Atte 名称。 |
+| 历史 ship-* 技能被触发 | 说明中的产品展示名为 Atte；示例调用 `atte`，旧协议仅在兼容路径读取。 |
 
 ## 验收消息入口（IX-1）
 
@@ -84,3 +88,17 @@ CLI 的 `goal rework` 是保留的显式状态协议，不是交互按钮或命�
 字段编辑统一显式保存，外观与现场选择不再点选即写入；加载失败不可覆盖现场设置，
 有未保存更改时必须先保存再测试。原有功能、实验授权、Hook 保护、安装和清理边界保留。
 完整项表与保存行为见 [设置说明](../design/settings.md)。
+
+## P2 文档范围（BR-5、VI-3）
+
+命名灵感只写入[内部记录](../brand/naming-origin.md)，未经批准不在关于页或 README
+公开。awesome-design-md 的 Linear、Raycast、Vercel 候选已按实际文件整理到
+[参考候选](../design/reference-candidates.md)，三份同页静态稿见
+[首页设计基线](../design/baseline-compare/README.md)。根目录 `DESIGN.md` 与当前
+token、组件和响应式实现一致；最终参考站点仍待确认，不宣称已经完成品牌定稿。
+
+## 首页图形预览（VI-4）
+
+首页沿用原像素吉祥物和 96px 基线，保留原响应式隐藏规则；独立的
+`--brand-home-preview-scale` token 保留为设计预览挂点，但不放大实际渲染。
+本轮不替换新 logo，也不决定最终尺寸。

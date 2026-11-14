@@ -1,4 +1,4 @@
 interface:
   display_name: "Atte"
   short_description: "Submit and inspect local Atte goals from another agent."
-  default_prompt: "Use $crewvane to submit or inspect goals in my local Atte workspace."
+  default_prompt: "Use $atte to submit or inspect goals in my local Atte workspace."

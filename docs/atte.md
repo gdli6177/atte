@@ -2,6 +2,8 @@
 
 ## 这是什么
 
+**注意力中心 · The attention layer**
+
 Atte 帮你记住并行工作里的下一步。所有项目和个人事项都进入同一个工作区，由一位全局管家统筹。你只在需要决定、最终确认、批准生产发布、到期跟进或会话介入时处理；普通进展不会持续打扰。
 
 0.11.0 起可在“设置 → 执行现场”选择 Herdr 或 Orca，整个安装一次只使用一套后端。
@@ -13,16 +15,16 @@ Orca 未安装时可选择已有应用或使用已验证官方安装包；设置
 
 ## 安装
 
-从 [GitHub Releases](https://github.com/gdli6177/crewvane/releases) 下载当前版本的 `.dmg`，将 Atte 拖入“应用程序”；也可以使用 `.zip`。支持 macOS Apple Silicon，无需另外安装 Node。
+从 [GitHub Releases](https://github.com/gdli6177/atte/releases) 下载当前版本的 `.dmg`，将 Atte 拖入“应用程序”；也可以使用 `.zip`。支持 macOS Apple Silicon，无需另外安装 Node。
 
 应用未使用 Apple Developer ID 签名和公证，首次打开可能提示“无法验证开发者”。确认下载来自本项目且 SHA-256 一致后，在“系统设置 → 隐私与安全性”选择“仍要打开”。如果提示安装包“已损坏”，不要绕过，重新下载当前版本并核对校验值。
 
 ## 第一次使用
 
-1. 首次打开 Atte，选择一个专用工作区目录。状态保存在该目录的 `.crewvane/`。这是全局数据的存储位置，不是项目入口；以后在“设置 > 工作区存储位置”更换。
+1. 首次打开 Atte，选择一个专用工作区目录。状态保存在该目录的 `.atte/`。这是全局数据的存储位置，不是项目入口；以后在“设置 > 工作区存储位置”更换。
 2. 安装包内置官方 Herdr TUI CLI，首次启动无需 Homebrew、系统 PATH 或额外下载。应用启动后会通过轻量的 GitHub Releases API 检查最新版，校验资产 SHA-256 和实际可执行版本；较新的官方版本可更新到应用自己的运行目录，不修改用户已有安装。联网检查失败时继续使用应用内置或本机可用版本，并在“设置”显示更新提示和重试入口。在“设置”可查看实际路径、检查更新，并安装应用内 Atte CLI。
 3. Herdr 就绪后，应用会自动安装并注册内置的 Atte 注意力插件。不需要另外运行 `herdr plugin install`；从 Herdr 的插件动作可以打开注意力控制台、直接进入一行新建目标，或回到全局管家。插件同时订阅 Herdr 原生 Agent 状态和 Pane / Tab / Workspace 生命周期事件，负责人阻塞、移动、退出或关闭现场时立即写回 Atte；Pane 被移动后会自动改用 Herdr 返回的新身份。桌面轮询只作为插件断线时的兜底。
-4. 在“Agent 接入”检查本机 Agent。Atte 会自动安装已支持且格式兼容的生命周期 Hook；Codex 首次显示“等待信任”时，需要按界面提示在 `/hooks` 中审核并信任 Atte 条目。Codex、Claude Code、Cursor、Qoder、OMP 的已有用户 Hook / Extension 都会保留，停用或卸载只移除 Atte 管理的条目。配置损坏、未来格式、符号链接或 OMP 同名用户文件会停止写入并提示；不会从旧备份整文件回滚覆盖新配置。首次备份位于原配置旁的 `.crewvane-backup`。
+4. 在“Agent 接入”检查本机 Agent。Atte 会自动安装已支持且格式兼容的生命周期 Hook；Codex 首次显示“等待信任”时，需要按界面提示在 `/hooks` 中审核并信任 Atte 条目。Codex、Claude Code、Cursor、Qoder、OMP 的已有用户 Hook / Extension 都会保留，停用或卸载只移除 Atte 管理的条目。配置损坏、未来格式、符号链接或 OMP 同名用户文件会停止写入并提示；不会从旧备份整文件回滚覆盖新配置。首次备份位于原配置旁的 `.atte-backup`。
 5. 在“设置 → 工作方法”确认内置角色与工序；需要团队 SOP 时点“让 Agent 创建”，或从文件夹预览并安装本地能力包。安装只进入工作区库，目标需要在详情中显式挂载。
 6. 在“Agent 启动命令”填写各角色使用的 CLI 命令，可附带模型等参数；负责人和工人留空则跟随上一级。点击“准备管家”会在后台准备该工作区唯一的 `concierge`。
 7. 在“设置 → 上线策略与决定账本”确认项目策略。新项目默认外部审批；只有你可以在桌面修改。
@@ -56,7 +58,7 @@ Atte 内置管家、负责人、独立复核者、标准交付、探索研究、
 设置中有两个安装入口：
 
 - **让 Agent 创建**：复制说明给已安装 Atte Skills 的 Agent。它使用
-  `crewvane-local-pack-author`，通过对话补齐触发场景、步骤、证据和角色，生成草稿
+  `atte-local-pack-author`，通过对话补齐触发场景、步骤、证据和角色，生成草稿
   并验证；只有你明确确认后才安装。
 - **从文件夹安装**：选择本地能力包目录。应用先显示名称、版本、适用角色、文件数、
   参考文件和入口预览，再允许安装。带脚本的方法默认不授权脚本。
@@ -78,7 +80,7 @@ Atte 内置管家、负责人、独立复核者、标准交付、探索研究、
 
 ## Agent 即时事件
 
-目标详情中的轻量运行状态条会显示最近一次 Hook / Extension 事件、事件时间、当前 attempt 的最新回复，以及回执提醒状态。支持 Codex、Claude Code、Cursor、Qoder 与 OMP。Hook 通过本地 Socket 送入当前应用；应用关闭时写入 `.crewvane/runtime/spool/`，重启后补处理。
+目标详情中的轻量运行状态条会显示最近一次 Hook / Extension 事件、事件时间、当前 attempt 的最新回复，以及回执提醒状态。支持 Codex、Claude Code、Cursor、Qoder 与 OMP。Hook 通过本地 Socket 送入当前应用；应用关闭时写入 `.atte/runtime/spool/`，重启后补处理。
 
 Hook 只证明会话、回合、阻塞或中断发生。目标进展、checkpoint、等待、决定和交付仍必须使用 Atte 现有 CLI。普通 Agent 回复、Stop、工具调用或终端 `idle` 都不会自动改变目标状态，也不会自动进入注意力；自动验收只读取显式交付、证据和独立复核事实。
 
@@ -174,7 +176,7 @@ Prompt 和可用的最新回复最多保存 12,000 个 Unicode 字符，并保�
 
 ### Bot 接入
 
-0.9 首期提供本地 Bot 发起方协议 `crewvane.bot.v1`。Bot 可以使用同一份 Atte 目标和事件事实，提交目标、读取状态或追加消息，不维护第二份任务数据库。Bot 绑定由人创建、限定项目并可撤销；首期不开放复核、自动验收、发布批准或策略修改，Bot 也不能把自身“通过”当成验收。
+0.9 首期提供本地 Bot 发起方协议 `atte.bot.v1`。Bot 可以使用同一份 Atte 目标和事件事实，提交目标、读取状态或追加消息，不维护第二份任务数据库。Bot 绑定由人创建、限定项目并可撤销；首期不开放复核、自动验收、发布批准或策略修改，Bot 也不能把自身“通过”当成验收。
 
 外部聊天机器人、远程 gateway、Bot 执行方和独立复核适配器属于后续阶段，必须先做认证、限流、撤销和威胁建模，不能只凭一个 `botId` 字符串授权。
 
@@ -182,7 +184,7 @@ Prompt 和可用的最新回复最多保存 12,000 个 Unicode 字符，并保�
 
 每个项目有三种上线策略：`external-approval`、`auto-merge-manual-deploy`、`auto`。默认 `external-approval`：即使检查和审查通过，合并与部署也需要你在桌面确认；设置中的审批人目前仅作展示，不做身份校验。第二种策略自动合并，但部署前仍需确认。`auto` 在真实检查通过后可放行合并与部署。Atte 本身不执行 Git、部署或外发，只给负责人返回是否已经得到项目策略授权。
 
-你批准或拒绝后，原话、时间、来源、项目和目标会写入 `.crewvane/decisions.md` 或 `.crewvane/rejected.md`。后续同类问题按稳定动作键命中账本，不再反复进入注意力。需要推翻旧决定时，就针对新决定再次明确回复。
+你批准或拒绝后，原话、时间、来源、项目和目标会写入 `.atte/decisions.md` 或 `.atte/rejected.md`。后续同类问题按稳定动作键命中账本，不再反复进入注意力。需要推翻旧决定时，就针对新决定再次明确回复。
 
 删除数据、停服、花钱、向外部人员发消息、改变产品方向、新建或轮换密钥、修改权限、修改上线策略，这九类动作始终先问你，项目设为 `auto` 也不例外。Agent 不能通过受管 CLI 修改项目策略。这是 core 的应用层协议约束，不是操作系统沙箱；第三方 Agent 的文件与网络权限仍由它自己的 CLI 决定。
 
@@ -196,7 +198,7 @@ Prompt 和可用的最新回复最多保存 12,000 个 Unicode 字符，并保�
 
 管家一次只处理一个案卷，单回合观察上限为 30 秒。累计处理 40 个案卷或约 240,000 字符后，Atte 会在管家空闲时轮换上下文，避免长期会话越积越乱；目标、消息、附件和交付记录不会删除。这个应用层案卷闸门降低串案风险，但不伪装成操作系统文件沙箱；任意第三方 Agent 仍受其自身权限机制约束。
 
-你也可以直接在 Herdr 里对管家追加要求。Herdr 0.9.5 没有把用户提交的 prompt 暴露给插件的钩子，因此不能从终端字节流可靠反推你刚发了什么；产品约定是管家收到终端直聊后，先执行 `crewvane direct --current "<原话>"` 追加到当前案卷，或用 `crewvane direct --new "<原话>"` 建立新目标，再继续处理。新目标写回后会自动成为管家当前的案卷 scope，因此同一回合还能继续整理和派发。CLI 写回后桌面会监听同一工作区并刷新，不再重复派发这条已经送到管家的消息。若管家没有执行这条写回，普通聊天内容只留在终端，不会出现在 App；可靠的一行新建入口仍是 Herdr 插件的“给 Atte 新建目标”或桌面“新目标”。
+你也可以直接在 Herdr 里对管家追加要求。Herdr 0.9.5 没有把用户提交的 prompt 暴露给插件的钩子，因此不能从终端字节流可靠反推你刚发了什么；产品约定是管家收到终端直聊后，先执行 `atte direct --current "<原话>"` 追加到当前案卷，或用 `atte direct --new "<原话>"` 建立新目标，再继续处理。新目标写回后会自动成为管家当前的案卷 scope，因此同一回合还能继续整理和派发。CLI 写回后桌面会监听同一工作区并刷新，不再重复派发这条已经送到管家的消息。若管家没有执行这条写回，普通聊天内容只留在终端，不会出现在 App；可靠的一行新建入口仍是 Herdr 插件的“给 Atte 新建目标”或桌面“新目标”。
 
 Herdr 事件只更新已经保存在目标中的同一 Pane 现场。插件事件本身没有创建目标、验收或发布权限，也不会因为某个 Agent 进入 `done` 就宣称目标完成。`done` / `idle` 仍需负责人通过交付记录提交真实成果与检查；人工验收模式仍由人完成，自动验收只按目标门禁决定。
 
@@ -208,56 +210,56 @@ Herdr 事件只更新已经保存在目标中的同一 Pane 现场。插件事�
 
 ## CLI
 
-设置页会把完整 CLI 安装到当前应用的 userData 目录，并在 `~/.local/bin/crewvane` 建立符号链接。它使用应用自带的 Node runtime，不依赖用户安装 Node。
+设置页会把完整 CLI 安装到当前应用的 userData 目录，并在 `~/.local/bin/atte` 建立符号链接。它使用应用自带的 Node runtime，不依赖用户安装 Node。
 
 ```sh
-crewvane status --root /path/to/workspace --json
-crewvane attention --root /path/to/workspace --json
-crewvane board --root /path/to/workspace
-crewvane ask "检查发布流程并补齐证据"
-crewvane ask "按截图修复布局" --attachment ~/Desktop/before.png --attachment ~/Desktop/after.png
-HERDR_PLUGIN_EVENT_JSON='…' crewvane event herdr --json
-crewvane goal list --root /path/to/workspace --json
-crewvane goal show <ID> --root /path/to/workspace --json
-crewvane goal message <ID> --text "增加回滚验证"
-crewvane direct --current "补充背景，不改下一步"
-crewvane goal progress <ID> --summary "完成实际步骤" --next "下一步"
-crewvane goal wait <ID> --reason "等待审批" --owner YR --remind-at 2026-11-05T10:00:00+08:00
-crewvane goal risk <ID> --category delete-data --summary "删除生产数据库"
-crewvane goal ship <ID> --operation deploy --checks passed
-crewvane goal review <ID> --summary "实际成果" --check "回归测试::pnpm test::passed::全部通过"
-crewvane goal resolve <ID> --note "批准今天发布" --outcome approved
-crewvane goal kind <ID> --kind discovery
-crewvane goal brief <ID> --file goal-brief.json
-crewvane goal checkpoint <ID> --summary "完成登录页修复" --next "运行真实回归"
-crewvane goal verify <ID> --delivery <DELIVERY_ID> --outcome passed \
+atte status --root /path/to/workspace --json
+atte attention --root /path/to/workspace --json
+atte board --root /path/to/workspace
+atte ask "检查发布流程并补齐证据"
+atte ask "按截图修复布局" --attachment ~/Desktop/before.png --attachment ~/Desktop/after.png
+HERDR_PLUGIN_EVENT_JSON='…' atte event herdr --json
+atte goal list --root /path/to/workspace --json
+atte goal show <ID> --root /path/to/workspace --json
+atte goal message <ID> --text "增加回滚验证"
+atte direct --current "补充背景，不改下一步"
+atte goal progress <ID> --summary "完成实际步骤" --next "下一步"
+atte goal wait <ID> --reason "等待审批" --owner YR --remind-at 2026-11-05T10:00:00+08:00
+atte goal risk <ID> --category delete-data --summary "删除生产数据库"
+atte goal ship <ID> --operation deploy --checks passed
+atte goal review <ID> --summary "实际成果" --check "回归测试::pnpm test::passed::全部通过"
+atte goal resolve <ID> --note "批准今天发布" --outcome approved
+atte goal kind <ID> --kind discovery
+atte goal brief <ID> --file goal-brief.json
+atte goal checkpoint <ID> --summary "完成登录页修复" --next "运行真实回归"
+atte goal verify <ID> --delivery <DELIVERY_ID> --outcome passed \
   --summary "全部必选条件已复核" --criterion "tests-pass::passed::ev_tests"
-crewvane goal boundary <ID> --file boundary.json
-crewvane goal autonomy acceptance <ID> --acceptance human-review
-crewvane release create --from <ID> --environment production \
+atte goal boundary <ID> --file boundary.json
+atte goal autonomy acceptance <ID> --acceptance human-review
+atte release create --from <ID> --environment production \
   --revision <REV> --version <VERSION>
-crewvane release approve <RELEASE_ID> --note "批准该候选发布到生产"
-crewvane release result <RELEASE_ID> --outcome succeeded \
+atte release approve <RELEASE_ID> --note "批准该候选发布到生产"
+atte release result <RELEASE_ID> --outcome succeeded \
   --evidence "生产环境已观察到该版本"
-crewvane autonomy set --acceptance auto-with-verification --initialize
-crewvane project autonomy <PROJECT_ID> --acceptance inherit \
+atte autonomy set --acceptance auto-with-verification --initialize
+atte project autonomy <PROJECT_ID> --acceptance inherit \
   --release-on-merge unknown
-crewvane bot bind --id <BOT_ID> --name "本地 Bot" --role initiator \
+atte bot bind --id <BOT_ID> --name "本地 Bot" --role initiator \
   --project <PROJECT_ID> --operation goal.submit --operation goal.read \
   --expires-at 2026-12-31T23:59:59+08:00
-crewvane bot call --file bot-request.json
-crewvane skill list
-crewvane skill show acme.release-review --json
-crewvane skill validate ~/Methods/acme.release-review --json
-crewvane skill install ~/Methods/acme.release-review
-crewvane skill attach <GOAL_ID> acme.release-review
-crewvane skill run acme.release-review inspect --goal <GOAL_ID>
-crewvane owner attach <GOAL_ID> --name owner-release --session <SESSION> \
+atte bot call --file bot-request.json
+atte skill list
+atte skill show acme.release-review --json
+atte skill validate ~/Methods/acme.release-review --json
+atte skill install ~/Methods/acme.release-review
+atte skill attach <GOAL_ID> acme.release-review
+atte skill run acme.release-review inspect --goal <GOAL_ID>
+atte owner attach <GOAL_ID> --name owner-release --session <SESSION> \
   --workspace <WORKSPACE_ID> --tab <TAB_ID> --pane <PANE_ID> \
   --agent owner-release --recovery-id <RECOVERY_ID>
 ```
 
-`CREWVANE_WORKSPACE=/path/to/workspace` 可以替代 `--root`。桌面和 CLI 使用同一把锁，不会覆盖彼此的并发修改。`goal message` 与 `direct` 是消息入口，只追加原话和附件；`progress`、`wait`、`review`、`decide` 等是 Agent 或受信任适配器在明确事实发生后使用的高级状态协议。`direct` 不接受 `--next`。
+`ATTE_WORKSPACE=/path/to/workspace` 可以替代 `--root`。桌面和 CLI 使用同一把锁，不会覆盖彼此的并发修改。`goal message` 与 `direct` 是消息入口，只追加原话和附件；`progress`、`wait`、`review`、`decide` 等是 Agent 或受信任适配器在明确事实发生后使用的高级状态协议。`direct` 不接受 `--next`。
 
 自主目标相关命令分两类：`goal brief`、`goal checkpoint`、`goal verify`、`goal boundary`、`goal review` 和 Bot 发起方协议供执行侧写回明确事实；`goal autonomy`、`autonomy set`、`project autonomy`、`release approve/reject` 和 `goal reopen` 是人用入口，不能交给受管 Agent 或 Bot 代调用。发布目标只能通过 `release create` 建立，`goal kind` 只能切换 `delivery | discovery`。完整字段、门禁和失败语义见 [自主目标规格](product/autonomous-goals.md)。
 
@@ -266,13 +268,13 @@ crewvane owner attach <GOAL_ID> --name owner-release --session <SESSION> \
 脚本。`owner attach` 只用于 `owner launch` 留下的真实恢复现场，必须来自同一
 Herdr Session，不能用来给普通目标凭空创建负责人。
 
-`crewvane board` 是 Herdr 注意力插件使用的终端控制台；可直接处理决定、等待推进、人工接管、验收与退回，按 `g` 可回到全局管家。桌面未运行时，`ask`、消息、决定和跟进仍会保存为待派发请求，下一次启动桌面后继续发送。
+`atte board` 是 Herdr 注意力插件使用的终端控制台；可直接处理决定、等待推进、人工接管、验收与退回，按 `g` 可回到全局管家。桌面未运行时，`ask`、消息、决定和跟进仍会保存为待派发请求，下一次启动桌面后继续发送。
 
 ## 数据与限制
 
-工作区目标保存在 `.crewvane/state.json`，当前状态版本为 v3；事件保存在 `.crewvane/events.jsonl`，决定账本在 `.crewvane/decisions.md` 与 `.crewvane/rejected.md`。有效 v2 工作区会先备份为 `.crewvane/state.v2.backup.json`，再原地迁移到 v3；旧目标默认人工验收、`releaseOnMerge=unknown`，不会批量获得续跑或自动验收权限。这些是本地数据，不会被 Atte 上传。模型登录、权限和网络访问仍由 Herdr 中的各个 Agent CLI 管理。
+工作区目标保存在 `.atte/state.json`，当前状态版本为 v4；事件保存在 `.atte/events.jsonl`，决定账本在 `.atte/decisions.md` 与 `.atte/rejected.md`。有效 v2 工作区会先备份为 `.atte/state.v2.backup.json`；有效 v3 会先备份为 `.atte/state.v3.backup.json`，再原地迁移到 v4。旧目标默认人工验收、`releaseOnMerge=unknown`，不会批量获得续跑或自动验收权限。这些是本地数据，不会被 Atte 上传。模型登录、权限和网络访问仍由 Herdr 中的各个 Agent CLI 管理。
 
-图片原图保存在 `.crewvane/attachments/`。状态与分析事件只记录文件名、相对路径、大小、MIME 和 SHA-256，不保存 Base64 或图片字节。导入会检查真实文件魔数、数量与大小；目标详情可以立即逐张删除，已结束目标默认保留 30 天，应用启动时清理，失败留下的无引用文件也会在过期后回收。
+图片原图保存在 `.atte/attachments/`。状态与分析事件只记录文件名、相对路径、大小、MIME 和 SHA-256，不保存 Base64 或图片字节。导入会检查真实文件魔数、数量与大小；目标详情可以立即逐张删除，已结束目标默认保留 30 天，应用启动时清理，失败留下的无引用文件也会在过期后回收。
 
 Atte 本身不执行 Git、部署或外部消息；负责人必须先用 `goal ship` 取得项目策略授权。它不会把终端状态、Agent 自述或模型推断当成成果完成，也不会让自动策略绕过九类高风险动作。
 
@@ -282,6 +284,6 @@ Atte 本身不执行 Git、部署或外部消息；负责人必须先用 `goal s
 - 外部终端打不开或提示“自动化”权限：允许 Atte 控制已选择的 iTerm2 / Terminal，或到“设置 → 工作现场”改为内嵌轻现场；同一目标与 Session 不会丢失。
 - 已安装 Herdr 桌面 App 仍缺少 CLI：Atte 需要 Herdr TUI 的 `herdr` 命令，应用会自动准备，不要求用户另外安装 Homebrew。不会改动已有桌面 App 或其他 Herdr 安装。
 - 重复点“准备管家”不会创建新管家；应用会优先复用实时 `concierge`。
-- 移动或删除 Atte 应用后，`~/.local/bin/crewvane` 可能失效。重新安装应用并在设置中重新安装 CLI。
+- 移动或删除 Atte 应用后，`~/.local/bin/atte` 可能失效。重新安装应用并在设置中重新安装 CLI。
 - 工作区被占用时会显示锁文件和持有进程，不会强行覆盖仍在写入的状态。
 - 安装应用提示“已损坏”时，核对 GitHub Release 来源和 SHA-256，再下载同版本附件；不要用清除隔离属性掩盖损坏的包。

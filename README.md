@@ -4,20 +4,20 @@
 
 # Atte
 
-**注意力中心**
+**注意力中心 · The attention layer**
 
 One workspace. Many projects. One concierge. Only what needs you reaches you.
 
-[简体中文](README.zh-CN.md) · [Download](https://github.com/gdli6177/crewvane/releases/latest) · [Documentation](docs/crewvane.md) · [Architecture](docs/ARCHITECTURE.md)
+[简体中文](README.zh-CN.md) · [Download](https://github.com/gdli6177/atte/releases/latest) · [Documentation](docs/atte.md) · [Architecture](docs/ARCHITECTURE.md)
 
-[![Latest release](https://img.shields.io/github/v/release/gdli6177/crewvane?display_name=tag&sort=semver)](https://github.com/gdli6177/crewvane/releases)
+[![Latest release](https://img.shields.io/github/v/release/gdli6177/atte?display_name=tag&sort=semver)](https://github.com/gdli6177/atte/releases)
 [![macOS Apple Silicon](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-111520)](docs/releases.md)
 [![MIT License](https://img.shields.io/badge/license-MIT-83e4c2)](LICENSE)
-[![Desktop installers](https://github.com/gdli6177/crewvane/actions/workflows/desktop-release.yml/badge.svg)](https://github.com/gdli6177/crewvane/actions/workflows/desktop-release.yml)
+[![Desktop installers](https://github.com/gdli6177/atte/actions/workflows/desktop-release.yml/badge.svg)](https://github.com/gdli6177/atte/actions/workflows/desktop-release.yml)
 
 </div>
 
-![Atte attention center](docs/assets/crewvane-overview.png)
+![Atte attention center](docs/assets/atte-overview.png)
 
 Atte is an open-source macOS desktop app for one person working with many
 projects and many CLI coding agents at the same time.
@@ -99,7 +99,7 @@ one approval for that environment and candidate, and still returns to you for a
 final result check after execution. A delivery acceptance is never release
 authority.
 
-A local Bot can use the same goal and event facts through `crewvane.bot.v1`.
+A local Bot can use the same goal and event facts through `atte.bot.v1`.
 Bindings are human-created, project-scoped and revocable; Bots cannot accept
 work, approve releases or modify policy in the first phase.
 
@@ -146,11 +146,11 @@ references, and attach it only to matching goals.
 Instruction-only packs need no scripting. If a pack declares deterministic
 scripts, installation is approval-neutral and each script must be approved
 against its current SHA-256. A changed script or pack invalidates the old
-approval. `crewvane skill run` records bounded audit output but never completes,
+approval. `atte skill run` records bounded audit output but never completes,
 accepts, or releases a goal.
 
 Create packs conversationally through the bundled
-`crewvane-local-pack-author` Skill or use `crewvane skill draft`, `validate`, and
+`atte-local-pack-author` Skill or use `atte skill draft`, `validate`, and
 `install`. Built-ins cannot be replaced, local packs cannot claim the concierge
 role, and a goal can attach at most eight local methods.
 
@@ -229,7 +229,7 @@ permissions still come from its own CLI.
 ### Local-first by default
 
 Goals, messages, attachments, decisions, and events are stored under
-`.crewvane/` in the workspace you choose. The desktop app and CLI share the same
+`.atte/` in the workspace you choose. The desktop app and CLI share the same
 locked, atomically written state.
 
 An optional HTTPS webhook can notify Feishu, Lark, WeCom, or another endpoint when
@@ -246,7 +246,7 @@ flowchart LR
     Desktop <--> Sessions[Herdr or Orca: one selected backend]
     Sessions --> Concierge[Concierge]
     Sessions --> Owners[Owners and CLI Agents]
-    Core <--> State[(.crewvane workspace)]
+    Core <--> State[(.atte workspace)]
     Desktop --> Notify[macOS notifications and HTTPS webhooks]
 ```
 
@@ -268,7 +268,7 @@ concierge reconciles it. Reminders do not change the goal lifecycle.
 ### Packaged app
 
 Download the latest installer from
-[GitHub Releases](https://github.com/gdli6177/crewvane/releases/latest):
+[GitHub Releases](https://github.com/gdli6177/atte/releases/latest):
 
 - `Atte-<version>-macOS-arm64.dmg`
 - `Atte-<version>-macOS-arm64.zip`
@@ -300,48 +300,48 @@ is damaged, redownload the latest release instead of bypassing Gatekeeper.
 4. Click **New goal**, describe the work in natural language, and attach
    screenshots if useful.
 
-See the [user guide](docs/crewvane.md) and
+See the [user guide](docs/atte.md) and
 [installation and release notes](docs/releases.md) for the complete workflow.
 
 ## CLI
 
-The desktop app installs a workspace-aware CLI at `~/.local/bin/crewvane`.
-Use `CREWVANE_WORKSPACE` or `--root` to select the workspace.
+The desktop app installs a workspace-aware CLI at `~/.local/bin/atte`.
+Use `ATTE_WORKSPACE` or `--root` to select the workspace.
 
 ```sh
-export CREWVANE_WORKSPACE="$HOME/Atte"
+export ATTE_WORKSPACE="$HOME/Atte"
 
-crewvane status
-crewvane ask "Audit the release workflow and attach the evidence"
-crewvane ask "Fix this layout" \
+atte status
+atte ask "Audit the release workflow and attach the evidence"
+atte ask "Fix this layout" \
   --attachment "$HOME/Desktop/before.png" \
   --attachment "$HOME/Desktop/after.png"
 
-crewvane attention
-crewvane attention --json
-crewvane goal list
-crewvane goal show <goal-id> --json
-crewvane board
+atte attention
+atte attention --json
+atte goal list
+atte goal show <goal-id> --json
+atte board
 
-crewvane skill list
-crewvane skill validate ./my-method --json
-crewvane skill install ./my-method
-crewvane skill attach <goal-id> my-method
+atte skill list
+atte skill validate ./my-method --json
+atte skill install ./my-method
+atte skill attach <goal-id> my-method
 ```
 
 Agent-facing state commands are deliberately explicit. For example:
 
 ```sh
-crewvane goal progress <goal-id> \
+atte goal progress <goal-id> \
   --summary "Implemented the change and ran the regression suite" \
   --next "Submit the release candidate for review"
 
-crewvane goal review <goal-id> \
+atte goal review <goal-id> \
   --summary "Installer and CLI verification completed" \
   --check "Installer smoke::pnpm test:installers::passed::ZIP and DMG passed"
 ```
 
-Run `crewvane --help` after installation to see the complete protocol.
+Run `atte --help` after installation to see the complete protocol.
 
 ## Project structure
 
@@ -363,8 +363,8 @@ Requirements:
 - pnpm `10.4.1`
 
 ```sh
-git clone https://github.com/gdli6177/crewvane.git
-cd crewvane
+git clone https://github.com/gdli6177/atte.git
+cd atte
 pnpm install --frozen-lockfile
 
 pnpm typecheck

@@ -2,14 +2,14 @@
 
 本轮只建立现有像素吉祥物的导出链与替换挂点，没有定稿新 logo。
 `baseline` 表示已有图形的过渡导出，不是已批准的新品牌方向。
-最终图形、颜色与首页目标尺寸见 [待决策表](../../../../../docs/product/atte-iteration.md#待决策)。
+最终图形与颜色见[仍开放的设计评审](../../../../../docs/product/atte-iteration.md#仍开放的设计评审)。
 
 ## 保留原图
 
-- `crewvane-mage-source.png`：原始像素吉祥物。
+- `crewvane-mage-source.png`：历史原稿，文件名保留以追溯来源。
 - `crewvane-mage.png`：已有 512px 透明吉祥物。
 - `crewvane-macos-source.png`：已有 macOS 图标原稿。
-- `crewvane-icon.png`、`crewvane-icon.icns`、`crewvane-trayTemplate.png`：原有导出，保留供追溯。
+- `crewvane-icon.png`、`crewvane-icon.icns`、`crewvane-trayTemplate.png`：历史导出，保留供追溯。
 
 原图不覆盖、不删除，不新增图形，不把已有设计的形状和配色当后续约束。
 

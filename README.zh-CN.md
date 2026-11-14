@@ -4,20 +4,20 @@
 
 # Atte
 
-**注意力中心**
+**注意力中心 · The attention layer**
 
 一个工作区，多个项目，一位管家。只有真正需要你的事，才会来到你面前。
 
-[English](README.md) · [下载](https://github.com/gdli6177/crewvane/releases/latest) · [使用说明](docs/crewvane.md) · [架构](docs/ARCHITECTURE.md)
+[English](README.md) · [下载](https://github.com/gdli6177/atte/releases/latest) · [使用说明](docs/atte.md) · [架构](docs/ARCHITECTURE.md)
 
-[![最新版本](https://img.shields.io/github/v/release/gdli6177/crewvane?display_name=tag&sort=semver)](https://github.com/gdli6177/crewvane/releases)
+[![最新版本](https://img.shields.io/github/v/release/gdli6177/atte?display_name=tag&sort=semver)](https://github.com/gdli6177/atte/releases)
 [![平台](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-111520)](docs/releases.md)
 [![许可证](https://img.shields.io/badge/license-MIT-83e4c2)](LICENSE)
-[![桌面构建](https://github.com/gdli6177/crewvane/actions/workflows/desktop-release.yml/badge.svg)](https://github.com/gdli6177/crewvane/actions/workflows/desktop-release.yml)
+[![桌面构建](https://github.com/gdli6177/atte/actions/workflows/desktop-release.yml/badge.svg)](https://github.com/gdli6177/atte/actions/workflows/desktop-release.yml)
 
 </div>
 
-![Atte 注意力中心](docs/assets/crewvane-overview.png)
+![Atte 注意力中心](docs/assets/atte-overview.png)
 
 Atte 是一个开源 macOS 桌面应用，面向同时处理多个项目、多个 CLI
 Agent 会话的人。
@@ -89,7 +89,7 @@ Atte 会在 Agent 会话之外持久保存短回合续跑：checkpoint、外部�
 生产发布是独立目标，每次都要针对环境和候选版本单独批准；执行结束后仍会回到你
 面前核对真实结果。交付验收不会自动变成发布许可。
 
-本地 Bot 可以通过 `crewvane.bot.v1` 使用同一份目标和事件事实。绑定由人创建、
+本地 Bot 可以通过 `atte.bot.v1` 使用同一份目标和事件事实。绑定由人创建、
 限定项目并可撤销；首期 Bot 不能验收、批准发布或修改策略。
 
 完整的边界、验收、续跑与发布协议见
@@ -124,11 +124,11 @@ Atte 内置管家、负责人、独立复核者、标准交付、探索研究、
 适用角色、入口和参考文件，再只挂载到匹配的目标。
 
 说明型能力包不需要脚本。能力包声明确定性脚本时，安装本身不会授权；每个脚本都要
-对当前 SHA-256 单独批准，内容变化后旧授权自动失效。`crewvane skill run` 只记录
+对当前 SHA-256 单独批准，内容变化后旧授权自动失效。`atte skill run` 只记录
 有界审计结果，不能完成、验收或发布目标。
 
-可以使用随应用安装的 `crewvane-local-pack-author` 通过自然语言创建，也可以调用
-`crewvane skill draft / validate / install`。内置方法不能替换，本地方法不能占用
+可以使用随应用安装的 `atte-local-pack-author` 通过自然语言创建，也可以调用
+`atte skill draft / validate / install`。内置方法不能替换，本地方法不能占用
 管家角色，每个目标最多挂载 8 个本地方法。
 
 解析顺序固定为 Core 约束、角色方法、工序方法、目标本地方法和当前任务。包缺失、
@@ -193,7 +193,7 @@ Agent 的文件与网络权限仍由它自己的 CLI 决定。
 
 ### 默认本地优先
 
-目标、消息、附件、决定和事件保存在所选工作区的 `.crewvane/` 中。桌面应用与 CLI
+目标、消息、附件、决定和事件保存在所选工作区的 `.atte/` 中。桌面应用与 CLI
 共享同一份带锁、原子写入的状态。
 
 需要外部提醒时，可以配置 HTTPS Webhook，把首次需要你处理的事项推送到飞书、
@@ -210,7 +210,7 @@ flowchart LR
     Desktop <--> Sessions[Herdr 或 Orca]
     Sessions --> Concierge[全局管家]
     Sessions --> Owners[负责人和 CLI Agents]
-    Core <--> State[(.crewvane 工作区)]
+    Core <--> State[(.atte 工作区)]
     Desktop --> Notify[macOS 通知和 HTTPS Webhooks]
 ```
 
@@ -230,7 +230,7 @@ flowchart LR
 
 ### 下载应用
 
-从 [GitHub Releases](https://github.com/gdli6177/crewvane/releases/latest)
+从 [GitHub Releases](https://github.com/gdli6177/atte/releases/latest)
 下载最新安装包：
 
 - `Atte-<version>-macOS-arm64.dmg`
@@ -256,47 +256,47 @@ Atte CLI 运行时和经过校验的 Herdr 二进制文件，无需另装 Node.j
 3. 准备管家。
 4. 点击“新目标”，用自然语言交代工作；需要时可以粘贴或添加截图。
 
-完整操作见[使用说明](docs/crewvane.md)和[安装与发布说明](docs/releases.md)。
+完整操作见[使用说明](docs/atte.md)和[安装与发布说明](docs/releases.md)。
 
 ## CLI
 
-桌面应用会把工作区级 CLI 安装到 `~/.local/bin/crewvane`。可用
-`CREWVANE_WORKSPACE` 或 `--root` 指定工作区。
+桌面应用会把工作区级 CLI 安装到 `~/.local/bin/atte`。可用
+`ATTE_WORKSPACE` 或 `--root` 指定工作区。
 
 ```sh
-export CREWVANE_WORKSPACE="$HOME/Atte"
+export ATTE_WORKSPACE="$HOME/Atte"
 
-crewvane status
-crewvane ask "检查发布流程并附真实验收证据"
-crewvane ask "按截图修复布局" \
+atte status
+atte ask "检查发布流程并附真实验收证据"
+atte ask "按截图修复布局" \
   --attachment "$HOME/Desktop/before.png" \
   --attachment "$HOME/Desktop/after.png"
 
-crewvane attention
-crewvane attention --json
-crewvane goal list
-crewvane goal show <goal-id> --json
-crewvane board
+atte attention
+atte attention --json
+atte goal list
+atte goal show <goal-id> --json
+atte board
 
-crewvane skill list
-crewvane skill validate ./my-method --json
-crewvane skill install ./my-method
-crewvane skill attach <goal-id> my-method
+atte skill list
+atte skill validate ./my-method --json
+atte skill install ./my-method
+atte skill attach <goal-id> my-method
 ```
 
 面向 Agent 的状态命令必须表达明确事实。例如：
 
 ```sh
-crewvane goal progress <goal-id> \
+atte goal progress <goal-id> \
   --summary "已完成实现并运行回归测试" \
   --next "提交发布候选供验收"
 
-crewvane goal review <goal-id> \
+atte goal review <goal-id> \
   --summary "安装包与 CLI 验证已完成" \
   --check "安装包验收::pnpm test:installers::passed::ZIP 和 DMG 均通过"
 ```
 
-安装后运行 `crewvane --help` 查看完整协议。
+安装后运行 `atte --help` 查看完整协议。
 
 ## 项目结构
 
@@ -318,8 +318,8 @@ docs/               产品规格、架构、QA 与发布说明
 - pnpm `10.4.1`
 
 ```sh
-git clone https://github.com/gdli6177/crewvane.git
-cd crewvane
+git clone https://github.com/gdli6177/atte.git
+cd atte
 pnpm install --frozen-lockfile
 
 pnpm typecheck

@@ -1,19 +1,19 @@
 ---
-name: crewvane
+name: atte
 description: Use Atte CLI to submit goals and attachments, inspect goals or attention items, and append context in a user's local Atte workspace from another agent.
 ---
 
 # Atte
 
-Use the installed `crewvane` CLI to collaborate through the user's shared Atte workspace. The desktop app and CLI read and write the same `.crewvane/state.json`; do not create a parallel task list in chat or in another database.
+Use the installed `atte` CLI to collaborate through the user's shared Atte workspace. The desktop app and CLI read and write the same `.atte/state.json`; do not create a parallel task list in chat or in another database.
 
 ## Resolve the workspace
 
 Use the first source that is explicit and verified:
 
 1. A workspace path supplied by the user.
-2. `CREWVANE_WORKSPACE`.
-3. The nearest parent directory containing `.crewvane/state.json`.
+2. `ATTE_WORKSPACE`.
+3. The nearest parent directory containing `.atte/state.json`.
 
 Pass `--root <absolute-path>` after the subcommand. Do not guess a different workspace from the current Git repository name. If no Atte workspace can be found, stop and state the missing path.
 
@@ -22,13 +22,13 @@ Pass `--root <absolute-path>` after the subcommand. Do not guess a different wor
 These commands append user intent without inventing a status transition:
 
 ```sh
-crewvane status --root "$WORKSPACE" --json
-crewvane goal list --root "$WORKSPACE" --json
-crewvane goal show "$GOAL_ID" --root "$WORKSPACE" --json
-crewvane ask "$VERBATIM_REQUEST" --project "$PROJECT_ID" --root "$WORKSPACE"
-crewvane capture "$VERBATIM_FUTURE_IDEA" --root "$WORKSPACE"
-crewvane capture "$VERBATIM_PERSONAL_TASK" --self --root "$WORKSPACE"
-crewvane goal message "$GOAL_ID" --text "$VERBATIM_MESSAGE" --root "$WORKSPACE"
+atte status --root "$WORKSPACE" --json
+atte goal list --root "$WORKSPACE" --json
+atte goal show "$GOAL_ID" --root "$WORKSPACE" --json
+atte ask "$VERBATIM_REQUEST" --project "$PROJECT_ID" --root "$WORKSPACE"
+atte capture "$VERBATIM_FUTURE_IDEA" --root "$WORKSPACE"
+atte capture "$VERBATIM_PERSONAL_TASK" --self --root "$WORKSPACE"
+atte goal message "$GOAL_ID" --text "$VERBATIM_MESSAGE" --root "$WORKSPACE"
 ```
 
 Use repeatable `--attachment <absolute-path>` for PNG, JPEG, WebP, or GIF context. Preserve the user's original wording and constraints. `goal message` and `direct` never infer approval, acceptance or completion from text. For a concierge goal, handing an external wait back to an Agent returns it to `active` and clears the old wait and reminder pending reconciliation; the next step is preserved. Passive notes on personal tasks preserve external waiting.
@@ -41,26 +41,26 @@ The managed concierge can persist a new request it has already received in its t
 
 ## Work methods and local packs
 
-Use `crewvane skill list --json` to inspect built-in and installed local methods. Built-in
+Use `atte skill list --json` to inspect built-in and installed local methods. Built-in
 role and process methods are resolved automatically and cannot be attached or replaced.
 The current-case concierge may inspect a method catalog and explicitly attach a matching
-local method to its current goal with `crewvane skill attach`. Owners and verifiers cannot
+local method to its current goal with `atte skill attach`. Owners and verifiers cannot
 change bindings.
 
 Local methods are bounded instructions, not executable tasks. Never infer goal completion
 from a method, script, Agent Stop, or terminal state. If the user asks to create or update
-a reusable method, load the separate `crewvane-local-pack-author` Skill when available;
+a reusable method, load the separate `atte-local-pack-author` Skill when available;
 otherwise use:
 
 ```sh
-crewvane skill draft "$DRAFT" --id "$PACK_ID" --name "$NAME" \
+atte skill draft "$DRAFT" --id "$PACK_ID" --name "$NAME" \
   --description "$WHEN_TO_USE" --role owner
-crewvane skill validate "$DRAFT" --json
-crewvane skill install "$DRAFT" --json
+atte skill validate "$DRAFT" --json
+atte skill install "$DRAFT" --json
 ```
 
 Show the preview and get an explicit install decision before installing. Never approve a
-script on the user's behalf. `crewvane skill run PACK_ID SCRIPT_ID --goal GOAL_ID`
+script on the user's behalf. `atte skill run PACK_ID SCRIPT_ID --goal GOAL_ID`
 requires an existing goal binding, matching package digest and a user-approved script
 SHA-256. Script output is audit evidence only.
 
@@ -75,7 +75,7 @@ Only use status-changing commands when this agent is the registered owner or the
 - Treat an empty or idle terminal as unknown, not successful.
 - After a human answers in the owner's Herdr scene, write the receipt before ending the turn. Do not ask the human to repeat the same answer in the desktop app. Never treat a Atte system check as a human reply.
 - If `owner launch` cannot confirm environment setup but preserves a real scene and
-  recovery ID, use `crewvane owner attach` only after verifying that exact Session,
+  recovery ID, use `atte owner attach` only after verifying that exact Session,
   Workspace, Tab, Pane and Agent or foreground process. Never replay a task that may
   already have been delivered.
 

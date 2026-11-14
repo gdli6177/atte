@@ -143,7 +143,7 @@ flowchart TB
 | Agent Runtime Adapter | Codex/Claude/Cursor/Qoder/OMP 原生生命周期 | 不与 SessionAdapter 混为一种 Adapter |
 | Skills | 角色、执行流程、接入和恢复说明 | 不作为送达确认、锁、迁移或验收权限的替代品 |
 
-第一方实现建议放到新 Node 包 `packages/sessions/`，包名 `@crewvane/sessions`。它可依赖 core 的纯类型；core 不反向依赖它。Electron 和独立 CLI 复用同一个实现，不各写一套启动逻辑。平台调用、进程执行和文件存储用显式依赖注入，便于离线 fixture 测试。
+第一方实现建议放到新 Node 包 `packages/sessions/`，包名 `@atte/sessions`。它可依赖 core 的纯类型；core 不反向依赖它。Electron 和独立 CLI 复用同一个实现，不各写一套启动逻辑。平台调用、进程执行和文件存储用显式依赖注入，便于离线 fixture 测试。
 
 Orca 的实验性 orchestration 不启用：不创建第二份 Run/Task，不安装其协调 Skill 来替代 Atte 管家，不让 `worker_done` 绕过 Atte 验收。必要的终端和生命周期能力走公开接口。将来引入原生消息能力应另行设计，不在首期顺带完成。
 
@@ -230,7 +230,7 @@ G0 后必须把这些 DTO 定义成完整的可编译类型，并提交 JSON fix
 - `switch/<operationId>.json`：逐阶段日志、目标快照摘要、已核实关闭结果和恢复计划，0600。
 - launcher 与一次性回执：独立私有目录；成功交接后保留必要身份记录，过期的正文/令牌按维护策略删除。
 
-日志不保存明文 Hook token、凭据、完整 PATH、Prompt、工具输出或整份 workspace。工作区语义事实仍在各自 `.crewvane/`，不复制进注册表。
+日志不保存明文 Hook token、凭据、完整 PATH、Prompt、工具输出或整份 workspace。工作区语义事实仍在各自 `.atte/`，不复制进注册表。
 
 全局控制锁用于启动/发送/绑定/切换决策；各 workspace 继续使用原有状态锁。锁顺序固定为 `全局控制锁 → 按 realpath 排序的 workspace 锁`，外部进程调用不持有 workspace 锁。耗时调用采用租约 + 返回后重查 epoch 的方式；不得持锁等待 Agent 回合。
 
@@ -310,7 +310,7 @@ Orca 在首期是额外安装的独立应用，不内嵌进 Atte。下载来源�
 
 ### 6.2 环境与自定义命令
 
-每个受管启动导出：`CREWVANE_WORKSPACE`、`CREWVANE_GOAL_ID`、`CREWVANE_ATTEMPT_ID`、`CREWVANE_AGENT_NAME`、`CREWVANE_BACKEND`、`CREWVANE_BACKEND_EPOCH`，以及现有 Hook token 和 Host Bridge 上下文。管家使用独立的角色/案卷作用域；负责人不能继承管家 scope。
+每个受管启动导出：`ATTE_WORKSPACE`、`ATTE_GOAL_ID`、`ATTE_ATTEMPT_ID`、`ATTE_AGENT_NAME`、`ATTE_BACKEND`、`ATTE_BACKEND_EPOCH`，以及现有 Hook token 和 Host Bridge 上下文。管家使用独立的角色/案卷作用域；负责人不能继承管家 scope。
 
 Orca 公共 `terminal create` 没有 POSIX `--env/--cwd`，所以用私有 launcher 在真实 interactive/login shell 里完成 cwd 与环境准备。只把正确转义的短 launcher 命令传给 Orca，任务正文放受校验文件；不用长串 `export` 作为一次终端键盘输入。
 
@@ -335,7 +335,7 @@ Orca 公共 `terminal create` 没有 POSIX `--env/--cwd`，所以用私有 launc
 
 无原生 Hook 的自定义 CLI，只报告可确认的进程与可达性，无法确认时 unknown；不能从屏幕文字猜测空闲。可信 Stop 保留 5 秒后一次提醒、再 30 秒交给管家；无 Hook 保留已验证的 90 秒 fallback；只有明确生命周期能启动 settled 计时。业务无进展阈值继续独立计算，工具/心跳不续命。
 
-Agent 之间的受管协调经 Atte 的目标事实和消息投递通道完成；Orca 首期不要求启用自己的 Run/Worker 协议。Host Bridge 收口为中性场景操作；不能让 Orca 管家通过遗留 `CREWVANE_HERDR_BINARY` 调用未选中的 Herdr。
+Agent 之间的受管协调经 Atte 的目标事实和消息投递通道完成；Orca 首期不要求启用自己的 Run/Worker 协议。Host Bridge 收口为中性场景操作；不能让 Orca 管家通过遗留 `ATTE_HERDR_BINARY` 调用未选中的 Herdr。
 
 ## 7. 单后端切换事务（必须严格实现）
 
@@ -401,7 +401,7 @@ committing 也必须调用 Core 在最新 workspace 上只更新后端/交接字
 
 ## 8. 存储升级、回退与已有数据
 
-首次打开有效 v3：在原 workspace 锁内先写一次 `.crewvane/state.v3.backup.json`，校验备份成功后迁移到 v4。保留原目标 ID、状态、注意力 ID、决定、消息、附件、委托、方法和通知去重身份。现有 Herdr 引用转换为 backend=herdr 的历史/当前场景，无法核实的运行身份只标为需重连，不凭迁移产生“运行中”。
+首次打开有效 v3：在原 workspace 锁内先写一次 `.atte/state.v3.backup.json`，校验备份成功后迁移到 v4。保留原目标 ID、状态、注意力 ID、决定、消息、附件、委托、方法和通知去重身份。现有 Herdr 引用转换为 backend=herdr 的历史/当前场景，无法核实的运行身份只标为需重连，不凭迁移产生“运行中”。
 
 迁移是离线可执行的，不能为填满 `SceneReferenceV1` 而生成伪造的 runtimeId/generation：先将原引用原样放入只供 legacy converter 读取的 `legacyScene`（版本0、backend=herdr、unverified），未核实前 `scene` 留空。首次连接在原Session核对工作区、真实Agent/前台进程、目标attempt与已有回执后，才生成完整中性scene；失败保留原记录与重连入口。历史记录可保留未验证来源，不获得发送/关闭权。升级时导入安装保存的当前/最近工作区索引，之后只登记明确打开过的根，不声称已经发现磁盘上所有旧工作区。
 

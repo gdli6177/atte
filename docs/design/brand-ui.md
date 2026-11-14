@@ -60,10 +60,10 @@ Atte 的品牌不是“更花”，而是“更少打扰、更可核对”。界
 pnpm typecheck
 pnpm test
 pnpm --dir apps/desktop exec vite build
-CREWVANE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop
+ATTE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop
 ```
 
 桌面门禁在三种窗口尺寸、深浅主题下覆盖注意力首页、待办池两类、全部目标、设置页
 顶部与底部、目标详情和新建目标；自动检查对比度、横向裁切、无名称按钮、小点击目标、
 右上角状态与主按钮的垂直中心，以及三目标并发响应。视觉原则仍见
-`skills/crewvane-ui/references/checklist.md`。
+`skills/atte-ui/references/checklist.md`。

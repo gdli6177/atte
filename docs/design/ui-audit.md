@@ -168,7 +168,7 @@
 
 ### 6.3 自动验收
 
-`CREWVANE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop` 在打包后的 Electron 中生成
+`ATTE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop` 在打包后的 Electron 中生成
 54 张审计截图，覆盖 3 种尺寸 × 深浅主题 × 注意力、待办池顶部和两类分类、
 全部目标、设置页顶部与底部、目标详情、新建目标。最终结果：
 

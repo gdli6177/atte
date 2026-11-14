@@ -130,7 +130,7 @@ Agent 的真实输出主要是自然语言、Markdown、终端摘录和附件，
 
 代码：`prototypes/goal-panel/`
 
-验收截图：`/tmp/crewvane-goal-panel-decoupled-qa/`
+验收截图：`/tmp/atte-goal-panel-decoupled-qa/`
 
 生产实现：
 

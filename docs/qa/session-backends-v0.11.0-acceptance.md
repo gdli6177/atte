@@ -118,7 +118,7 @@
 | E2E08 | 连续20次从不同目标“回到现场”，再关闭 Orca 窗口重开 | 定位对应真实 terminal，不新建20个现场或Agent |
 | E2E09 | `.zshrc` alias 和函数 cursor-2；中文/空格 cwd；长 PATH | 启动的真实程序、argv、cwd、Atte root 正确；不替换成 cursor-agent |
 | E2E10 | 提交20,000字单段目标、长补充与图片 | 目标不因首行超长失败；任务正文不截断，图片文件可读取 |
-| E2E11 | 原生 Orca 现场复制/粘贴文本、粘贴图片、输入法、Agent快捷键 | 使用与单独 Orca 相同路径；Crewvane不吞键；Agent实际识别图片内容 |
+| E2E11 | 原生 Orca 现场复制/粘贴文本、粘贴图片、输入法、Agent快捷键 | 使用与单独 Orca 相同路径；Atte 不吞键；Agent实际识别图片内容 |
 | E2E12 | 在负责人现场回答 attention 问题，执行CLI写回 | 解决当前问题，app及时更新；旧attention的迟到答案不能解除新问题 |
 | E2E13 | Stop 无写回 → 提醒 → 写回 | 只提醒一次；及时回报取消旧计时器；仍缺失先找管家 |
 | E2E14 | 外部等待、到期提醒、人为验收、已放弃、待办池混合后切换 | 不自动推进等待/暂停/待验收/记录项；同条通知不再发送 |
@@ -133,16 +133,16 @@
 | ID | 测量方法 | 发布阈值 |
 | --- | --- | --- |
 | PERF01 | 同一包、同机各模式三目标运行，自动点击导航/打开新目标 | 输入到下一帧 p95 <200ms；不因后端调用产生>200ms主线程长任务 |
-| PERF02 | 关闭外部现场后立刻连续操作Crewvane | 无旧窗口探测造成的秒级点击阻塞；新目标表单正常输入 |
+| PERF02 | 关闭外部现场后立刻连续操作 Atte | 无旧窗口探测造成的秒级点击阻塞；新目标表单正常输入 |
 | PERF03 | 记录两模式各10分钟的CLI进程次数 | 一个runtime每10秒最多一组常规采集；不按目标放大spawn；失败退避 |
 | PERF04 | 选 Orca 10 分钟 | 未调用Herdr server/attach/plugin/update；Herdr专项后台轮询为零 |
 | PERF05 | 两种模式100个目标的synthetic状态与10000条重复生命周期事件 | 相同观测不反复写快照；重复事件不增加Activity；日志轮转有界 |
-| PERF06 | 对比0.10.0同机三次空载、三次三目标 | 记录CPU/RSS与启动时间；Crewvane自身RSS/CPU相对基线退化>20%需定位修复或提出明确评审，不用包体大小冒充性能数据 |
+| PERF06 | 对比0.10.0同机三次空载、三次三目标 | 记录CPU/RSS与启动时间；Atte 自身RSS/CPU相对基线退化>20%需定位修复或提出明确评审，不用包体大小冒充性能数据 |
 | UX01 | 900×700、1440×960；深浅主题 | 设置完整可达，标签不歪斜；无按钮被现场遮挡；顶部固定 |
 | UX02 | 键盘操作选择/确认/取消/恢复、屏幕阅读标签 | 焦点可见并返回正确入口；loading、成功、失败不能只靠颜色 |
-| PRIV01 | 不含Crewvane目标env的普通Agent对话 | 不进入Crewvane目标、日志或上下文 |
+| PRIV01 | 不含 Atte 目标 env 的普通Agent对话 | 不进入 Atte 目标、日志或上下文 |
 | PRIV02 | token、凭据、工具输出、终端全文 | 不在receipt/diagnostic/fixture中出现；只保留被允许的有界事件 |
-| PRIV03 | 双方已有Hook、同名用户Skill、Orca已有配置 | 内容被保护，卸载Crewvane管理条目不删除其他配置 |
+| PRIV03 | 双方已有Hook、同名用户Skill、Orca已有配置 | 内容被保护，卸载 Atte 管理条目不删除其他配置 |
 
 一次性切换操作的进程调用单独计数，不混入常规采集预算。单次读查询超时≤5秒，UI立即有进度反馈；创建/发送/关闭按G0确定的上游时限执行，但必须可取消观察并保留unknown结果，不能由取消按钮假装副作用撤销。
 
@@ -201,7 +201,7 @@ CI跑纯contract、core和故障注入；需要图形登录/已认证Agent的试
 
 | 范围 | 方式与结果 | 证据 |
 | --- | --- | --- |
-| 数据、身份、幂等、切换故障 | core / sessions / desktop 自动测试，含旧 epoch、响应丢失、恢复屏障、未知结果不重放 | `/tmp/crewvane-v011-full-release.log`；最终检查结果随 PR |
+| 数据、身份、幂等、切换故障 | core / sessions / desktop 自动测试，含旧 epoch、响应丢失、恢复屏障、未知结果不重放 | `/tmp/atte-v011-full-release.log`；最终检查结果随 PR |
 | Codex / Claude Code / Cursor / Qoder 配置 | 隔离 HOME fixture；原有与后来增加的第三方 Hook、matcher、空分组、设置均保留；重复安装、更新、停用与卸载通过 | `apps/desktop/test/agent-hook-manager.test.ts` |
 | OMP 扩展保护 | 隔离 HOME fixture；其他扩展、同名用户文件与后文含 marker 的用户文件均保留 | 同上 |
 | Hook 配置写入故障 | 并发 manager 串行，损坏/未来格式/符号链接停止写入；无受管条目的卸载逐字节 no-op | 同上 |
@@ -214,8 +214,8 @@ CI跑纯contract、core和故障注入；需要图形登录/已认证Agent的试
 | 自然语言现场答复 | 真实 OMP：只向负责人发送人的普通原话，不由脚本代写状态；负责人保存 scene-reply，管家写决定账本，原注意力消失且负责人现场复用 | `/private/tmp/cv-scene-nURfAs/verified-state.json` |
 | 测试资源回收 | 完整交接退出后测试进程为零；项目删除后重查；清理器保留进程出生身份，覆盖子进程被系统接管和 PID 复用，并保护用户 Orca 与调用者 | `scripts/lib/backend-trial-cleanup.mjs`；`apps/desktop/test/backend-trial-cleanup.test.ts` |
 | 管家复用状态 | 回归先复现已初始化管家被留在 `not_ready`，再验证复用恢复就绪、保留 presence，且不新建现场、不重复发身份 Prompt | `packages/sessions/test/runtime.test.ts` |
-| 最终本地门禁 | CLI 59、Core 149、Sessions 68、Desktop 184，合计 460 项通过；类型检查与桌面构建通过 | `/tmp/crewvane-v011-final-gate.log` |
-| 最终安装与首次启动 | 最终包通过首次启动、自定义 CLI 与管家重启复用；ZIP / DMG 的 SHA-256、quarantine 后严格签名、安装启动与包内 CLI 的 v4 真实写入通过 | `/tmp/crewvane-v011-onboarding-final-check.log`；`/tmp/crewvane-v011-installers-final.log` |
+| 最终本地门禁 | CLI 59、Core 149、Sessions 68、Desktop 184，合计 460 项通过；类型检查与桌面构建通过 | `/tmp/atte-v011-final-gate.log` |
+| 最终安装与首次启动 | 最终包通过首次启动、自定义 CLI 与管家重启复用；ZIP / DMG 的 SHA-256、quarantine 后严格签名、安装启动与包内 CLI 的 v4 真实写入通过 | `/tmp/atte-v011-onboarding-final-check.log`；`/tmp/atte-v011-installers-final.log` |
 
 真实 Codex Hook 验收在临时 HOME 中先断言安装为 `waiting-trust`，随后由测试者
 显式配置一次性的 `--dangerously-bypass-hook-trust` 运行已审核的隔离 Hook。

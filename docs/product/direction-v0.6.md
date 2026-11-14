@@ -111,14 +111,14 @@ Atte 的第一价值不是让用户更快地管理 Agent，而是让用户同时
 
 Codex、Claude Code、Cursor、OMP 等 Agent 已经运行在用户自己的终端里。要求用户切换到 Atte UI 才能登记目标，会丢掉“任务正在哪里产生”的上下文。
 
-外部 skill 的职责是把 Agent 引导到稳定的 CLI，而不是让它直接改 `.crewvane/state.json`：
+外部 skill 的职责是把 Agent 引导到稳定的 CLI，而不是让它直接改 `.atte/state.json`：
 
 ```text
 外部 Agent
    │
-   ├─ crewvane ask / goal message    人可提交原文，不猜状态
-   ├─ crewvane goal show / list      读取结构化事实
-   └─ crewvane goal progress / wait / review / decide
+   ├─ atte ask / goal message    人可提交原文，不猜状态
+   ├─ atte goal show / list      读取结构化事实
+   └─ atte goal progress / wait / review / decide
                                         负责人或管家在事实发生后提交
 ```
 
@@ -227,7 +227,7 @@ Brief 可以是 Markdown 原文加少量显式字段。Atte 不需要拆解 Agen
 
 ```ts
 interface GoalDetailService {
-  command(command: CrewvaneCommand): Promise<unknown>;
+  command(command: AtteCommand): Promise<unknown>;
   importAttachments(inputs: AttachmentInput[]): Promise<GoalAttachment[]>;
   previewAttachment(goalId: string, attachmentId: string): Promise<string>;
   openAttachment(goalId: string, attachmentId: string): Promise<void>;

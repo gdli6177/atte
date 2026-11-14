@@ -4,11 +4,11 @@
 
 Required fields:
 
-- `id`: namespaced lowercase ID such as `acme.design-review`; `crewvane.` is reserved.
+- `id`: namespaced lowercase ID such as `acme.design-review`; `atte.` is reserved.
 - `name`: short user-facing name.
 - `description`: when the method should be used.
 - `version`: semver, normally `1.0.0`.
-- `minimumCrewvane`: minimum compatible Atte version.
+- `minimumAtte`: minimum compatible Atte version.
 - `kind`: `process`.
 - `roles`: one or both of `owner`, `verifier`.
 - `entry`: usually `SKILL.md`.
@@ -27,7 +27,7 @@ Example:
   "name": "设计评审",
   "description": "界面设计或实现需要发布前评审时使用。",
   "version": "1.0.0",
-  "minimumCrewvane": "0.10.0",
+  "minimumAtte": "0.10.0",
   "kind": "process",
   "roles": ["owner", "verifier"],
   "entry": "SKILL.md",

@@ -566,7 +566,7 @@ interface Verification {
 由 Atte 启动的复核进程只获得当前目标范围内的精简 `status`、`goal show` 和
 `goal verify`。它不能更新其他目标、提交交付、调用验收或发布命令，也不能用
 `--reviewer` 冒用另一身份；复核署名来自启动时登记且不能被普通参数覆盖的
-`CREWVANE_AGENT_NAME`。该限制用于避免协议误用，不冒充操作系统身份认证。
+`ATTE_AGENT_NAME`。该限制用于避免协议误用，不冒充操作系统身份认证。
 
 ### 10.3 审查轮次
 
@@ -748,26 +748,26 @@ type ReleaseOnMerge = "never" | "production" | "unknown";
 Agent 协议：
 
 ```text
-crewvane goal brief ID --file PATH [--expected-revision N]
-crewvane goal checkpoint ID --summary TEXT --next TEXT [--due-at ISO]
-crewvane goal verify ID --delivery ID --outcome passed|failed
+atte goal brief ID --file PATH [--expected-revision N]
+atte goal checkpoint ID --summary TEXT --next TEXT [--due-at ISO]
+atte goal verify ID --delivery ID --outcome passed|failed
   --summary TEXT --criterion ID::passed|failed::EVIDENCE_ID [--criteria-file PATH]
-crewvane goal boundary ID --file PATH
+atte goal boundary ID --file PATH
 ```
 
 人用协议：
 
 ```text
-crewvane goal autonomy pause ID
-crewvane goal autonomy resume ID
-crewvane goal autonomy acceptance ID
+atte goal autonomy pause ID
+atte goal autonomy resume ID
+atte goal autonomy acceptance ID
   --acceptance inherit|human-review|auto-with-verification
-crewvane goal reopen ID --note TEXT
-crewvane release create --from GOAL_ID --environment production
+atte goal reopen ID --note TEXT
+atte release create --from GOAL_ID --environment production
   --revision REV [--digest SHA256] [--version VERSION]
-crewvane release approve ID --note TEXT
-crewvane release reject ID --note TEXT
-crewvane release result ID --outcome succeeded|failed --evidence-file PATH
+atte release approve ID --note TEXT
+atte release reject ID --note TEXT
+atte release result ID --outcome succeeded|failed --evidence-file PATH
 ```
 
 兼容命令：
@@ -811,7 +811,7 @@ CLI 进程本身不能可靠证明调用者是人。实现必须：
 最小权限约束：负责人不能冒用其他复核人，复核者只能读取当前目标并写复核结果。
 这些约束是明确的协议边界，不是操作系统沙箱或密码学身份证明。
 
-本地 Bot 首期只通过独立的 `crewvane bot` 子协议接入，不继承人的 CLI 能力。
+本地 Bot 首期只通过独立的 `atte bot` 子协议接入，不继承人的 CLI 能力。
 即使 Bot 与桌面登录同一操作系统账户，它也只能执行绑定中列出的操作。
 
 ### 14.3 状态版本
@@ -865,7 +865,7 @@ interface GoalAutonomy {
 
 从 2 迁移到 3：
 
-1. 写入前备份原状态为 `.crewvane/state.v2.backup.json`。
+1. 写入前备份原状态为 `.atte/state.v2.backup.json`。
 2. 现有目标默认 `kind = "delivery"`，不自动开启自主推进。
 3. 工作区默认验收方式为 `human-review`。
 4. `releaseOnMerge = "unknown"`。
@@ -938,7 +938,7 @@ interface BotBinding {
 
 ```json
 {
-  "schema": "crewvane.bot.v1",
+  "schema": "atte.bot.v1",
   "requestId": "stable-idempotency-key",
   "operation": "goal.submit",
   "botId": "bot_...",
@@ -958,7 +958,7 @@ delivery.submit
 ```
 
 所有操作按 `(botId, requestId)` 幂等，只允许绑定项目内的目标。Bot 接收的事件使用
-现有 `crewvane.notification.v1` 或显式连接器，不通过读取工作区文件推断状态。
+现有 `atte.notification.v1` 或显式连接器，不通过读取工作区文件推断状态。
 `delivery.submit` 映射到同一 core 交付事实，不允许 Bot 自行标记验收。
 
 ### 15.4 Bot 与验收

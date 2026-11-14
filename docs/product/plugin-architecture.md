@@ -52,7 +52,7 @@ Atte 先保证一个可靠内核，再把会变化的部分放到稳定的能力
 - `Activity` / `GoalMessage`：按 `goalId` 隔离的原始消息与附件事实，不对正文做语义推断。
 - `Attention`：说明为什么需要人，不保存某一种界面的按钮结构。
 - `Decision`：人明确做出的批准或拒绝，以及原话、来源和时间。
-- `CrewvaneCommand`：唯一写入口。桌面、CLI 和插件都提交命令。
+- `AtteCommand`：唯一写入口。桌面、CLI 和插件都提交命令。
 - `WorkspaceEvent`：提交成功后的追加事件，供索引、通知和即时界面消费。
 
 内核禁止：
@@ -97,7 +97,7 @@ interface InvocationContext {
 适配器是一个能力包，可同时包含后台逻辑和声明式 UI。建议的最小接口：
 
 ```ts
-interface CrewvaneAdapter<TConfig = unknown> {
+interface AtteAdapter<TConfig = unknown> {
   manifest: AdapterManifest;
   activate(context: AdapterContext<TConfig>): Promise<Disposable>;
 }

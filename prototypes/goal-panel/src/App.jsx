@@ -154,7 +154,7 @@ function AppHeader({ theme, onToggleTheme, viewLabel }) {
     <header className="app-header">
       <div className="brand">
         <span className="brand-mark">
-          <img src="/assets/crewvane-mage.png" alt="" />
+          <img src="/assets/atte-mascot-baseline-512.png" alt="" />
         </span>
         <strong>Atte</strong>
         <small>Atte</small>

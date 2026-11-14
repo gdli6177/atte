@@ -24,12 +24,12 @@ Agent 输出通常是非结构化的。原型需要验证：不要求 Agent 填�
 
 验收截图保存在：
 
-- `/tmp/crewvane-goal-panel-decoupled-qa/01-reply-dark.png`
-- `/tmp/crewvane-goal-panel-decoupled-qa/02-all-goals-dark.png`
-- `/tmp/crewvane-goal-panel-decoupled-qa/03-review-dark.png`
-- `/tmp/crewvane-goal-panel-decoupled-qa/04-waiting-dark.png`
-- `/tmp/crewvane-goal-panel-decoupled-qa/05-blocked-dark.png`
-- `/tmp/crewvane-goal-panel-decoupled-qa/06-blocked-light.png`
+- `/tmp/atte-goal-panel-decoupled-qa/01-reply-dark.png`
+- `/tmp/atte-goal-panel-decoupled-qa/02-all-goals-dark.png`
+- `/tmp/atte-goal-panel-decoupled-qa/03-review-dark.png`
+- `/tmp/atte-goal-panel-decoupled-qa/04-waiting-dark.png`
+- `/tmp/atte-goal-panel-decoupled-qa/05-blocked-dark.png`
+- `/tmp/atte-goal-panel-decoupled-qa/06-blocked-light.png`
 
 ## 交互覆盖
 

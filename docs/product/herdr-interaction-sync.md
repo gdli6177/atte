@@ -11,13 +11,13 @@
 1. Herdr 身份、生命周期和可达性由事件加周期对账自动同步。
 2. 对话语义和目标状态必须由 Agent 通过 Atte CLI 显式写回。
 
-两层之间没有“猜语义”的捷径。只要发生显式写回，桌面通过监听 `.crewvane/state.json` 立即刷新；没有写回时，界面最多显示“现场有新内容，尚未写回目标”，不能把它显示成新消息、完成或审批结果。
+两层之间没有“猜语义”的捷径。只要发生显式写回，桌面通过监听 `.atte/state.json` 立即刷新；没有写回时，界面最多显示“现场有新内容，尚未写回目标”，不能把它显示成新消息、完成或审批结果。
 
 ## 两类直接交互
 
 ### 人在 Herdr Pane 操作已有 Agent
 
-Herdr 原生事件会报告 Agent 名称、Pane / Tab / Workspace 身份和 `working | idle | done | blocked | unknown` 状态。Atte 插件把这些事件送入 `crewvane event herdr`，只更新已经登记到目标或管家上的真实现场。
+Herdr 原生事件会报告 Agent 名称、Pane / Tab / Workspace 身份和 `working | idle | done | blocked | unknown` 状态。Atte 插件把这些事件送入 `atte event herdr`，只更新已经登记到目标或管家上的真实现场。
 
 这能同步：
 
@@ -43,13 +43,13 @@ CLI 的终端输出是原始终端流，不是稳定的消息协议。即使内�
 语义同步依赖 Agent 遵守 Atte 写回协议：
 
 ```text
-crewvane direct --current "用户刚说的话"
-crewvane direct --new "用户在终端里新建的事项"
-crewvane goal message GOAL_ID --text "用户的补充意见"
-crewvane goal progress GOAL_ID --summary "Agent 的明确进展"
-crewvane goal wait GOAL_ID --reason "等待审批" --owner "外部联系人或机构"
-crewvane goal decide GOAL_ID --question "需要人决定的问题"
-crewvane goal review GOAL_ID --summary "交付与检查事实"
+atte direct --current "用户刚说的话"
+atte direct --new "用户在终端里新建的事项"
+atte goal message GOAL_ID --text "用户的补充意见"
+atte goal progress GOAL_ID --summary "Agent 的明确进展"
+atte goal wait GOAL_ID --reason "等待审批" --owner "外部联系人或机构"
+atte goal decide GOAL_ID --question "需要人决定的问题"
+atte goal review GOAL_ID --summary "交付与检查事实"
 ```
 
 `direct`、`message` 和普通聊天只追加人的原话，不改变目标状态。`progress`、`wait`、`decide`、`review` 等是 Agent 在明确事实发生后提交的状态协议。批准、退回和验收仍使用独立命令，由人操作或管家依据明确的用户原话记录；core 不从聊天正文推断。
@@ -59,7 +59,7 @@ crewvane goal review GOAL_ID --summary "交付与检查事实"
 每次请求决定、验收、介入都有独立的 `attentionRequest.id`；旧快照和到期提醒有稳定的兼容编号。负责人收到人的直接答复后先读取目标，再调用：
 
 ```sh
-crewvane goal scene-reply GOAL_ID --attention-id REQUEST_ID \
+atte goal scene-reply GOAL_ID --attention-id REQUEST_ID \
   --quote "用户本轮完整原话" --summary "实际处理结果、未解决的问题与下一步" --json
 ```
 
@@ -67,7 +67,7 @@ crewvane goal scene-reply GOAL_ID --attention-id REQUEST_ID \
 
 新负责人启动时总会携带现场回写协议，包括自定义 CLI。已有负责人通过安全补核对支持升级：打开现场仅记录访问；插件或对账观察到一次 `working → idle/done` 后，应用只向同名、同 Pane 且确认空闲的已识别 Agent 发送一次核对提示。提示要求它核对自己的真实对话，不携带整段终端历史，也不是用户答复或执行授权。持久原子领取避免并发或重启重复发送；系统核对本身不会形成核对循环。
 
-普通活跃目标没有 `attentionRequest` 时，负责人也必须先用 `crewvane direct --goal` 保存用户本轮的补充、决定或要求，再按真实事实提交 `progress / wait / decide / review`。这不是从终端自动推断语义，而是负责人在自己的真实对话上下文中履行写回协议。
+普通活跃目标没有 `attentionRequest` 时，负责人也必须先用 `atte direct --goal` 保存用户本轮的补充、决定或要求，再按真实事实提交 `progress / wait / decide / review`。这不是从终端自动推断语义，而是负责人在自己的真实对话上下文中履行写回协议。
 
 活跃目标在负责人 `idle / done` 持续 90 秒且未写回时，巡检将当前案卷交给管家，要求核对真实结果、下一步与必要的决定、等待或交付。界面显示“待管家核对”；空闲本身不产生人的介入，也不会自动验收或结束。结构化决定或交付一旦写回，旧的空闲核对立即失效。
 
@@ -93,7 +93,7 @@ crewvane goal scene-reply GOAL_ID --attention-id REQUEST_ID \
 1. **Herdr 插件事件**：Agent 状态和 Pane 生命周期变化后即时送入 Atte core，按真实身份匹配。
 2. **周期对账**：每 10 秒读取 `agent list`，补偿插件故障、服务暂停或事件丢失。
 3. **前台 PID 校验**：准备、恢复或派发前，用 `pane process-info` 确认登记进程仍在前台。
-4. **状态文件监听**：Agent 调用 Atte CLI 后，桌面监听 `.crewvane/state.json` 并立即刷新。
+4. **状态文件监听**：Agent 调用 Atte CLI 后，桌面监听 `.atte/state.json` 并立即刷新。
 5. **内置终端 PTY**：人在 Atte 内直接操作 Herdr Session 时，用原始字节流显示现场；它不创建第二份业务状态。
 6. **可选 transcript adapter**：只有某个 Agent 提供稳定、可验证的会话标识和读取接口时才接入，并按 Agent 能力单独开关。
 

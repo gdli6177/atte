@@ -42,8 +42,8 @@ launcher 收据发现现场，不把能力名称当作可安全重试的凭据�
 ## 可重跑证据
 
 ```sh
-CREWVANE_TEST_ORCA_PROFILE=/private/tmp/cv-orca-g0/profile pnpm test:orca
-CREWVANE_TEST_HERDR_BINARY=/absolute/path/to/verified/herdr \
+ATTE_TEST_ORCA_PROFILE=/private/tmp/cv-orca-g0/profile pnpm test:orca
+ATTE_TEST_HERDR_BINARY=/absolute/path/to/verified/herdr \
   pnpm exec tsx scripts/herdr-session-contract-smoke.mjs
 ```
 

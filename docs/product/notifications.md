@@ -58,7 +58,7 @@ Atte 使用 `POST`，`Content-Type: application/json`，并发送：
 
 ```json
 {
-  "schema": "crewvane.notification.v1",
+  "schema": "atte.notification.v1",
   "event": "attention.required",
   "deliveryId": "sha256:…",
   "occurredAt": "2026-11-04T10:15:00.000Z",

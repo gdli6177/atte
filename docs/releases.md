@@ -1,18 +1,18 @@
 # 安装与 GitHub Releases 交付
 
-版本发布后，从 [GitHub Releases](https://github.com/gdli6177/crewvane/releases) 进入对应版本，在 **Assets** 下载。当前只支持 Apple Silicon Mac（arm64），不提供 Intel Mac、Windows 或 Linux 安装包。
+版本发布后，从 [GitHub Releases](https://github.com/gdli6177/atte/releases) 进入对应版本，在 **Assets** 下载。当前只支持 Apple Silicon Mac（arm64），不提供 Intel Mac、Windows 或 Linux 安装包。
 
 | 附件 | 使用方法 |
 | --- | --- |
-| `Crewvane-<version>-macOS-arm64.dmg` | 打开磁盘映像，将 Crewvane.app 拖入 Applications，然后从“应用程序”打开 |
-| `Crewvane-<version>-macOS-arm64.zip` | 解压后将 Crewvane.app 移入“应用程序” |
+| `Atte-<version>-macOS-arm64.dmg` | 打开磁盘映像，将 Atte.app 拖入 Applications，然后从“应用程序”打开 |
+| `Atte-<version>-macOS-arm64.zip` | 解压后将 Atte.app 移入“应用程序” |
 | `SHA256SUMS.txt` | 执行 `shasum -a 256 -c SHA256SUMS.txt` 核对安装附件 |
 
 GitHub 自动生成的 **Source code** 是源码，不是可安装应用。安装包自带 Electron、CLI runtime 和经 SHA-256 校验的 Herdr TUI CLI，无需安装 Node、pnpm 或 Homebrew。Agent CLI 仍由用户自行安装和登录。
 
 当前包没有 Apple Developer ID 签名与公证，首次打开可能出现“无法验证开发者”。核对发布来源与 SHA-256 后，可在“系统设置 → 隐私与安全性”选择“仍要打开”。如果出现“已损坏，无法打开”，不要清除隔离属性绕过；重新下载当前版本并联系维护者。`v0.3.0` 的签名不完整，不应继续使用。
 
-安装替换应用后，打开设置重新安装 Crewvane CLI，确保 `~/.local/bin/crewvane` 指向当前应用。工作区位于用户选择的目录，不会被覆盖。
+安装替换应用后，打开设置重新安装 Atte CLI，确保 `~/.local/bin/atte` 指向当前应用。工作区位于用户选择的目录，不会被覆盖。旧版目录与兼容行为见[升级说明](upgrade-atte.md)。
 
 ## 0.11.0 安装与验收
 

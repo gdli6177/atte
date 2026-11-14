@@ -28,7 +28,7 @@ Atte 0.6 是一个**全局管家与注意力中心**。用户把事项告诉管�
 - 验收以实际成果、检查记录和可访问的 Herdr 现场为依据。Agent 自称完成、Herdr `done` 或终端空闲均不等于验收通过。
 - 项目可选择 `external-approval`、`auto-merge-manual-deploy` 或 `auto`；默认外部审批。Atte 只判定项目策略是否放行，不会替 Agent 执行 Git、部署或外发。
 - 删除数据、停服、花钱、外部发消息、改变产品方向、新建或轮换密钥、修改权限、修改上线策略，九类动作在任何策略下都必须先问人。
-- 旧版未投入实际使用。当前不读取 v1 语义，也不把它猜测转换成新目标；发现不兼容、损坏或缺快照的旧工作区时，先整库归档到相邻 `.crewvane.backup-*`，再自动创建可用的 v3 工作区，并在界面显示备份原因与打开入口。有效 v2 原地备份并保守迁移到 v3。
+- 旧版未投入实际使用。当前不读取 v1 语义，也不把它猜测转换成新目标；发现不兼容、损坏或缺快照的旧工作区时，先整库归档到相邻 `.atte.backup-*`，再自动创建可用的 v3 工作区，并在界面显示备份原因与打开入口。有效 v2 原地备份并保守迁移到 v3。
 - 注意力中的真实现场介入直接进入 Herdr；决定、验收、到期跟进和派发失败使用轻量动作卡。普通活动目标有已登记现场时优先打开现场；已结束目标保留历史记录。现场上方仅展示结构化目标事实，不把终端滚动内容注入 Agent 上下文。
 
 ## 2. 产品结构
@@ -55,7 +55,7 @@ Atte 工作区
     ├── 内置 Atte CLI 安装与 PATH 说明
     └── 系统通知、Webhook、浅色 / 深色外观
 
-持久 Herdr Session：crewvane
+持久 Herdr Session：atte
 └── 唯一管家 Tab：concierge
     ├── 目标 Tab（需要现场时创建）
     └── 独立负责人 / 执行 Agent（实际执行必须分发，已有现场则复用）
@@ -92,13 +92,13 @@ Atte 工作区
 
 ### 工作区
 
-一个工作区保存一份 `.crewvane/state.json`、完整快照事件日志和写锁。`WorkspaceState.version` 为 `3`；有效 v2 先写 `.crewvane/state.v2.backup.json` 再原地迁移，其他不兼容版本、损坏 JSON、缺字段快照或只有旧事件日志时，先构造完整的新 v3 目录，再原子归档旧 `.crewvane` 并切换。旧执行状态、审批和 Herdr 现场不自动转换，备份供用户查看；有效 v3 不触发恢复。细节见 [工作区兼容检查与自动恢复](workspace-recovery.md)。
+一个工作区保存一份 `.atte/state.json`、完整快照事件日志和写锁。`WorkspaceState.version` 为 `3`；有效 v2 先写 `.atte/state.v2.backup.json` 再原地迁移，其他不兼容版本、损坏 JSON、缺字段快照或只有旧事件日志时，先构造完整的新 v3 目录，再原子归档旧 `.atte` 并切换。旧执行状态、审批和 Herdr 现场不自动转换，备份供用户查看；有效 v3 不触发恢复。细节见 [工作区兼容检查与自动恢复](workspace-recovery.md)。
 
 核心记录：
 
 - `Project`：`id`、`name`、可选 `path`、`policy`。项目用于归类与提供目录上下文；项目策略只决定上线审批，不承担 Agent 运行时职责。
 - `ProjectPolicy`：`shipPolicy`、`approvers[]`、修订号与更新时间。默认 `external-approval`，设置只能由人通过桌面执行。
-- `DecisionRecord`：项目、稳定动作键、批准/拒绝、人的原话、来源、目标与时间；派生为 `.crewvane/decisions.md` 和 `.crewvane/rejected.md`。
+- `DecisionRecord`：项目、稳定动作键、批准/拒绝、人的原话、来源、目标与时间；派生为 `.atte/decisions.md` 和 `.atte/rejected.md`。
 - `Goal`：标题、原始说明、归属项目、模式（`concierge` / `manual`）、生命周期、等待信息、提醒、注意力原因、下一步、当前负责人、图片附件元数据、交付记录、Herdr 引用及时间戳。
 - `Activity`：按 `goalId` 隔离的目标消息与处理事实，记录人 / 管家 / 负责人 / 系统的明确动作；`message` 保持原文和附件引用，Agent 答复不需要变成固定字段。
 - `HerdrReference`：真实的 Session、Workspace、Tab、Pane 和 Agent ID。引用只用于定位现场，不表示任务结果。
@@ -141,17 +141,17 @@ Atte 工作区
 
 ## 5. Herdr 与管家契约
 
-桌面通过固定可执行文件和 argv 调用 Herdr，不经 shell 拼接命令。Session 按工作区路径派生为 `crewvane-<路径摘要>`，可由显式环境配置固定。安装包在构建时下载并校验官方当前平台 Herdr，首次启动不依赖 Homebrew、网络或系统 PATH。应用启动后检测应用内置、私有 runtime、登录 shell PATH 与常见目录中的版本，并通过轻量 GitHub Releases API 检查更新；发现较新版本时下载官方当前平台二进制，再次校验 SHA-256 和可执行版本后安装到应用自己的 runtime 目录，不修改用户已有安装。更新检查或下载失败时继续使用应用内置或已有可用版本，并持续显示具体原因及重试入口；无可用 CLI 时记录、筛选、提醒和人工验收仍可使用。设置页显示实际路径、版本和检查更新入口。
+桌面通过固定可执行文件和 argv 调用 Herdr，不经 shell 拼接命令。Session 按工作区路径派生为 `atte-<路径摘要>`，可由显式环境配置固定。安装包在构建时下载并校验官方当前平台 Herdr，首次启动不依赖 Homebrew、网络或系统 PATH。应用启动后检测应用内置、私有 runtime、登录 shell PATH 与常见目录中的版本，并通过轻量 GitHub Releases API 检查更新；发现较新版本时下载官方当前平台二进制，再次校验 SHA-256 和可执行版本后安装到应用自己的 runtime 目录，不修改用户已有安装。更新检查或下载失败时继续使用应用内置或已有可用版本，并持续显示具体原因及重试入口；无可用 CLI 时记录、筛选、提醒和人工验收仍可使用。设置页显示实际路径、版本和检查更新入口。
 
-Atte 插件随 `.app` 打包，Herdr 就绪且 CLI 可用后自动部署到 `userData/herdr-plugin` 并注册为 `dev.crewvane`。升级时按全部打包源码摘要原子替换，固定插件 ID 重新登记，不依赖 GitHub 再下载。插件提供“打开 Atte 注意力”“给 Atte 新建目标”和“回到 Atte 管家”三个动作：注意力 Pane 运行 `crewvane board`，新建 Pane 使用稳定的一行输入并调用 `crewvane ask`，回到管家动作按真实 Agent 身份聚焦 `concierge`。三者使用与桌面相同的 core 状态；注意力 Pane 可显示项目上线策略、审查轮次、高风险动作、决定、验收、跟进和介入，补充意见、提交批准或拒绝、请求跟进、等待事项交给管家或人工接管、验收通过、退回修改、聚焦真实负责人现场或按 `g` 回到管家；不自行执行目标。
+Atte 插件随 `.app` 打包，Herdr 就绪且 CLI 可用后自动部署到 `userData/herdr-plugin` 并注册为 `dev.atte`。升级时按全部打包源码摘要原子替换，固定插件 ID 重新登记，不依赖 GitHub 再下载。插件提供“打开 Atte 注意力”“给 Atte 新建目标”和“回到 Atte 管家”三个动作：注意力 Pane 运行 `atte board`，新建 Pane 使用稳定的一行输入并调用 `atte ask`，回到管家动作按真实 Agent 身份聚焦 `concierge`。三者使用与桌面相同的 core 状态；注意力 Pane 可显示项目上线策略、审查轮次、高风险动作、决定、验收、跟进和介入，补充意见、提交批准或拒绝、请求跟进、等待事项交给管家或人工接管、验收通过、退回修改、聚焦真实负责人现场或按 `g` 回到管家；不自行执行目标。
 
-插件清单同时订阅 `pane.agent_status_changed`、`pane.exited`、`pane.closed`、`pane.moved`、`tab.closed` 和 `workspace.closed`。事件脚本读取 Herdr 原生的 `{ event, data }` 环境变量并调用内部 `crewvane event herdr`；CLI 校验 Pane、Tab 或 Workspace 身份后只写回已经登记该现场的目标，陌生现场不产生写入。`pane.moved` 使用新返回的 Pane、Tab、Workspace 与 Agent 身份原子替换旧引用，后续状态和关闭事件只命中新 ID。桌面每 10 秒的 `agent list` 轮询仍保留，覆盖 Herdr 服务暂停、事件钩子故障和旧版插件。
+插件清单同时订阅 `pane.agent_status_changed`、`pane.exited`、`pane.closed`、`pane.moved`、`tab.closed` 和 `workspace.closed`。事件脚本读取 Herdr 原生的 `{ event, data }` 环境变量并调用内部 `atte event herdr`；CLI 校验 Pane、Tab 或 Workspace 身份后只写回已经登记该现场的目标，陌生现场不产生写入。`pane.moved` 使用新返回的 Pane、Tab、Workspace 与 Agent 身份原子替换旧引用，后续状态和关闭事件只命中新 ID。桌面每 10 秒的 `agent list` 轮询仍保留，覆盖 Herdr 服务暂停、事件钩子故障和旧版插件。
 
 Herdr 插件不是可靠性的捷径或安全边界。插件 v1 是无 SDK、无沙箱的普通 argv 进程，继承用户环境并可调用完整 Herdr CLI；原生非终端 UI 也不受支持。因此插件只作为可选表现层，Atte 的案卷限制、状态锁和权限校验仍由 CLI、core 和受约束 Electron IPC 承担。Herdr 不可用或插件安装失败不阻止桌面记录目标；设置页显示独立状态，修复后自动重试。
 
-管家身份初始化与案卷处理始终是两个回合。初始化只记住职责并回复 `CREWVANE_CONCIERGE_READY`，不读取目标；案卷通知一次只带一个 `case_id`，同一工作区由上一条消息的 settled 状态串行解锁。每个案卷回合在分发、写回或交接后立即结束，禁止启动后台任务、循环轮询或等待负责人完工，避免下一条目标继承上一条的 scope。恢复已有管家时，只有 Herdr 的 `idle` / `done` 状态允许发送身份初始化；`working` / `blocked` / `unknown` 必须保留现有现场，“找管家”直接聚焦真实 Pane 让用户处理阻塞 UI，不能把 blocked 当成不存在，也不能自动发送 Enter、Esc 改变用户输入。已知 blocked 时后续派发返回清楚的可操作错误。案卷快照附带图片的真实绝对路径，并明确要求负责人实际查看；没有读取证据时不得声称看过。
+管家身份初始化与案卷处理始终是两个回合。初始化只记住职责并回复 `ATTE_CONCIERGE_READY`，不读取目标；案卷通知一次只带一个 `case_id`，同一工作区由上一条消息的 settled 状态串行解锁。每个案卷回合在分发、写回或交接后立即结束，禁止启动后台任务、循环轮询或等待负责人完工，避免下一条目标继承上一条的 scope。恢复已有管家时，只有 Herdr 的 `idle` / `done` 状态允许发送身份初始化；`working` / `blocked` / `unknown` 必须保留现有现场，“找管家”直接聚焦真实 Pane 让用户处理阻塞 UI，不能把 blocked 当成不存在，也不能自动发送 Enter、Esc 改变用户输入。已知 blocked 时后续派发返回清楚的可操作错误。案卷快照附带图片的真实绝对路径，并明确要求负责人实际查看；没有读取证据时不得声称看过。
 
-Herdr 0.9.5 的插件 v1 事件没有用户 prompt 提交事件。直接终端聊天必须先由管家执行 `crewvane direct --current "<原话>"` 或 `crewvane direct --new "<原话>"` 写回共享状态，再继续处理；桌面监听状态文件并即时刷新。CLI 对已存在的当前案卷只追加用户消息，不建立重复 handoff；对终端中新建立的目标记录为已经送达管家，避免桌面回放同一原文，并原子推进管家的案卷 scope，使同一回合可以继续处理新目标。终端能提供可保存的本地图片文件时，管家为 direct 命令追加 `--attachment <路径>`，CLI 负责复制和校验；无法取得文件时明确要求用户回到桌面输入框附加，不能静默丢图。协议无法捕获不经过 CLI 写回的普通终端对话，UI 与文档必须明确这个边界。
+Herdr 0.9.5 的插件 v1 事件没有用户 prompt 提交事件。直接终端聊天必须先由管家执行 `atte direct --current "<原话>"` 或 `atte direct --new "<原话>"` 写回共享状态，再继续处理；桌面监听状态文件并即时刷新。CLI 对已存在的当前案卷只追加用户消息，不建立重复 handoff；对终端中新建立的目标记录为已经送达管家，避免桌面回放同一原文，并原子推进管家的案卷 scope，使同一回合可以继续处理新目标。终端能提供可保存的本地图片文件时，管家为 direct 命令追加 `--attachment <路径>`，CLI 负责复制和校验；无法取得文件时明确要求用户回到桌面输入框附加，不能静默丢图。协议无法捕获不经过 CLI 写回的普通终端对话，UI 与文档必须明确这个边界。
 
 应用打开工作区时读取状态，不控制用户其他 Session。准备管家时：
 
@@ -161,7 +161,7 @@ Herdr 0.9.5 的插件 v1 事件没有用户 prompt 提交事件。直接终端�
 4. 唯一的 `concierge` Tab 中使用用户填写的启动命令启动管家，默认 `codex`。命令解析为可执行文件与原生参数，可包含模型参数；已识别 CLI 交给 Herdr Agent 通道，自定义 CLI 将每个参数正确转义后在 Pane 内执行。不把设置原文当作 shell 表达式执行，不支持管道、重定向或变量展开。这只是管家启动方式，不重建运行时管理页面。
 5. 将身份说明、工作区绝对路径、CLI 使用方式和当前目标摘要交给管家。
 
-设置中的 Agent 偏好分别指定管家、负责人、工人的启动命令，例如 `codex --model <模型名>`、`npx --yes my-agent` 或自定义启动脚本。允许任意交互式 CLI，以及绝对路径、`~/` 和相对于工作区的脚本路径。Herdr 已识别的 CLI 使用原生 Agent 通信；未识别的命令通过 Pane 直接启动，保留原生参数，用真实前台 PID 复用和核验现场。发消息前检查原进程仍在前台，退出或被替换后禁止把任务发给 shell。未报告生命周期时为 unknown，不伪造工作或完成。普通终端模式下长身份说明按 Unicode 字符安全换行，防止超过 macOS 单行输入上限。负责人未设置时跟随管家，工人未设置时跟随负责人。分工前管家通过 `crewvane status --json` 读取最新偏好，当前目标里用户明确指定的命令优先。未指定模型时沿用 CLI 本机配置；不静默更换备用 CLI。复杂 shell 表达式与环境配置由用户自己的启动脚本承载。修改偏好不替换已经运行的会话，也不阻止恢复现有管家。安装检测不读取凭据或登录状态。
+设置中的 Agent 偏好分别指定管家、负责人、工人的启动命令，例如 `codex --model <模型名>`、`npx --yes my-agent` 或自定义启动脚本。允许任意交互式 CLI，以及绝对路径、`~/` 和相对于工作区的脚本路径。Herdr 已识别的 CLI 使用原生 Agent 通信；未识别的命令通过 Pane 直接启动，保留原生参数，用真实前台 PID 复用和核验现场。发消息前检查原进程仍在前台，退出或被替换后禁止把任务发给 shell。未报告生命周期时为 unknown，不伪造工作或完成。普通终端模式下长身份说明按 Unicode 字符安全换行，防止超过 macOS 单行输入上限。负责人未设置时跟随管家，工人未设置时跟随负责人。分工前管家通过 `atte status --json` 读取最新偏好，当前目标里用户明确指定的命令优先。未指定模型时沿用 CLI 本机配置；不静默更换备用 CLI。复杂 shell 表达式与环境配置由用户自己的启动脚本承载。修改偏好不替换已经运行的会话，也不阻止恢复现有管家。安装检测不读取凭据或登录状态。
 
 左上角工作台入口必须显示当前目录并解释工作区与项目的区别。选择目录后回到注意力页，显示切换成功；选择同一目录明确提示，取消保持原状，读取失败保留旧工作区和可见错误。“设置 → 打开 Herdr”不依赖成功准备管家，允许直接进入现场排错。菜单栏与 Dock 使用同一份像素魔法师应用图标。
 
@@ -169,7 +169,7 @@ Herdr 0.9.5 的插件 v1 事件没有用户 prompt 提交事件。直接终端�
 
 正在推进的新目标提供“我来处理”，通过 `goal.takeover` 转为人工推进，清除未发送的派发请求与仅由派发失败产生的介入项。迟到的发送回执必须按请求 ID 丢弃，不得把人工接管重新改为管家目标。保留人工查看 Herdr 现场、补充进展、编辑安排、提交成果和验收的能力；接管不终止或删除真实 Herdr 会话。
 
-进行中的目标在详情显著位置提供自由消息框，用于追加新的要求、约束和想法。它通过 `goal.message` 保存完整原话与附件，并建立独立的待发送请求；消息入口本身不按关键词修改状态、下一步、等待对象或提醒。被路由给管家的消息必须实际送达，失败可重试。等待事项的到期卡只保留一个“告诉管家”输入框和一个“1 小时后提醒”次级动作；管家读取完整原话后，才通过结构化命令决定继续等待、恢复推进、验收或结束。高风险批准、交付验收和决定仍要求人的明确语义，并由 core 记录用户原话。Herdr 终端直聊和 `crewvane direct` 遵守同一边界。
+进行中的目标在详情显著位置提供自由消息框，用于追加新的要求、约束和想法。它通过 `goal.message` 保存完整原话与附件，并建立独立的待发送请求；消息入口本身不按关键词修改状态、下一步、等待对象或提醒。被路由给管家的消息必须实际送达，失败可重试。等待事项的到期卡只保留一个“告诉管家”输入框和一个“1 小时后提醒”次级动作；管家读取完整原话后，才通过结构化命令决定继续等待、恢复推进、验收或结束。高风险批准、交付验收和决定仍要求人的明确语义，并由 core 记录用户原话。Herdr 终端直聊和 `atte direct` 遵守同一边界。
 
 管家只负责读取事项和规则、明确下一步、创建或复用独立负责人、转达任务与返工、跟进等待、核对交付记录并交接给人。不得亲自调查业务代码、产出或修改成果、执行目标命令和测试。负责人阻塞时通过澄清要求、调整分工或联系其他负责人协调恢复，不能由管家接手；协调后仍需人的决定时进入注意力。成果与真实检查由负责人提交，管家核对位置和记录是否齐备，缺失交回补齐，最终验收由人完成。
 
@@ -198,67 +198,67 @@ herdr agent prompt <负责人名称> "<任务>" --wait
 
 ## 6. CLI 协议
 
-所有写操作通过同一份存储服务，使用进程锁与原子快照，不向 Agent 开放任意 shell 或任意路径写入。默认根为 `CREWVANE_WORKSPACE`，其次当前目录；桌面启动管家时显式提供工作区环境。
+所有写操作通过同一份存储服务，使用进程锁与原子快照，不向 Agent 开放任意 shell 或任意路径写入。默认根为 `ATTE_WORKSPACE`，其次当前目录；桌面启动管家时显式提供工作区环境。
 
 ```text
-crewvane status [--json]
-crewvane attention [--json]
-crewvane board [--new] [--once]
-crewvane ask TEXT [--project ID]
-crewvane goal list [--all] [--json]
-crewvane goal show ID [--json]
-crewvane goal message ID --text TEXT [--attachment PATH ...]
-crewvane goal create --title TEXT --project ID [--description TEXT]
+atte status [--json]
+atte attention [--json]
+atte board [--new] [--once]
+atte ask TEXT [--project ID]
+atte goal list [--all] [--json]
+atte goal show ID [--json]
+atte goal message ID --text TEXT [--attachment PATH ...]
+atte goal create --title TEXT --project ID [--description TEXT]
                      [--kind delivery|discovery] [--mode concierge|manual]
-crewvane goal kind ID --kind delivery|discovery
-crewvane goal update ID [--title TEXT] [--description TEXT] [--next TEXT]
+atte goal kind ID --kind delivery|discovery
+atte goal update ID [--title TEXT] [--description TEXT] [--next TEXT]
                         [--owner TEXT] [--status active|waiting] [--remind-at ISO]
-crewvane goal progress ID --summary TEXT [--next TEXT] [--owner NAME]
-crewvane goal wait ID --reason TEXT --owner 外部第三方 [--remind-at ISO]
-crewvane goal decide ID --question TEXT [--next TEXT]
-crewvane goal risk ID --category CATEGORY --summary TEXT [--key KEY]
-crewvane goal ship ID --operation merge|deploy --checks passed|failed
-crewvane goal brief ID --file PATH [--expected-revision N]
-crewvane goal checkpoint ID --summary TEXT --next TEXT [--due-at ISO]
-crewvane goal verify ID --delivery ID --outcome passed|failed
+atte goal progress ID --summary TEXT [--next TEXT] [--owner NAME]
+atte goal wait ID --reason TEXT --owner 外部第三方 [--remind-at ISO]
+atte goal decide ID --question TEXT [--next TEXT]
+atte goal risk ID --category CATEGORY --summary TEXT [--key KEY]
+atte goal ship ID --operation merge|deploy --checks passed|failed
+atte goal brief ID --file PATH [--expected-revision N]
+atte goal checkpoint ID --summary TEXT --next TEXT [--due-at ISO]
+atte goal verify ID --delivery ID --outcome passed|failed
   --summary TEXT --criterion ID::passed|failed::EVIDENCE_ID
-crewvane goal boundary ID --file PATH
-crewvane goal review ID --summary TEXT [--location TEXT] [--url URL]
+atte goal boundary ID --file PATH
+atte goal review ID --summary TEXT [--location TEXT] [--url URL]
                         [--check NAME::COMMAND::passed|failed::NOTE]
                         [--candidate-revision REV] [--candidate-digest SHA256]
                         [--evidence-file PATH]
-crewvane goal accept ID [--note TEXT]
-crewvane goal complete ID --note "用户明确确认完成的原话"
-crewvane goal rework ID --note TEXT
-crewvane goal drop ID --reason TEXT
-crewvane goal remind ID --at ISO [--note TEXT]
-crewvane goal resolve ID --note TEXT [--outcome approved|rejected]
-crewvane session set ID [--workspace ID] [--tab ID] [--pane ID] [--agent NAME]
-crewvane autonomy set [--acceptance human-review|auto-with-verification]
+atte goal accept ID [--note TEXT]
+atte goal complete ID --note "用户明确确认完成的原话"
+atte goal rework ID --note TEXT
+atte goal drop ID --reason TEXT
+atte goal remind ID --at ISO [--note TEXT]
+atte goal resolve ID --note TEXT [--outcome approved|rejected]
+atte session set ID [--workspace ID] [--tab ID] [--pane ID] [--agent NAME]
+atte autonomy set [--acceptance human-review|auto-with-verification]
   [--paused yes|no] [--max-recovery-attempts N] [--no-progress-minutes N]
-crewvane goal autonomy pause|resume ID
-crewvane goal autonomy acceptance ID
+atte goal autonomy pause|resume ID
+atte goal autonomy acceptance ID
           --acceptance inherit|human-review|auto-with-verification
-crewvane project autonomy PROJECT_ID [--acceptance inherit|human-review|auto-with-verification]
+atte project autonomy PROJECT_ID [--acceptance inherit|human-review|auto-with-verification]
   [--release-on-merge never|production|unknown]
-crewvane goal boundary-resolve ID --boundary ID --outcome approved|rejected --note TEXT
-crewvane goal reopen ID --note TEXT
-crewvane release create --from GOAL_ID --environment production --revision REV
+atte goal boundary-resolve ID --boundary ID --outcome approved|rejected --note TEXT
+atte goal reopen ID --note TEXT
+atte release create --from GOAL_ID --environment production --revision REV
   [--digest SHA256] [--version VERSION]
-crewvane release approve|reject ID --note TEXT
-crewvane release result ID --outcome succeeded|failed
+atte release approve|reject ID --note TEXT
+atte release result ID --outcome succeeded|failed
   --evidence TEXT | --evidence-file PATH
-crewvane bot bind --id ID --name NAME --role initiator
+atte bot bind --id ID --name NAME --role initiator
   --project ID --operation OPERATION --expires-at ISO
-crewvane bot call --file ENVELOPE.json
-crewvane bot revoke ID
+atte bot call --file ENVELOPE.json
+atte bot revoke ID
 ```
 
 `--json` 输出可供 Agent 读取的结构化记录；默认输出简洁中文。写操作输出更新后的目标。所有时间使用 ISO 8601；ID 和路径按服务端验证。`goal accept` 只接受已有交付记录的目标，并且 core 只接受人用可信入口；`goal complete` 用于用户明确要求结束、但没有正式交付审查的非自主事项，不能绕过 `review` 验收或自主目标门禁。两者都只结束 Atte 目标，不产生 Git 或部署副作用。`rework` 将目标退回 `active` 并清除待验收注意力；`resolve` 只解决决定 / 跟进，不代替成果验收。`goal ship` 只返回策略判断，不自行执行外部动作。`goal autonomy acceptance`、边界决定、重新打开和发布批准只能由人操作。发布执行器通过 `release result` 报告真实结果，但成功后仍进入人工最终确认。
 
 上线策略默认 `external-approval`。`goal ship` 先要求本地检查通过：默认档的合并和部署都等待人，`auto-merge-manual-deploy` 的部署等待人，`auto` 在检查通过后放行。人可在桌面修改项目策略；受管管家 CLI 没有策略修改入口。
 
-人通过桌面或 Herdr 注意力面板批准/拒绝后，`goal.resolve` 保存原始回复、时间、来源、项目、目标和稳定动作键，并派生 `.crewvane/decisions.md` / `.crewvane/rejected.md`。`goal decide` 和 `goal risk` 先查账本，命中时不产生新的注意力。
+人通过桌面或 Herdr 注意力面板批准/拒绝后，`goal.resolve` 保存原始回复、时间、来源、项目、目标和稳定动作键，并派生 `.atte/decisions.md` / `.atte/rejected.md`。`goal decide` 和 `goal risk` 先查账本，命中时不产生新的注意力。
 
 `goal risk` 覆盖 `delete-data`、`stop-service`、`spend-money`、`external-message`、`product-direction`、`create-secret`、`rotate-secret`、`change-permissions`、`change-ship-policy`。这些动作即使处于 `auto` 项目也会先问人。同一目标默认最多三轮审查；第四轮返回 `intervention`，人在注意力面板允许后才增加一轮。
 
@@ -282,7 +282,7 @@ crewvane bot revoke ID
 - `cli`：用户 / Agent 共用的薄命令层，必须调用 core 服务而不是另写状态副本。
 - `cli/src/board.ts`：Herdr 内注意力 Pane；只调用 core 和显式 Herdr CLI，不保存状态副本。
 
-Electron 保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。渲染进程不能获得凭据、任意命令执行或任意本地文件读取。外部 URL 只允许明确的 `https:` 链接。CLI 安装通过应用内打包的独立可执行文件或自包含脚本实现，安装位置默认 `~/.local/bin/crewvane`，不覆盖非 Atte 文件。
+Electron 保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。渲染进程不能获得凭据、任意命令执行或任意本地文件读取。外部 URL 只允许明确的 `https:` 链接。CLI 安装通过应用内打包的独立可执行文件或自包含脚本实现，安装位置默认 `~/.local/bin/atte`，不覆盖非 Atte 文件。
 
 ## 8. 方案评审结论
 
@@ -305,7 +305,7 @@ Electron 保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: 
 - core：新工作区默认值；并发写；锁恢复；非法状态；人工字段保留；四类注意力；通知去重；消息不改状态且按目标隔离；完整验收 / 退回 / 放弃闭环；三档上线策略；决定账本去重；九类高风险升级；第四轮审查拦截。
 - CLI：真实进程调用目标创建、消息、进展、等待、决定、验收、完成；`direct` 拒绝进度别名；参数校验；JSON；工作区选择；桌面与 CLI 读写一致。
 - Herdr adapter：使用测试替身验证固定 argv、真实 ID 解析、唯一管家、失效引用和错误传播；测试不得依赖当前用户的 Herdr 现场。
-- Herdr 插件：验证清单版本与安装包一致、全部源码摘要、原子部署、幂等注册和错误状态；真实试用在隔离 Herdr 中打开 `dev.crewvane` Pane，验证注意力、一句话新目标、回到管家、现场关闭事件，并读取 `Atte` 与注意力内容。
+- Herdr 插件：验证清单版本与安装包一致、全部源码摘要、原子部署、幂等注册和错误状态；真实试用在隔离 Herdr 中打开 `dev.atte` Pane，验证注意力、一句话新目标、回到管家、现场关闭事件，并读取 `Atte` 与注意力内容。
 - 桌面 E2E：空状态、创建项目、单输入框交给管家、人工接管与迟到回执保护、侧边栏、项目筛选、四类注意力、上线策略、高风险决定、消息与附件、更新等待、验收卡、打开现场、设置、深浅主题与窄屏。
 - 构建：typecheck、单元测试、renderer / Electron 构建均成功，无未处理运行时错误。
 

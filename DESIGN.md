@@ -1,14 +1,15 @@
 ---
 version: atte-iteration
 name: Atte
-description: 注意力中心；单列、留白、字阶、克制的状态提示。
+description: 注意力中心 · The attention layer；单列、留白、字阶、克制的状态提示。
 ---
 
 # Atte 设计基线
 
-产品定位是「注意力中心」。人做决定、验收和必要介入，管家协调并行 Agent。
+产品定位是「注意力中心 · The attention layer」。人做决定、验收和必要介入，
+管家协调并行 Agent。
 这是本轮已经落地的界面规范。最终品牌色、logo 和外部站点参考仍按
-[待决策表](docs/product/atte-iteration.md#待决策) 审核。
+[仍开放的设计评审](docs/product/atte-iteration.md#仍开放的设计评审) 审核。
 
 ## 颜色
 
@@ -83,6 +84,7 @@ description: 注意力中心；单列、留白、字阶、克制的状态提示�
 - `EmptyState` / `LoadingState`：给出一句状态说明和可执行的下一步。
 - `Modal`：复用 Radix Dialog 的键盘与焦点约束，关闭后回到原入口。
 - `BrandMark`：所有界面品牌图形共用的替换挂点，不在页面直接绑定旧文件名。
+  首页维持原 96px 基线及既有响应式显示规则；本轮不改变首页图形尺寸。
 
 验收状态保留「验收通过」主按钮和一个「给管家发消息」次入口。
 发送反馈只写原话和附件，保留待验收状态；由管家通过显式状态协议决定后续修改。
@@ -100,3 +102,15 @@ token 分为 primitive、semantic、component 三层，包含颜色、字体、�
 核对首页、任务详情、验收卡、设置、首启的深浅主题；验证 900×700、
 1024×768、1440×960，检查键盘、焦点、正文对比度、单一主动作和动作区可达性。
 外部参考站点与最终图标签字不从自动检查推定完成。
+
+## 外部参考
+
+已阅读 awesome-design-md 中 Linear、Raycast、Vercel 的实际设计文件；候选、
+来源版本与取舍见 [参考候选](docs/design/reference-candidates.md)，同页视觉对比见
+[首页设计基线](docs/design/baseline-compare/README.md)。
+本文件是当前实现的事实基线，尚未把任何外部站点选为最终参考。
+
+三套同页静态比较稿位于
+[设计基线对比](docs/design/baseline-compare/README.md)；Logo 的三个未定稿方向
+位于 [Logo 备选](docs/design/logo-options/README.md)。两者都只用于评审，
+不替换当前 `BrandMark`、应用图标或设计 token。

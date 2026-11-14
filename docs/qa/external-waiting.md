@@ -32,7 +32,7 @@
 4. `pnpm test:task-pool`：暂存、本人执行、提醒与接管。
 5. `pnpm test:onboarding`：实际自定义 CLI 接收更新后的身份说明与消息，验证等待反馈交回后为活动状态。
 
-打包试用使用隔离的临时工作区，不修改用户正在使用的 Atte 数据或 Herdr Session。自定义 CLI 试用证明真实传输，不等同于验证模型在所有自然语言场景下都能正确识别外部第三方；模型行为场景见 `skills/crewvane/references/waiting-eval.md`。
+打包试用使用隔离的临时工作区，不修改用户正在使用的 Atte 数据或 Herdr Session。自定义 CLI 试用证明真实传输，不等同于验证模型在所有自然语言场景下都能正确识别外部第三方；模型行为场景见 `skills/atte/references/waiting-eval.md`。
 
 ## 本次结果
 

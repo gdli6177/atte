@@ -6,7 +6,7 @@
 
 ## 数据结构
 
-每个工作区保存 `.crewvane/coordinator-inbox.json`：
+每个工作区保存 `.atte/coordinator-inbox.json`：
 
 - `human`：用户明确反馈、现场回执、重启与人工操作。
 - `attention`：到期跟进、阻塞或负责人不可达等需要优先核查的事件。
