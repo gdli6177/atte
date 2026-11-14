@@ -106,7 +106,7 @@ try {
   app = await electron.launch({
     executablePath: resolve(
       process.env.CREWVANE_APP_PATH ||
-        "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane",
+        "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte",
     ),
     env: {
       ...process.env,

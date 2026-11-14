@@ -19,7 +19,7 @@ const home = join(trial, "home"), workspace = join(trial, "workspace");
 const userData = join(trial, "userData"), codexHome = join(home, ".codex");
 const session = `cv-hooks-${Date.now().toString(36)}`;
 const appPath = resolve(process.env.CREWVANE_APP_PATH ||
-  "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane");
+  "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte");
 const codex = process.env.CREWVANE_TRIAL_CODEX ||
   (await exec("which", ["codex"])).stdout.trim();
 for (const directory of [workspace, codexHome, join(home, ".local/bin")])

@@ -9,7 +9,7 @@ const exec = promisify(execFile);
 const brand = fileURLToPath(new URL("../assets/brand/", import.meta.url));
 const temporary = await mkdtemp(join(tmpdir(), "crewvane-icons-"));
 try {
-  const iconset = join(temporary, "Crewvane.iconset");
+  const iconset = join(temporary, "Atte.iconset");
   const { mkdir } = await import("node:fs/promises");
   await mkdir(iconset);
   // Use the dedicated macOS composition; never put the full scene in the Dock.

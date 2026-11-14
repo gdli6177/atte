@@ -155,7 +155,7 @@ export class HerdrPlugin {
         herdr, ["plugin", "link", this.installRoot, "--enabled"], this.environment,
       )).stdout);
       if (!linked || linked.plugin_id !== CREWVANE_HERDR_PLUGIN_ID)
-        throw new Error("Herdr 没有返回已注册的 Crewvane 插件");
+        throw new Error("Herdr 没有返回已注册的 Atte 插件");
       return this.publish({
         phase: "ready", installed: true, version: identity.version, path: this.installRoot,
         detail: "Herdr 动作与注意力面板已就绪",

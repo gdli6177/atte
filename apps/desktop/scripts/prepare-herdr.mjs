@@ -28,7 +28,7 @@ function githubHeaders(env, accept) {
   const token = env.GITHUB_TOKEN ?? env.GH_TOKEN;
   return {
     Accept: accept,
-    "User-Agent": "Crewvane",
+    "User-Agent": "Atte",
     "X-GitHub-Api-Version": "2022-11-28",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };

@@ -1,4 +1,4 @@
-# Crewvane UI checklist
+# Atte UI checklist
 
 改完桌面 UI 后逐项勾选。任何一项失败都先修，不要用“看起来还行”代替。
 

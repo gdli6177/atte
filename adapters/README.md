@@ -1,7 +1,7 @@
 # Adapters
 
 > **Legacy (0.2-era):** these adapter notes describe the retired manual-contract
-> captain workflow. Crewvane 0.6 does not orchestrate workers through this
+> captain workflow. Atte 0.6 does not orchestrate workers through this
 > interface; see `docs/crewvane.md` and `skills/crewvane/` for the current flow.
 > The files are kept for historical reference.
 

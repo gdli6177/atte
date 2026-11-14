@@ -13,7 +13,7 @@ test("installs only detected agent targets and never overwrites an unrelated ski
     await mkdir(join(source, "references"), { recursive: true });
     await mkdir(join(home, ".codex"), { recursive: true });
     await mkdir(join(home, ".claude", "skills", "crewvane"), { recursive: true });
-    await writeFile(join(source, "SKILL.md"), "# Crewvane\n");
+    await writeFile(join(source, "SKILL.md"), "# Atte\n");
     await writeFile(join(source, "references", "cli-protocol.md"), "# Protocol\n");
     await writeFile(join(home, ".claude", "skills", "crewvane", "SKILL.md"), "# User skill\n");
 
@@ -47,7 +47,7 @@ test("installs only detected agent targets and never overwrites an unrelated ski
   }
 });
 
-test("updates a Crewvane-managed skill in place and skips undetected agents", async () => {
+test("updates a Atte-managed skill in place and skips undetected agents", async () => {
   const root = await mkdtemp(join(tmpdir(), "crewvane-skill-update-"));
   try {
     const source = join(root, "source");
@@ -91,7 +91,7 @@ test("install status remains readable before the skills folder exists", async ()
     const home = join(root, "home");
     await mkdir(source, { recursive: true });
     await mkdir(home, { recursive: true });
-    await writeFile(join(source, "SKILL.md"), "# Crewvane\n");
+    await writeFile(join(source, "SKILL.md"), "# Atte\n");
     const installer = new CrewvaneSkillInstaller(source, home, "0.6.0");
     const status = await installer.status();
     assert.equal(status.targets[0]?.phase, "not-installed");
@@ -106,7 +106,7 @@ test("protocol changes update managed skills even when the app version is unchan
   try {
     const source = join(root, "source"), home = join(root, "home");
     await mkdir(join(source, "references"), { recursive: true });
-    await writeFile(join(source, "SKILL.md"), "# Crewvane\n");
+    await writeFile(join(source, "SKILL.md"), "# Atte\n");
     await writeFile(join(source, "references/cli-protocol.md"), "# Previous protocol\n");
     const installer = new CrewvaneSkillInstaller(source, home, "0.6.4");
     await installer.install();
@@ -129,7 +129,7 @@ test("installs the local pack author beside the main skill on every detected Age
       recursive: true,
     });
     await mkdir(join(home, ".codex"), { recursive: true });
-    await writeFile(join(source, "crewvane", "SKILL.md"), "# Crewvane\n");
+    await writeFile(join(source, "crewvane", "SKILL.md"), "# Atte\n");
     await writeFile(
       join(source, "crewvane", "references", "cli-protocol.md"),
       "# Protocol\n",

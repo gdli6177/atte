@@ -1,6 +1,6 @@
-# Crewvane CLI
+# Atte CLI
 
-Crewvane 桌面应用在“设置”中安装自包含 CLI，管家和负责人通过它读取目标、写回进展并提交交付。CLI 与桌面使用同一个 `packages/core` 状态服务，不需要单独运行后台服务。
+Atte 桌面应用在“设置”中安装自包含 CLI，管家和负责人通过它读取目标、写回进展并提交交付。CLI 与桌面使用同一个 `packages/core` 状态服务，不需要单独运行后台服务。
 
 命令分为两类：
 
@@ -69,11 +69,11 @@ CLI 只接受 PNG、JPEG、WebP、GIF；单张最多 10 MB，每个目标最多 
 
 `crewvane event herdr` 是插件内部入口，读取 Herdr 注入的 `HERDR_PLUGIN_EVENT_JSON`。它把 `pane.agent_status_changed`、`pane.exited`、`pane.closed`、`pane.moved`、`tab.closed` 和 `workspace.closed` 同步到已经登记为对应现场的目标；Pane 移动时以 Herdr 返回的新 Pane、Tab 与 Workspace ID 原子替换旧现场。无关或跨目标现场不会串案。
 
-`crewvane hook ingest --adapter codex|claude-code|cursor|qoder|omp` 是 Agent Adapter 的内部入口，由 Crewvane 安装的受管 Hook 或 OMP Extension 调用。只有负责人环境同时具备目标、attempt、Hook token 和 Agent 名称时才处理；普通 Agent 会话为 no-op。CLI 把原生事件转换为受限生命周期事件，通过本地 Socket 交给桌面；应用未运行时使用 `0600` 私有队列并在重启后补处理，失败永远不会阻止 Agent 回合。该入口不接受人工状态，也不能完成、验收或放行目标。
+`crewvane hook ingest --adapter codex|claude-code|cursor|qoder|omp` 是 Agent Adapter 的内部入口，由 Atte 安装的受管 Hook 或 OMP Extension 调用。只有负责人环境同时具备目标、attempt、Hook token 和 Agent 名称时才处理；普通 Agent 会话为 no-op。CLI 把原生事件转换为受限生命周期事件，通过本地 Socket 交给桌面；应用未运行时使用 `0600` 私有队列并在重启后补处理，失败永远不会阻止 Agent 回合。该入口不接受人工状态，也不能完成、验收或放行目标。
 
 ## 管家案卷边界
 
-管家由 Crewvane 启动时带有 `CREWVANE_COORDINATOR=1` 和当前案卷 scope。此时 CLI 只允许：
+管家由 Atte 启动时带有 `CREWVANE_COORDINATOR=1` 和当前案卷 scope。此时 CLI 只允许：
 
 - `status`；
 - `goal show <当前ID>`；
@@ -82,7 +82,7 @@ CLI 只接受 PNG、JPEG、WebP、GIF；单张最多 10 MB，每个目标最多 
 
 `goal list`、`attention`、`ask`、`goal message` 以及任何跨目标读写都会被拒绝。每次通知也带唯一 `case_id`，同一工作区严格串行发送，避免多个目标在长期会话中串案；结束类状态命令还要求 `--note` 保留用户明确确认的原话。
 
-这是 Crewvane CLI 的应用层数据边界，不是操作系统文件沙箱，也不能阻止第三方 Agent 绕过 CLI 直接访问文件。Agent CLI 的模型、沙箱和权限参数完全使用用户配置的原生 argv；Crewvane 不会自动添加 Codex 专属 `workspace-write` 或其他运行时参数。
+这是 Atte CLI 的应用层数据边界，不是操作系统文件沙箱，也不能阻止第三方 Agent 绕过 CLI 直接访问文件。Agent CLI 的模型、沙箱和权限参数完全使用用户配置的原生 argv；Atte 不会自动添加 Codex 专属 `workspace-write` 或其他运行时参数。
 
 ## 写回目标
 

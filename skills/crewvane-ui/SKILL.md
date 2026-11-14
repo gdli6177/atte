@@ -1,9 +1,9 @@
 ---
 name: crewvane-ui
-description: Use when changing Crewvane desktop UI: layout, styles, buttons, cards, empty or loading states, settings, attention cards, goal detail surfaces, dialogs, or form fields. Enforces DESIGN.md tokens, shared React primitives, one primary CTA, single focus rings, and light/dark parity.
+description: Use when changing Atte desktop UI: layout, styles, buttons, cards, empty or loading states, settings, attention cards, goal detail surfaces, dialogs, or form fields. Enforces DESIGN.md tokens, shared React primitives, one primary CTA, single focus rings, and light/dark parity.
 ---
 
-# Crewvane UI
+# Atte UI
 
 桌面界面只有一套设计语言：`DESIGN.md` 定义 token 与语义，`apps/desktop/src/ui/`
 提供绑定 token 的 React 原语。改 UI 前先读这两处，再读

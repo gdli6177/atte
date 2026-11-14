@@ -54,7 +54,7 @@ test("deploys the bundled plugin and links it automatically once", async () => {
     assert.equal(first.installed, true);
     assert.equal(calls.filter(args => args[1] === "link").length, 1);
     const copied = await readFile(join(install, "herdr-plugin.toml"), "utf8");
-    assert.match(copied, /Crewvane/);
+    assert.match(copied, /Atte/);
     const marker = JSON.parse(await readFile(join(install, ".crewvane-owned.json"), "utf8"));
     assert.equal(marker.pluginId, CREWVANE_HERDR_PLUGIN_ID);
 

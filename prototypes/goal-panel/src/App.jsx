@@ -156,8 +156,8 @@ function AppHeader({ theme, onToggleTheme, viewLabel }) {
         <span className="brand-mark">
           <img src="/assets/crewvane-mage.png" alt="" />
         </span>
-        <strong>Crewvane</strong>
-        <small>协航</small>
+        <strong>Atte</strong>
+        <small>Atte</small>
       </div>
       <div className="breadcrumb">
         <span>我的工作台</span>

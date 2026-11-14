@@ -1,11 +1,11 @@
 ---
 name: crewvane
-description: Use Crewvane CLI to submit goals and attachments, inspect goals or attention items, and append context in a user's local Crewvane workspace from another agent.
+description: Use Atte CLI to submit goals and attachments, inspect goals or attention items, and append context in a user's local Atte workspace from another agent.
 ---
 
-# Crewvane
+# Atte
 
-Use the installed `crewvane` CLI to collaborate through the user's shared Crewvane workspace. The desktop app and CLI read and write the same `.crewvane/state.json`; do not create a parallel task list in chat or in another database.
+Use the installed `crewvane` CLI to collaborate through the user's shared Atte workspace. The desktop app and CLI read and write the same `.crewvane/state.json`; do not create a parallel task list in chat or in another database.
 
 ## Resolve the workspace
 
@@ -15,7 +15,7 @@ Use the first source that is explicit and verified:
 2. `CREWVANE_WORKSPACE`.
 3. The nearest parent directory containing `.crewvane/state.json`.
 
-Pass `--root <absolute-path>` after the subcommand. Do not guess a different workspace from the current Git repository name. If no Crewvane workspace can be found, stop and state the missing path.
+Pass `--root <absolute-path>` after the subcommand. Do not guess a different workspace from the current Git repository name. If no Atte workspace can be found, stop and state the missing path.
 
 ## Human-facing operations
 
@@ -71,14 +71,14 @@ Only use status-changing commands when this agent is the registered owner or the
 - An owner records a direct human answer using `goal scene-reply`, bound to the current `attentionRequest.id`; it does not approve or dismiss the question. The current-case concierge may apply an explicit human decision using `resolve`, `accept`, `complete`, `rework`, or `drop`, preserving the human's exact words. An external submitting agent must not make these decisions.
 - Never report a check, file, deployment, approval, or message as complete unless it was actually observed.
 - Ask the concierge to coordinate before escalating a routine implementation choice to the human.
-- `waiting` is exclusively for a named external third party outside the human and all Crewvane Agents. Human choices, confirmations, missing information or actions require `decide` and attention; internal Agent coordination stays `active`. Scheduling a reminder does not change lifecycle.
+- `waiting` is exclusively for a named external third party outside the human and all Atte Agents. Human choices, confirmations, missing information or actions require `decide` and attention; internal Agent coordination stays `active`. Scheduling a reminder does not change lifecycle.
 - Treat an empty or idle terminal as unknown, not successful.
-- After a human answers in the owner's Herdr scene, write the receipt before ending the turn. Do not ask the human to repeat the same answer in the desktop app. Never treat a Crewvane system check as a human reply.
+- After a human answers in the owner's Herdr scene, write the receipt before ending the turn. Do not ask the human to repeat the same answer in the desktop app. Never treat a Atte system check as a human reply.
 - If `owner launch` cannot confirm environment setup but preserves a real scene and
   recovery ID, use `crewvane owner attach` only after verifying that exact Session,
   Workspace, Tab, Pane and Agent or foreground process. Never replay a task that may
   already have been delivered.
 
-Return concise results to the caller, including the goal ID and any unresolved human decision. Do not paste secrets, credentials, or unrelated workspace state into Crewvane.
+Return concise results to the caller, including the goal ID and any unresolved human decision. Do not paste secrets, credentials, or unrelated workspace state into Atte.
 
 Protocol evaluation scenarios: [references/waiting-eval.md](references/waiting-eval.md).

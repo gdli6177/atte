@@ -333,7 +333,7 @@ export function GoalDetail({
                       {runtime
                         ? "等待负责人提交近期回复或结构化进展。"
                         : goal.live
-                          ? `${backendLabel} 状态保持可用；目标完成、等待外部和找人决定仍以 Crewvane 结构化为准。`
+                          ? `${backendLabel} 状态保持可用；目标完成、等待外部和找人决定仍以 Atte 结构化为准。`
                           : "Hook 不可用时由当前会话后端与巡检完整兜底，不会阻止目标继续执行。"}
                     </p>
                   )}

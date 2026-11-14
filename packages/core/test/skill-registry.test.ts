@@ -119,12 +119,12 @@ test("built-in context is private from list output and resolves by role and goal
   });
 
   const listed = await registry.list();
-  assert.equal(JSON.stringify(listed).includes("Crewvane Core 约束"), false);
+  assert.equal(JSON.stringify(listed).includes("Atte Core 约束"), false);
   assert.equal((await registry.show("crewvane.concierge") as { content?: string }).content?.includes("控制面管家"), true);
   const saved = (await service.read()).goals[0]!,
     owner = await registry.resolve(saved, "owner"),
     verifier = await registry.resolve(saved, "verifier");
-  assert.match(owner.text, /全局|目标负责人|当前 Crewvane 目标的唯一独立负责人/);
+  assert.match(owner.text, /全局|目标负责人|当前 Atte 目标的唯一独立负责人/);
   assert.match(owner.text, /探索研究流程/);
   assert.match(owner.text, /先检查真实输入/);
   assert.match(owner.text, /参考：references\/checklist\.md/);
@@ -140,7 +140,7 @@ test("built-in context is private from list output and resolves by role and goal
   );
 
   const concierge = await registry.resolve(saved, "concierge");
-  assert.match(concierge.text, /你是 Crewvane 的控制面管家/);
+  assert.match(concierge.text, /你是 Atte 的控制面管家/);
   assert.match(concierge.text, /Agent 接入流程/);
   assert.match(concierge.text, /工作现场恢复/);
   assert.doesNotMatch(concierge.text, /标准交付流程|探索研究流程/);

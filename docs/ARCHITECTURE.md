@@ -1,7 +1,7 @@
-# Crewvane 架构
+# Atte 架构
 
 产品基线见 [全局管家与注意力中心开发说明](product/attention-center-development.md)
-与 [Crewvane 自主目标规格](product/autonomous-goals.md)。
+与 [Atte 自主目标规格](product/autonomous-goals.md)。
 
 ## 边界
 
@@ -17,9 +17,9 @@ Session Adapter     Herdr / Orca 的创建、发送、观测、聚焦、恢复�
 Herdr 插件           注意力 Pane、新目标与回到管家动作；不是安全边界或状态副本
 ```
 
-Crewvane 不运行模型，不管理模型凭据，也不根据终端画面解析 Agent 结果。它通过官方 Hook / Extension 观测受支持 Agent 的生命周期，并把事件归一化为 Crewvane 自己的 attempt 与 turn 记录。设置中选择 Herdr 或 Orca 作为本安装唯一的会话后端，不会双路派发；未支持 Hook 的 CLI 自动回退到当前后端与巡检。
+Atte 不运行模型，不管理模型凭据，也不根据终端画面解析 Agent 结果。它通过官方 Hook / Extension 观测受支持 Agent 的生命周期，并把事件归一化为 Atte 自己的 attempt 与 turn 记录。设置中选择 Herdr 或 Orca 作为本安装唯一的会话后端，不会双路派发；未支持 Hook 的 CLI 自动回退到当前后端与巡检。
 
-0.11.0 的 `packages/sessions` 提供统一 Session 契约、持久切换事务、私有 launcher、身份与代次校验。Herdr 使用 Session / Tab / Pane；Orca 使用官方 CLI 的原生终端。代码只保证传输、幂等、权限、状态与恢复；Skill 指导管家理解目标、委派、追问和整理交付，两种后端复用相同的 Crewvane CLI 语义写回。
+0.11.0 的 `packages/sessions` 提供统一 Session 契约、持久切换事务、私有 launcher、身份与代次校验。Herdr 使用 Session / Tab / Pane；Orca 使用官方 CLI 的原生终端。代码只保证传输、幂等、权限、状态与恢复；Skill 指导管家理解目标、委派、追问和整理交付，两种后端复用相同的 Atte CLI 语义写回。
 
 后端切换保存目标和消息，不搬移终端全文。旧现场先静止并核实停止，再以新 attempt 按案卷恢复；旧 attempt、旧 attention 和旧回执不能覆盖新事实。注意力 ↔ 现场通过 `goal.decide` / `goal.scene-reply` / `goal.resolve` 的结构化 ID 关联。现场答复先持久保存原话，再由管家核对并解除对应事项，不由“打开过现场”或终端 idle 推断解决。
 
@@ -61,7 +61,7 @@ Crewvane 不运行模型，不管理模型凭据，也不根据终端画面解�
 需要脚本时，安装本身不会授权。用户逐项批准某个脚本的当前 SHA-256；`skill run`
 只允许当前目标已挂载、摘要匹配且已批准的脚本。脚本环境只包含必要变量，stdout /
 stderr 有界，120 秒后终止，结果写入审计活动。脚本、Hook 和 Skill 都不能修改目标
-生命周期，Crewvane 语义 CLI 仍是唯一业务状态写入口。产品边界与验收见
+生命周期，Atte 语义 CLI 仍是唯一业务状态写入口。产品边界与验收见
 [工作方法与本地能力包](product/local-capability-packs.md)。
 
 ### 自主目标闭环
@@ -90,9 +90,9 @@ stderr 有界，120 秒后终止，结果写入审计活动。脚本、Hook 和 
 
 活跃目标的负责人持续 `idle` / `done` 90 秒且仍未写回结果时，巡检请管家核对该负责人是否遗漏结果、真实等待或交付。运行标签由列表和详情共享的事实映射生成：当前 turn 已写回显示“本轮已回报”；未产生核对请求且已有下一步时显示“按计划跟进”，缺少下一步时显示“待管家更新”；真正持久记录核对请求后才显示“待管家核对”，确认送达后显示“已请管家核对”，不声称管家正在执行。旧 `recovery` 提示本身不能产生核对请求。需要人处理、验收、外部等待和人工接管的业务事实优先于运行标签。恢复 `working` 或提交新的结构化决定、交付后清除旧核对提示。`active` 只表示目标仍需跟进。终端空闲不自动改变业务状态，也不会直接产生人的注意力事项或自动验收。
 
-可信 Stop Hook 进一步缩短这段反馈链：回合结束后等待 5 秒，若当前 turn 仍没有结构化 Crewvane 写回，就向同一负责人发送一次命令提醒；再等 30 秒仍缺失时标记 `protocol_missing` 并交给管家，不直接打扰人。Hook heartbeat 不进入 `Activity`，不会重置工作区配置的业务无进展计时（默认 30 分钟）。没有受支持 Hook 的 Agent 继续使用 90 秒 Herdr 路径。详细 Adapter 矩阵、事件模型、隐私限制和故障降级见 [Agent Runtime Hooks](product/agent-runtime-hooks.md)。
+可信 Stop Hook 进一步缩短这段反馈链：回合结束后等待 5 秒，若当前 turn 仍没有结构化 Atte 写回，就向同一负责人发送一次命令提醒；再等 30 秒仍缺失时标记 `protocol_missing` 并交给管家，不直接打扰人。Hook heartbeat 不进入 `Activity`，不会重置工作区配置的业务无进展计时（默认 30 分钟）。没有受支持 Hook 的 Agent 继续使用 90 秒 Herdr 路径。详细 Adapter 矩阵、事件模型、隐私限制和故障降级见 [Agent Runtime Hooks](product/agent-runtime-hooks.md)。
 
-状态归并顺序固定为：明确 Crewvane CLI 语义写回 > 当前 attempt Hook > 当前 Session 后端生命周期 > Watchdog。任何 Hook、Stop 或 Agent 回复都不能推断完成、等待外部、找人决定或验收放行。
+状态归并顺序固定为：明确 Atte CLI 语义写回 > 当前 attempt Hook > 当前 Session 后端生命周期 > Watchdog。任何 Hook、Stop 或 Agent 回复都不能推断完成、等待外部、找人决定或验收放行。
 
 负责人现场答复通过 `goal.scene-reply` 保存原话和实际结果，再由唯一管家提交状态命令。注意力与回执分别具有独立编号；管家 scope 绑定二者并在状态事务内校验，防止迟到回复清除新问题。现场访问和工作回合仅触发空闲时的一次协议补核对，不构成审批事实；失败保持事项和重试入口。细节见 [人工交互同步](product/herdr-interaction-sync.md)。
 
@@ -108,7 +108,7 @@ stderr 有界，120 秒后终止，结果写入审计活动。脚本、Hook 和 
 
 0.9.2 起，“回到现场”默认由 `ExternalTerminalManager` 在 iTerm2、Terminal 或 Ghostty 中 attach 当前工作区 Herdr Session。设置保存在 userData 的 `scene-settings.json`（`0600`）；每个工作区、Session 的 attach 进程、TTY lease 与固定 launcher 分别使用私有目录。再次打开时先验证原 attach 进程仍存活并激活原窗口；旧 lease 才通过 TTY 定位，窗口已关闭才创建新窗口。Ghostty 将 launcher 作为 `-e` 的单个命令参数，路径含空格也不会被拆开。AppleScript 只接收固定脚本参数，用户文本不拼接进脚本；Session 名称、工作区路径和执行路径都先校验。自动终端失败、权限被拒绝或终端未安装时，目标与 Session 不变，界面明确提示可改用内嵌轻现场。
 
-内嵌轻现场使用同一 Session 与同一核心快照，不维护第二套 Agent 状态。纯文本继续走 xterm PTY；仅图片剪贴板时，渲染进程通过受约束 IPC 确认系统剪贴板类型，再向当前 Agent 写一次 `Ctrl+V`，让 CLI 自己读取剪贴板，避免把图片字节复制进 Crewvane 状态。轻现场标题栏提供强制外部打开入口，用户所选默认模式只影响普通“回到现场”动作。
+内嵌轻现场使用同一 Session 与同一核心快照，不维护第二套 Agent 状态。纯文本继续走 xterm PTY；仅图片剪贴板时，渲染进程通过受约束 IPC 确认系统剪贴板类型，再向当前 Agent 写一次 `Ctrl+V`，让 CLI 自己读取剪贴板，避免把图片字节复制进 Atte 状态。轻现场标题栏提供强制外部打开入口，用户所选默认模式只影响普通“回到现场”动作。
 
 ## 会话后端与管家
 
@@ -118,31 +118,31 @@ stderr 有界，120 秒后终止，结果写入审计活动。脚本、Hook 和 
 
 已识别的 CLI 使用 Herdr Agent 通信；任意自定义交互式 CLI 通过真实 Pane 启动，原样保留可执行文件与参数，用 `transport=pane` 与前台 `processId` 记录并复用。Finder 目录预检找不到命令时，不再提前判定 CLI 不存在：裸命令名交给真实 interactive Pane shell，由其 PATH、alias 与函数解析；绝对路径仍作为一个安全参数执行。每次发送文本前核对该进程仍在前台，退出或换进程时拒绝发送；没有 Agent 生命周期信息时只报告 unknown。不把任意程序“成功启动”当作理解任务或完成任务。用户复杂 shell 表达式通过自己的启动脚本承载。
 
-Crewvane 不向 Codex 或其他 Agent CLI 注入运行时专属的 `workspace-write`、网络开关、审批参数或额外目录。设置中的启动命令是可执行文件与原生 argv；支持哪些模型、沙箱和权限选项由该 CLI 自己决定。Electron renderer 的 `sandbox: true` 是应用安全边界，与 Agent 执行权限无关。
+Atte 不向 Codex 或其他 Agent CLI 注入运行时专属的 `workspace-write`、网络开关、审批参数或额外目录。设置中的启动命令是可执行文件与原生 argv；支持哪些模型、沙箱和权限选项由该 CLI 自己决定。Electron renderer 的 `sandbox: true` 是应用安全边界，与 Agent 执行权限无关。
 
-应用打开工作区后，`SessionRuntime` 通过当前 Session Adapter 准备唯一管家，复用可核实的现有现场；新现场使用设置中保存的完整 CLI 命令。Herdr 使用按工作区路径派生的命名 Session，可通过 `CREWVANE_HERDR_SESSION` 固定名称；Orca 使用经过验证的本机 runtime、folder 工作区和真实终端 handle。隐藏 Crewvane 窗口不结束 Agent。所有普通启动、发送和关闭先取得 `SessionControl` 租约，再在返回时复核 backend epoch；切换期间仅受限恢复授权可以操作清单内资源。
+应用打开工作区后，`SessionRuntime` 通过当前 Session Adapter 准备唯一管家，复用可核实的现有现场；新现场使用设置中保存的完整 CLI 命令。Herdr 使用按工作区路径派生的命名 Session，可通过 `CREWVANE_HERDR_SESSION` 固定名称；Orca 使用经过验证的本机 runtime、folder 工作区和真实终端 handle。隐藏 Atte 窗口不结束 Agent。所有普通启动、发送和关闭先取得 `SessionControl` 租约，再在返回时复核 backend epoch；切换期间仅受限恢复授权可以操作清单内资源。
 
-管家通过 `crewvane` 读取和写回目标，只负责分发、协调跟进与向人交接。所有实际执行，包括简单任务、返工和检查，都交给独立负责人；管家不得在阻塞时接手执行。负责人使用 Herdr Tab、Pane 和 Agent 消息，但 Crewvane 不预设任务图、分配算法或固定层级拓扑。每次派发前先把 `coordinator-scope.json` 写入同目录临时文件，再用 rename 原子替换；准备或刷新管家不会先删除 scope，因此队列中的目标任务不会遇到短暂的文件缺失。Herdr `agent_prompt_stalled` 表示输入已被接受但未及时观察到 working，传输回执保持 `accepted`；timeout 保持未知。两者都不能证明管家完成协调，业务层没有结构化证据时保存为 `unconfirmed`，禁止自动重发。
+管家通过 `crewvane` 读取和写回目标，只负责分发、协调跟进与向人交接。所有实际执行，包括简单任务、返工和检查，都交给独立负责人；管家不得在阻塞时接手执行。负责人使用 Herdr Tab、Pane 和 Agent 消息，但 Atte 不预设任务图、分配算法或固定层级拓扑。每次派发前先把 `coordinator-scope.json` 写入同目录临时文件，再用 rename 原子替换；准备或刷新管家不会先删除 scope，因此队列中的目标任务不会遇到短暂的文件缺失。Herdr `agent_prompt_stalled` 表示输入已被接受但未及时观察到 working，传输回执保持 `accepted`；timeout 保持未知。两者都不能证明管家完成协调，业务层没有结构化证据时保存为 `unconfirmed`，禁止自动重发。
 
 Herdr 0.9.5 的插件事件不暴露用户提交的 prompt 文本。用户直接在管家终端追加入口时，管家先调用 `crewvane direct` 写回原始消息：带当前案卷时追加活动，明确的新事项创建新目标并标记为已经从终端送达，避免桌面再次派发同一文本。`direct --new` 成功后会把管家的案卷 scope 原子切到新目标，允许同一回合继续读取、整理和派发新案卷。桌面监听 `.crewvane/state.json`，外部 CLI 写入后立即刷新，不需要等待 10 秒巡检。这个同步依赖管家执行协议；未经 CLI 写回的终端聊天仍只是终端内容。
 
-职责边界通过初始身份说明、每次目标通知与巡检消息传达。身份初始化是一个没有案卷的独立回合，只确认长期职责后结束，不得读取或猜测目标。每次目标与巡检通知只包含一个 `case_id` 和一个目标的快照，并以案子标记包裹；同一工作区的通知由持久协调收件箱严格串行，必须等当前管家回合进入 `idle` / `done` / `blocked` 后再发送下一案卷，不同工作区可以并行。处理案卷的回合不得创建后台任务、循环轮询或等待负责人完成，否则旧案卷会悬挂并污染下一条通知的 scope。每次应用启动后首次恢复已有管家时，只有 Herdr 状态为 `idle` / `done` 才刷新身份说明，同一运行中按实际管家引用去重；`working` / `blocked` / `unknown` 只保留并聚焦真实现场，不发送身份 prompt。“找管家”直接打开已登记的 Tab/Pane，让用户处理阻塞 UI；已知 blocked 时派发返回可操作状态，不自动发送 Enter、Esc 或其他输入。它是 Agent 行为契约，不是操作系统权限隔离；Crewvane 无法拦截任意第三方 CLI 内部的工具调用。
+职责边界通过初始身份说明、每次目标通知与巡检消息传达。身份初始化是一个没有案卷的独立回合，只确认长期职责后结束，不得读取或猜测目标。每次目标与巡检通知只包含一个 `case_id` 和一个目标的快照，并以案子标记包裹；同一工作区的通知由持久协调收件箱严格串行，必须等当前管家回合进入 `idle` / `done` / `blocked` 后再发送下一案卷，不同工作区可以并行。处理案卷的回合不得创建后台任务、循环轮询或等待负责人完成，否则旧案卷会悬挂并污染下一条通知的 scope。每次应用启动后首次恢复已有管家时，只有 Herdr 状态为 `idle` / `done` 才刷新身份说明，同一运行中按实际管家引用去重；`working` / `blocked` / `unknown` 只保留并聚焦真实现场，不发送身份 prompt。“找管家”直接打开已登记的 Tab/Pane，让用户处理阻塞 UI；已知 blocked 时派发返回可操作状态，不自动发送 Enter、Esc 或其他输入。它是 Agent 行为契约，不是操作系统权限隔离；Atte 无法拦截任意第三方 CLI 内部的工具调用。
 
 ### 协调收件箱
 
 `CoordinatorInbox` 把人工反馈、注意力、普通目标和后台巡检保存到工作区私有文件 `.crewvane/coordinator-inbox.json`，权限为 `0600`。排序固定为 `human > attention > normal > background`；同一目标只保留最新有效通知，新请求与旧请求同级时用新请求替换，旧请求为更高优先级时不降级。已经 `processing` 的请求不丢失，新变化在其后重新排队。
 
-`CoordinatorDispatcher` 每个工作区只有一个 drain，因此一次只有一个 Crewvane 管家回合。负责人创建、执行、交付和 Herdr 现场仍按目标并行；协调收件箱不串行化负责人。单个目标失败后继续处理其他目标。优先级只在当时可排队项之间生效，已经开始的回合不能被后来的人工消息抢占；较低优先级后台工作可以持续运行，不会饿死人工消息。Herdr 明确报 blocked 时暂停下一次自动尝试；`unconfirmed` 且现场仍 `working` 时也暂停，留到下一次轮询或新事件唤醒。收件箱只保留最近 240 条终态记录，超过容量不会删除排队或处理中项目。
+`CoordinatorDispatcher` 每个工作区只有一个 drain，因此一次只有一个 Atte 管家回合。负责人创建、执行、交付和 Herdr 现场仍按目标并行；协调收件箱不串行化负责人。单个目标失败后继续处理其他目标。优先级只在当时可排队项之间生效，已经开始的回合不能被后来的人工消息抢占；较低优先级后台工作可以持续运行，不会饿死人工消息。Herdr 明确报 blocked 时暂停下一次自动尝试；`unconfirmed` 且现场仍 `working` 时也暂停，留到下一次轮询或新事件唤醒。收件箱只保留最近 240 条终态记录，超过容量不会删除排队或处理中项目。
 
 每条目标通知在发送前原子更新 `coordinator-scope.json`；巡检路径也执行同一步骤。请求绑定 `requestId`，旧回执不能修改新目标状态。管家单回合观察上限为 120 秒；后端恢复最多等待 60 秒的结构化协调证据。超时保存未确认，停止自动重放。累计完成 40 个案卷或估算约 240,000 字符后，应用只在管家 `idle` / `done` 且队列为空时关闭并重建管家上下文；所有目标事实仍在 core 状态中，轮换不会清理消息、附件、交付或注意力。
 
 应用启动时，持久化为 `queued` 的请求继续处理；`processing` 表示应用可能已把请求交给管家却不知道完整结果，因此转为 `unconfirmed` 且不自动重放。顶部状态只统计每个目标最新一条失败或未确认记录，后续成功重试会清除旧提示。详细设计与基准见 [持久协调收件箱](product/coordinator-inbox.md)。
 
-受管 Agent 的沙箱可能禁止连接 Unix Socket，因此桌面同时提供私有 Host Bridge。它只接受随机令牌和 `agent`、`pane`、`tab`、`workspace` 四类命令，并通过系统临时目录下按工作区哈希隔离的原子 request / claim / response 文件工作。目录和文件使用 owner-only 权限；socket 路径不依赖工作区深度，避免 macOS Unix Socket 约 104 字节的路径上限。请求已有 claim 但缺少 response 时表示结果未确认，恢复后只报告状态，不自动重放 Herdr 命令或 Agent prompt。Bridge 始终调用 Crewvane 选定的同一 Herdr 运行时，避免系统 PATH 中另一份 Herdr 指向不同 Session。
+受管 Agent 的沙箱可能禁止连接 Unix Socket，因此桌面同时提供私有 Host Bridge。它只接受随机令牌和 `agent`、`pane`、`tab`、`workspace` 四类命令，并通过系统临时目录下按工作区哈希隔离的原子 request / claim / response 文件工作。目录和文件使用 owner-only 权限；socket 路径不依赖工作区深度，避免 macOS Unix Socket 约 104 字节的路径上限。请求已有 claim 但缺少 response 时表示结果未确认，恢复后只报告状态，不自动重放 Herdr 命令或 Agent prompt。Bridge 始终调用 Atte 选定的同一 Herdr 运行时，避免系统 PATH 中另一份 Herdr 指向不同 Session。
 
-自定义 CLI 先按 Pane 进程身份管理。若 Herdr 随后自动识别并登记该 Agent，Crewvane 会把该 Pane 上的 Agent 改名为受管负责人名称，并改用生命周期感知的 `agent prompt`；无法识别的 CLI 继续按前台 PID 校验后用 Pane 输入，两者都不会把任务发给已经退出的 shell。
+自定义 CLI 先按 Pane 进程身份管理。若 Herdr 随后自动识别并登记该 Agent，Atte 会把该 Pane 上的 Agent 改名为受管负责人名称，并改用生命周期感知的 `agent prompt`；无法识别的 CLI 继续按前台 PID 校验后用 Pane 输入，两者都不会把任务发给已经退出的 shell。
 
-管家进程从 `<workspace>/.crewvane` 启动，并继承 `CREWVANE_COORDINATOR=1` 与当前案卷 scope 文件。受管 Crewvane CLI 只允许读取当前目标的详情和 status，以及更新该目标的 update、progress、wait、decide、risk、ship、kind、brief、checkpoint、boundary、complete、rework、drop、resolve、remind、scene-reply 和 session，并可启动负责人或独立复核者；`goal list`、attention、ask、message、验收、自主设置、发布批准和跨目标读写会被拒绝。自主目标进入 `review` 后不能由管家调用 `complete` 绕过验收。结束或放弃时 CLI 要求 `--note` / `--reason` 保留用户明确说出的原话。该边界保护 Crewvane 数据 API，不能阻止 Agent 直接读取文件或绕过 CLI。
+管家进程从 `<workspace>/.crewvane` 启动，并继承 `CREWVANE_COORDINATOR=1` 与当前案卷 scope 文件。受管 Atte CLI 只允许读取当前目标的详情和 status，以及更新该目标的 update、progress、wait、decide、risk、ship、kind、brief、checkpoint、boundary、complete、rework、drop、resolve、remind、scene-reply 和 session，并可启动负责人或独立复核者；`goal list`、attention、ask、message、验收、自主设置、发布批准和跨目标读写会被拒绝。自主目标进入 `review` 后不能由管家调用 `complete` 绕过验收。结束或放弃时 CLI 要求 `--note` / `--reason` 保留用户明确说出的原话。该边界保护 Atte 数据 API，不能阻止 Agent 直接读取文件或绕过 CLI。
 
 首次创建负责人统一调用受管的 `crewvane owner launch`，独立 CLI 与 Desktop 复用 `packages/sessions/src/runtime.ts`。先解析角色与目标方法，再创建私有 launcher、生成 attempt，清除管家控制环境并导出当前目标身份；在真实 `/bin/zsh -ilc` 中 source 启动器，保留 `.zshrc` alias、函数、原生 argv 与 shell PATH。后端只接收短启动命令，避免 canonical 行长限制。启动器把安装、epoch、attempt、进程出生时间及后端 locator 写入私有文件收据；收据没有 Prompt 或 Hook token。读到收据不等于 Agent 已开始，发送前仍核实进程、身份与生命周期。
 
@@ -164,7 +164,7 @@ Herdr 的 OMP 传输对超过 10 行或 1,000 UTF-16 code units 的正文使用 
 
 `crewvane hook ingest --adapter <id>` 是内部稳定入口。Adapter 把官方原生事件送入 CLI，CLI 负责能力校验、turn 归一化、12,000 字符限制与原文 SHA-256，然后通过 `/tmp/crewvane-<uid>/<workspace-hash>.sock` 发给 Electron Broker。Socket 请求失败或 500 ms 内不可用时，事件写入工作区 `.crewvane/runtime/spool/`；目录与文件分别使用 `0700` / `0600`，最多 200 条、保留 7 天。应用重启先 drain 离线队列，再按持久 receipt 时间恢复计时器。工具参数、工具输出和终端全文不会进入 stored event。
 
-桌面设置中的“Agent 接入”由 `AgentHookManager` 管理。Codex、Claude Code、Cursor、Qoder 通过可核实的命令 marker、首次备份、JSON 合并与原子替换维护各自官方配置；只增删 Crewvane 条目。保留第三方 handlers、matcher、空用户分组和其他设置；没有受管条目的卸载不重写配置。写入按配置目录加锁，并在提交前重新核对原内容；发现外部编辑则停止写入。损坏 JSON、未来 schema、非普通文件和符号链接不会被覆盖。OMP 使用官方 Extension API，只更新以 Crewvane 标记开头的同名文件，其他扩展和同名用户文件被保护。Codex 安装后显示“等待信任”，直到原生事件实际被收到；用户可在设置中停用或卸载，停用状态会阻止自动重装。v1 不安装 Pre/PostToolUse，避免工具级进程与重复写入放大。
+桌面设置中的“Agent 接入”由 `AgentHookManager` 管理。Codex、Claude Code、Cursor、Qoder 通过可核实的命令 marker、首次备份、JSON 合并与原子替换维护各自官方配置；只增删 Atte 条目。保留第三方 handlers、matcher、空用户分组和其他设置；没有受管条目的卸载不重写配置。写入按配置目录加锁，并在提交前重新核对原内容；发现外部编辑则停止写入。损坏 JSON、未来 schema、非普通文件和符号链接不会被覆盖。OMP 使用官方 Extension API，只更新以 Atte 标记开头的同名文件，其他扩展和同名用户文件被保护。Codex 安装后显示“等待信任”，直到原生事件实际被收到；用户可在设置中停用或卸载，停用状态会阻止自动重装。v1 不安装 Pre/PostToolUse，避免工具级进程与重复写入放大。
 
 ## 上线策略与决定账本
 
@@ -176,13 +176,13 @@ Herdr 的 OMP 传输对超过 10 行或 1,000 UTF-16 code units 的正文使用 
 
 ## Herdr 插件
 
-应用包内包含一个本地 Herdr 插件 `dev.crewvane`。Herdr 可用后，应用把插件原子部署到 `userData/herdr-plugin`，通过固定 ID 注册或更新，并在设置中显示就绪状态。插件随 Crewvane 安装和升级，不需要用户另装 Node、从 GitHub 再下载或手工执行 `plugin link`；应用只使用打包内的固定源码，不静默更新远程代码。插件源码摘要变化时即使应用版本未变也会重新登记，避免新增动作或事件钩子停留在旧清单。
+应用包内包含一个本地 Herdr 插件 `dev.crewvane`。Herdr 可用后，应用把插件原子部署到 `userData/herdr-plugin`，通过固定 ID 注册或更新，并在设置中显示就绪状态。插件随 Atte 安装和升级，不需要用户另装 Node、从 GitHub 再下载或手工执行 `plugin link`；应用只使用打包内的固定源码，不静默更新远程代码。插件源码摘要变化时即使应用版本未变也会重新登记，避免新增动作或事件钩子停留在旧清单。
 
 插件提供三个动作与两个 terminal Pane：打开注意力控制台、直接进入一行新建目标，以及按真实 Agent 名称回到全局管家。控制台直接调用内置 `crewvane board`，读取 `.crewvane/state.json` 的同一份 core 数据，展示需要决定、验收、到期跟进和介入的事项。它支持补充意见、提交决定、请求跟进、等待事项交给管家或人工接管、验收通过、退回修改、聚焦真实负责人 Tab，以及 `g` 回到管家；新建入口调用同一 `crewvane ask`。这些入口都不维护第二份状态，也不自行执行目标。
 
 Herdr 的 `pane.agent_status_changed`、`pane.exited`、`pane.closed`、`pane.moved`、`tab.closed` 和 `workspace.closed` 事件由插件脚本送入内部 `crewvane event herdr`。CLI 兼容 Herdr 原生的 `{ event, data }` envelope，再按真实 Pane、Tab 或 Workspace ID 查找已登记负责人现场，只有命中目标时才执行 core 的 `live.event`。Pane 移动时用 Herdr 返回的新 Pane、Tab、Workspace 与 Agent 身份原子更新目标，旧 ID 立即停止匹配，避免后续关闭或状态事件落到失效引用。事件是桌面 10 秒 Agent 列表轮询的即时通道和断线补偿，不改变 `idle` / `done` 不等于完成的规则。
 
-插件适合 Herdr 内的快捷入口，不承担持久化、案卷隔离、Agent 权限或系统文件沙箱。插件 v1 的代码继承用户权限并可使用完整 Herdr CLI；Herdr 不沙箱插件。因此权限判断和状态写入继续留在受约束的 Electron IPC 与 Crewvane core，插件只作为表现和动作层。事件钩子只有在能提供明确增益且不会产生双写竞争时才引入。
+插件适合 Herdr 内的快捷入口，不承担持久化、案卷隔离、Agent 权限或系统文件沙箱。插件 v1 的代码继承用户权限并可使用完整 Herdr CLI；Herdr 不沙箱插件。因此权限判断和状态写入继续留在受约束的 Electron IPC 与 Atte core，插件只作为表现和动作层。事件钩子只有在能提供明确增益且不会产生双写竞争时才引入。
 
 通知送达与负责人现场登记是两个独立事实。系统通知和可选 Webhook 消费明确的目标状态变化与只读注意力；状态变化可按各状态分别订阅，Webhook 配置保存在应用数据目录且不回传令牌；普通 HTTP 2xx 记为送达，飞书 / Lark 和企业微信还要求响应业务码为 0，失败按 5 分钟退避，稳定投递键跨重启去重，投递失败不回滚目标。未登记现场的活动目标在一分钟启动宽限期后交由管家巡检，不把通知成功显示成已经执行。`session.set` 拒绝把管家现场或其他未结束目标的现场登记成当前目标负责人；真实连接仍由 Herdr presence 核实，包括自定义 CLI 的前台 PID。Webhook 载荷与适配器边界见 [消息通知](product/notifications.md)。
 
@@ -200,7 +200,7 @@ Herdr 的 `pane.agent_status_changed`、`pane.exited`、`pane.closed`、`pane.mo
 
 应用内 CLI 使用随包分发的独立 Node 可执行文件，CLI bundle 位于 ASAR unpack 目录，脚本和 Node runtime 都在 `.app` 内。打开工作区时自动安装或刷新 `~/.local/bin/crewvane`，并把它默认绑定到当前工作区。该入口只是应用内脚本的符号链接，因此移动应用后 CLI 会失败并提示重新安装，可避免悄悄执行旧版本。
 
-本地维护每天最多后台扫描一次 Crewvane 自己的 Chromium 缓存、诊断日志和遗留临时文件：删除 30 天未用的缓存与日志、退出后遗留超过 24 小时的原子临时文件；设置页可立即显示占用并手动清理当前缓存。清理根目录固定且拒绝符号链接，只匹配已知缓存目录和临时文件名，不删除 `state.json`、目标、当前附件、Agent 会话或 `.crewvane.backup-*`。已结束目标的附件继续使用 30 天保留期。维护任务与设置页扫描串行执行，避免清理与统计交错；自动任务在首屏打开后后台运行，不阻塞工作区加载。
+本地维护每天最多后台扫描一次 Atte 自己的 Chromium 缓存、诊断日志和遗留临时文件：删除 30 天未用的缓存与日志、退出后遗留超过 24 小时的原子临时文件；设置页可立即显示占用并手动清理当前缓存。清理根目录固定且拒绝符号链接，只匹配已知缓存目录和临时文件名，不删除 `state.json`、目标、当前附件、Agent 会话或 `.crewvane.backup-*`。已结束目标的附件继续使用 30 天保留期。维护任务与设置页扫描串行执行，避免清理与统计交错；自动任务在首屏打开后后台运行，不阻塞工作区加载。
 
 ## 安装和签名
 

@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="apps/desktop/assets/brand/crewvane-mage.png" width="112" alt="Crewvane 像素魔法师">
+<img src="apps/desktop/assets/brand/crewvane-mage.png" width="112" alt="Atte 像素魔法师">
 
-# Crewvane｜协航
+# Atte
 
 **给并行 AI 工作装上一层注意力。**
 
@@ -17,9 +17,9 @@
 
 </div>
 
-![Crewvane 注意力中心](docs/assets/crewvane-overview.png)
+![Atte 注意力中心](docs/assets/crewvane-overview.png)
 
-Crewvane 是一个开源 macOS 桌面应用，面向同时处理多个项目、多个 CLI
+Atte 是一个开源 macOS 桌面应用，面向同时处理多个项目、多个 CLI
 Agent 会话的人。
 
 它为每个项目和个人事项保留持久的记录，通过
@@ -27,21 +27,21 @@ Agent 会话的人。
 验收、到期跟进和真正需要介入的事放进注意力面板。普通的推进过程留在后台，
 不再逼你逐个盯着终端。
 
-Crewvane 不替代 Codex、Claude Code、OMP、Cursor、Qoder 等 CLI Agent。已经能在
-终端中运行的交互式 Agent，都可以作为工作现场接入。Crewvane 为这些现场补齐
+Atte 不替代 Codex、Claude Code、OMP、Cursor、Qoder 等 CLI Agent。已经能在
+终端中运行的交互式 Agent，都可以作为工作现场接入。Atte 为这些现场补齐
 持久目标、负责人、等待、证据、审批和恢复机制。
 
 > **当前状态：** 早期预览版（`0.11.x`）。桌面界面目前为简体中文，安装包支持
 > macOS Apple Silicon。
 
-## 为什么需要 Crewvane
+## 为什么需要 Atte
 
 Agent 让工作可以并行，也带来了新的负担：会话越来越多，等待不可见，每次切换
 都要重新想起“这件事做到哪了”。
 
-Crewvane 把工作单位从**终端会话**变成**目标**。
+Atte 把工作单位从**终端会话**变成**目标**。
 
-| 直接管理 Agent 会话 | 使用 Crewvane |
+| 直接管理 Agent 会话 | 使用 Atte |
 | --- | --- |
 | 自己盯着不断增长的终端 Tab | 只扫一眼注意力中心 |
 | 把 Agent 结束工作误当成交付完成 | 交付必须有证据，并经过独立复核或人工验收 |
@@ -79,7 +79,7 @@ Crewvane 把工作单位从**终端会话**变成**目标**。
 ### 自主目标，人保留最终裁决
 
 一个目标可以带结构化委托摘要，写明结果、范围、完成条件、外部影响和验证方式。
-Crewvane 会在 Agent 会话之外持久保存短回合续跑：checkpoint、外部等待、失败恢复、
+Atte 会在 Agent 会话之外持久保存短回合续跑：checkpoint、外部等待、失败恢复、
 独立复核和人工决定都能跨重启继续，不依赖某个 Agent 一直驻留。
 
 自动验收默认关闭，授权按“目标覆盖 > 项目设置 > 工作区默认”解析。只有真实证据、
@@ -102,14 +102,14 @@ Crewvane 会在 Agent 会话之外持久保存短回合续跑：checkpoint、外
 ### 使用你已经安装的 Agent
 
 分别配置管家、负责人和工人的启动命令与原生参数，例如
-`codex --model my-model`、绝对脚本路径或其他交互式 CLI。Crewvane 不管理模型密钥，
+`codex --model my-model`、绝对脚本路径或其他交互式 CLI。Atte 不管理模型密钥，
 不代理模型 API，也不替换 Agent 运行时。
 
 Herdr 提供持久终端会话和 Agent 通信。桌面应用自带经过校验的 Herdr 二进制文件；
 可选的 Herdr 插件还能在终端内打开注意力、用一句话新建目标、直接回到全局管家。
 
 设置也可以改选 [Orca](https://github.com/stablyai/orca) 作为唯一生效的会话后端。
-Orca 提供原生工作界面，Crewvane 仍在自己的 Core 保存目标、注意力、证据与验收，
+Orca 提供原生工作界面，Atte 仍在自己的 Core 保存目标、注意力、证据与验收，
 不使用 Orca Task 作为第二份状态。设置提供 Orca 安装、选择已有应用和检查更新。
 切换保留目标与消息，停止已核实的旧现场后按案卷恢复，不搬终端全文，也不会双路派发。
 
@@ -119,7 +119,7 @@ Orca 提供原生工作界面，Crewvane 仍在自己的 Core 保存目标、注
 
 ### 可复用的工作方法
 
-Crewvane 内置管家、负责人、独立复核者、标准交付、探索研究、发布检查、Agent
+Atte 内置管家、负责人、独立复核者、标准交付、探索研究、发布检查、Agent
 接入和现场恢复 Skills。团队也可以从本地目录安装自己的工作方法，在设置中预览
 适用角色、入口和参考文件，再只挂载到匹配的目标。
 
@@ -140,7 +140,7 @@ Crewvane 内置管家、负责人、独立复核者、标准交付、探索研�
 Agent 已停止，再按保存的目标记录在新后端继续，目标与注意力不会分成两份。
 
 Herdr 模式下，“回到现场”默认在 iTerm2、Terminal 或 Ghostty 中打开同一个 Session，
-保留原生组合键、图片粘贴、输入法和终端行为。Crewvane 会复用已有窗口，并在设置
+保留原生组合键、图片粘贴、输入法和终端行为。Atte 会复用已有窗口，并在设置
 中记住终端偏好。也可以切换到内嵌轻现场快速查看；其中的目标事实与外部终端完全
 共用同一份 Herdr 现场。仅粘贴图片时，轻现场会把一次 `Ctrl+V` 交给当前 Agent，
 由 Agent 自己读取系统剪贴板。
@@ -151,13 +151,13 @@ Orca 模式直接打开 Orca 原生窗口，并定位对应的受管终端；不
 
 ### 即时生命周期，明确业务决定
 
-Crewvane 会检测 Codex、Claude Code、Cursor、Qoder 和 OMP，并为提供官方接入能力的
+Atte 会检测 Codex、Claude Code、Cursor、Qoder 和 OMP，并为提供官方接入能力的
 Agent 安装受管生命周期 Hook。事件通过私有本地 Socket 即时进入应用；应用未运行时
 进入有期限和数量上限的离线队列。用户已有的 Hook 与其他 OMP extension 会完整保留，
 Codex 仍要求在它自己的 `/hooks` 界面中审核并信任新条目。
 
 Hook 只证明会话或回合状态发生了变化，绝不会把目标标成完成、等待第三方、可验收或
-允许外部动作。这些业务事实仍只由 Crewvane 语义 CLI 写入。回合结束后，Crewvane
+允许外部动作。这些业务事实仍只由 Atte 语义 CLI 写入。回合结束后，Atte
 会短暂等待结构化写回；缺失时只提醒同一负责人一次，再由管家核对。Agent 没有兼容
 Hook 时，当前所选后端与原有 Watchdog 继续完整兜底。
 
@@ -173,7 +173,7 @@ Hook 时，当前所选后端与原有 Watchdog 继续完整兜底。
 
 ### 关键边界由人掌握
 
-每个项目都可以配置上线策略，默认需要外部审批。Crewvane 只返回策略是否放行，
+每个项目都可以配置上线策略，默认需要外部审批。Atte 只返回策略是否放行，
 不会替你合并、部署或向外发送消息。
 
 即使项目设为自动上线，以下九类动作仍必须由人明确决定：
@@ -188,7 +188,7 @@ Hook 时，当前所选后端与原有 Watchdog 继续完整兜底。
 8. 修改权限；或
 9. 修改上线策略。
 
-这九类动作由 Crewvane core 作为应用层协议约束判定，不是操作系统沙箱；第三方
+这九类动作由 Atte core 作为应用层协议约束判定，不是操作系统沙箱；第三方
 Agent 的文件与网络权限仍由它自己的 CLI 决定。
 
 ### 默认本地优先
@@ -204,9 +204,9 @@ Lark、企业微信或其他端点。Webhook 只消费精简的只读事件，�
 
 ```mermaid
 flowchart LR
-    Human[你] --> Desktop[Crewvane Desktop]
-    Desktop --> Core[Crewvane Core]
-    CLI[Crewvane CLI] --> Core
+    Human[你] --> Desktop[Atte Desktop]
+    Desktop --> Core[Atte Core]
+    CLI[Atte CLI] --> Core
     Desktop <--> Sessions[Herdr 或 Orca]
     Sessions --> Concierge[全局管家]
     Sessions --> Owners[负责人和 CLI Agents]
@@ -221,7 +221,7 @@ flowchart LR
 - 会话后端和 Agent Hook 更新真实现场是否可达及回合状态；
 - 终端的 `done` 或 `idle` 永远不能宣告目标完成。
 
-“等待外部”只用于你和所有 Crewvane Agent 之外的具名第三方。
+“等待外部”只用于你和所有 Atte Agent 之外的具名第三方。
 需要你决定、确认、补充信息或操作时进入注意力；内部协调保持跟进中。
 外部等待交回 Agent 核查时先恢复跟进中，由管家核查后重新安排。
 设置提醒不会改变目标的生命周期。
@@ -233,14 +233,14 @@ flowchart LR
 从 [GitHub Releases](https://github.com/gdli6177/crewvane/releases/latest)
 下载最新安装包：
 
-- `Crewvane-<version>-macOS-arm64.dmg`
-- `Crewvane-<version>-macOS-arm64.zip`
+- `Atte-<version>-macOS-arm64.dmg`
+- `Atte-<version>-macOS-arm64.zip`
 - `SHA256SUMS.txt`
 
-打开 DMG，把 **Crewvane.app** 拖入“应用程序”后启动。安装包已包含 Electron、
-Crewvane CLI 运行时和经过校验的 Herdr 二进制文件，无需另装 Node.js 或 Homebrew。
+打开 DMG，把 **Atte.app** 拖入“应用程序”后启动。安装包已包含 Electron、
+Atte CLI 运行时和经过校验的 Herdr 二进制文件，无需另装 Node.js 或 Homebrew。
 
-你的 Agent CLI 仍需自行安装和登录。Crewvane 只使用你配置的启动命令，不读取这些
+你的 Agent CLI 仍需自行安装和登录。Atte 只使用你配置的启动命令，不读取这些
 工具的凭据。
 
 当前安装包使用 ad-hoc 签名，未经 Apple 公证。首次打开时，macOS 可能提示“无法验证
@@ -250,8 +250,8 @@ Crewvane CLI 运行时和经过校验的 Herdr 二进制文件，无需另装 No
 ### 第一次使用
 
 1. 选择一个专用工作区目录。
-2. 打开“设置”，选择“回到现场”默认使用外部终端还是内嵌轻现场，安装 Crewvane
-   CLI 和可选 Crewvane Skills，检查“Agent 接入”和“工作方法”，再配置管家、
+2. 打开“设置”，选择“回到现场”默认使用外部终端还是内嵌轻现场，安装 Atte
+   CLI 和可选 Atte Skills，检查“Agent 接入”和“工作方法”，再配置管家、
    负责人或工人的 Agent 启动命令。
 3. 准备管家。
 4. 点击“新目标”，用自然语言交代工作；需要时可以粘贴或添加截图。
@@ -264,7 +264,7 @@ Crewvane CLI 运行时和经过校验的 Herdr 二进制文件，无需另装 No
 `CREWVANE_WORKSPACE` 或 `--root` 指定工作区。
 
 ```sh
-export CREWVANE_WORKSPACE="$HOME/Crewvane"
+export CREWVANE_WORKSPACE="$HOME/Atte"
 
 crewvane status
 crewvane ask "检查发布流程并附真实验收证据"
@@ -304,7 +304,7 @@ crewvane goal review <goal-id> \
 apps/desktop/       Electron 桌面壳、React UI、应用内 Herdr 终端、插件
 packages/core/      目标、注意力、策略、存储、附件与工作区恢复
 cli/                人类消息入口与明确的 Agent 状态协议
-skills/             随应用打包的 Crewvane 与本地方法创建 Skills
+skills/             随应用打包的 Atte 与本地方法创建 Skills
 scripts/            桌面、Herdr、首次启动与安装包验收测试
 docs/               产品规格、架构、QA 与发布说明
 ```
@@ -345,9 +345,9 @@ pnpm test:onboarding
   移动端版本。
 - 桌面 UI 目前为简体中文。
 - 仍处于早期预览阶段，存储细节和 CLI 可能继续演进。
-- Crewvane 不是模型网关、自动调度器或云托管服务。Agent Hooks 只观测生命周期，
+- Atte 不是模型网关、自动调度器或云托管服务。Agent Hooks 只观测生命周期，
   不替代各 Agent 自己的运行时。
-- Crewvane 协调目标和现场，不为第三方 Agent 提供文件系统或网络沙箱。
+- Atte 协调目标和现场，不为第三方 Agent 提供文件系统或网络沙箱。
   Agent 的访问权限仍由其自身 CLI 决定。
 - Agent 执行需要 Herdr 或已验证兼容的 Orca 版本。所选后端暂时不可用时，
   仍可查看目标、提醒和人工验收记录。
@@ -358,7 +358,7 @@ pnpm test:onboarding
 
 欢迎提交 Issue 和小范围、可验证的 Pull Request。
 
-较大的功能建议先开 Issue，确保符合 Crewvane 的产品边界：每个工作区一位管家、
+较大的功能建议先开 Issue，确保符合 Atte 的产品边界：每个工作区一位管家、
 状态来自明确命令、验收基于证据、数据本地优先。
 
 提交 PR 前至少运行：
@@ -373,4 +373,4 @@ pnpm test
 
 ## 开源许可
 
-Crewvane 使用 [MIT License](LICENSE) 发布。
+Atte 使用 [MIT License](LICENSE) 发布。

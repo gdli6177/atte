@@ -394,7 +394,7 @@ export async function launchOwner(
   const executableDirectory = executable.includes("/")
     ? dirname(executable)
     : "";
-  const label = `Crewvane · ${goal.title.trim().slice(0, 60)}`;
+  const label = `Atte · ${goal.title.trim().slice(0, 60)}`;
 
   let tabId: string | undefined;
   let verifierReference: HerdrReference | undefined;

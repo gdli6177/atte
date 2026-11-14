@@ -42,7 +42,7 @@ await writeFile(join(workspace, "AGENTS.md"), `# 隔离产品验收工作区
 交付检查必须实际运行；不能把测试要求当作检查已通过的证据。
 `);
 const executablePath = resolve(process.env.CREWVANE_APP_PATH ||
-  "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane");
+  "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte");
 const env = { ...process.env, CREWVANE_TEST_HOME: home, CREWVANE_TEST_USER_DATA: userData,
   CREWVANE_TEST_WORKSPACE: workspace, CREWVANE_HERDR_SESSION: session };
 let app, page;

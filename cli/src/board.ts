@@ -68,7 +68,7 @@ export function renderBoard(state: WorkspaceState, selectedId?: string, message?
     "",
   ];
   if (!goals.length) {
-    lines.push(`${ESC}2m还没有目标。按 n 用一句话交给 Crewvane。${ESC}0m`);
+    lines.push(`${ESC}2m还没有目标。按 n 用一句话交给 Atte。${ESC}0m`);
   } else {
     for (const goal of goals) {
       const selected = goal.id === selectedId;
@@ -211,7 +211,7 @@ export async function runBoard(
     await act(async () => {
       const goal = await service.execute({ type: "goal.intake", text, handling }) as Goal;
       selectedId = goal.id;
-      return handling === "concierge" ? "已交给管家。Crewvane 打开时会自动派发，桌面未运行时请求会保留。"
+      return handling === "concierge" ? "已交给管家。Atte 打开时会自动派发，桌面未运行时请求会保留。"
         : handling === "later" ? "已暂存，不会启动 Agent。" : "已记录，由你安排，做完即可标记完成。";
     });
   };
@@ -301,7 +301,7 @@ export async function runBoard(
     if (!goal) return;
     if (goal.mode === "manual" && !goal.scene)
       return setMessage("这件事没有 Agent 现场；需要 Agent 执行时，请先交给管家。");
-    if (!options.focusScene) return setMessage("请从已安装的 Crewvane CLI 或桌面打开现场。");
+    if (!options.focusScene) return setMessage("请从已安装的 Atte CLI 或桌面打开现场。");
     await act(async () => {
       await options.focusScene!(goal.id);
       return "已切换到负责人现场。";
@@ -310,7 +310,7 @@ export async function runBoard(
   const focusConcierge = async () => {
     if (!state.concierge.scene)
       return setMessage("管家还没有启动，请先在桌面点击「找管家」。");
-    if (!options.focusScene) return setMessage("请从已安装的 Crewvane CLI 或桌面回到管家。");
+    if (!options.focusScene) return setMessage("请从已安装的 Atte CLI 或桌面回到管家。");
     await act(async () => {
       await options.focusScene!();
       return "已切换到全局管家。";

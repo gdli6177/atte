@@ -51,8 +51,8 @@ function runtimeReminder(goal: Goal, runtime: AgentRuntimeState) {
   // Agent TUI prompt submission is reliable for one logical line. Multi-line
   // reminders can remain visible in the input box without being submitted, so
   // keep the transport prompt compact and leave full protocol guidance in the
-  // owner's persistent Crewvane instructions.
-  return `${agentReceiptMarker(runtime.attempt.attemptId, runtime.receipt!.turnId)} Crewvane 未收到目标 ${goal.id} 本回合的结构化写回。请立即用 crewvane goal show ${goal.id} --json 核对实际结果，并按事实运行 crewvane goal progress/decide/wait/review 之一；不要只回复，也不要把这条系统提醒记成用户新目标。`;
+  // owner's persistent Atte instructions.
+  return `${agentReceiptMarker(runtime.attempt.attemptId, runtime.receipt!.turnId)} Atte 未收到目标 ${goal.id} 本回合的结构化写回。请立即用 crewvane goal show ${goal.id} --json 核对实际结果，并按事实运行 crewvane goal progress/decide/wait/review 之一；不要只回复，也不要把这条系统提醒记成用户新目标。`;
 }
 
 export class AgentRuntimeBroker {
@@ -73,12 +73,12 @@ export class AgentRuntimeBroker {
   }
 
   socketPath(workspace = this.options.workspace()) {
-    if (!workspace) throw new Error("尚未打开 Crewvane 工作区");
+    if (!workspace) throw new Error("尚未打开 Atte 工作区");
     return agentRuntimeSocketPath(workspace);
   }
 
   private spoolPath(workspace = this.options.workspace()) {
-    if (!workspace) throw new Error("尚未打开 Crewvane 工作区");
+    if (!workspace) throw new Error("尚未打开 Atte 工作区");
     return join(workspace, ".crewvane", "runtime", "spool");
   }
 
@@ -323,7 +323,7 @@ export class AgentRuntimeBroker {
     try {
       await this.options.notifyConcierge(
         result.goal,
-        "负责人回合结束并收到一次回执提醒后，仍未提交 Crewvane 结构化结果。请先联系原负责人核对实际结果、真实等待或交付；不要根据终端文本或空闲状态猜测完成。",
+        "负责人回合结束并收到一次回执提醒后，仍未提交 Atte 结构化结果。请先联系原负责人核对实际结果、真实等待或交付；不要根据终端文本或空闲状态猜测完成。",
       );
       await current.service.execute({
         type: "watchdog.report",

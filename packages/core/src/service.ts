@@ -1137,7 +1137,7 @@ export class WorkspaceService {
         }
         case "project.policy.set": {
           if (command.actor !== "你")
-            throw new Error("上线策略只能由人在 Crewvane 设置中修改");
+            throw new Error("上线策略只能由人在 Atte 设置中修改");
           const project = state.projects.find(item => item.id === id(command.projectId));
           if (!project) throw new Error("找不到项目");
           if (!isShipPolicy(command.policy?.shipPolicy))
@@ -2028,7 +2028,7 @@ export class WorkspaceService {
                 state,
                 item,
                 "automatic",
-                "Crewvane",
+                "Atte",
                 at,
                 `独立复核通过：${verification.summary}`,
                 verification.id,
@@ -2904,7 +2904,7 @@ export class WorkspaceService {
                 ? `${item.scene?.backend === "orca" ? "Orca" : "Herdr"} 负责人现场`
                 : command.source === "herdr"
                 ? "Herdr 注意力面板"
-                : command.source === "cli" ? "Crewvane CLI" : "Crewvane 桌面",
+                : command.source === "cli" ? "Atte CLI" : "Atte 桌面",
               goalId: item.id,
               decidedAt: at,
             });
@@ -3181,7 +3181,7 @@ export class WorkspaceService {
             detectedAt: at,
           };
           activity(item, "watchdog",
-            "负责人回合已结束但未按 Crewvane 协议写回；现已交给管家核对，不据此推断完成或失败。",
+            "负责人回合已结束但未按 Atte 协议写回；现已交给管家核对，不据此推断完成或失败。",
             "系统");
           return { updated: true, goal: item };
         }

@@ -8,7 +8,7 @@ Required fields:
 - `name`: short user-facing name.
 - `description`: when the method should be used.
 - `version`: semver, normally `1.0.0`.
-- `minimumCrewvane`: minimum compatible Crewvane version.
+- `minimumCrewvane`: minimum compatible Atte version.
 - `kind`: `process`.
 - `roles`: one or both of `owner`, `verifier`.
 - `entry`: usually `SKILL.md`.
@@ -43,4 +43,4 @@ Pack limits:
 - no symlinks, absolute paths, traversal, credentials, or generated caches;
 - scripts must live under `scripts/`, match their declared SHA-256, and require explicit approval.
 
-The user-facing method should say what must happen and what evidence proves it. Crewvane Core continues to own task state, permissions, acceptance, and concurrency.
+The user-facing method should say what must happen and what evidence proves it. Atte Core continues to own task state, permissions, acceptance, and concurrency.

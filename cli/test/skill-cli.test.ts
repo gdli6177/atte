@@ -61,7 +61,7 @@ test("real CLI creates, validates, installs, lists and binds a local method pack
   assert.equal(installed.json.status, "ready");
   assert.equal(
     JSON.stringify((await call(root, ["skill", "list"])).json)
-      .includes("Crewvane Core 约束"),
+      .includes("Atte Core 约束"),
     false,
   );
   assert.match(

@@ -43,7 +43,7 @@ const errors = [];
 try {
   app = await electron.launch({
     executablePath: resolve(process.env.CREWVANE_APP_PATH ||
-      "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+      "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     args: [],
     env: { ...process.env, CREWVANE_TEST_HOME: home, CREWVANE_TEST_USER_DATA: join(home, "userData"),
       CREWVANE_TEST_WORKSPACE: workspace, CREWVANE_HERDR_SESSION: session,
@@ -100,7 +100,7 @@ try {
   // actual shell-side effect rather than mistaking echoed input for execution.
   await expect.poll(() => readFile(resultFile, "utf8").catch(() => ""), { timeout: 30_000 }).toBe(marker);
   await page.locator(".xterm-accessibility").filter({ hasText: marker }).waitFor({ state: "attached" });
-  const firstPid = await app.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === "Crewvane Herdr terminal").map(item => item.pid));
+  const firstPid = await app.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   assert.equal(firstPid.length, 1);
   const textarea = page.locator(".xterm-helper-textarea");
   await textarea.focus();
@@ -234,20 +234,20 @@ try {
   await expect.poll(async () => page.evaluate(async () =>
     (await window.crewvane.terminalSnapshot())?.data ?? "")
   ).toContain(marker);
-  const nextPid = await app.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === "Crewvane Herdr terminal").map(item => item.pid));
+  const nextPid = await app.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   assert.deepEqual(nextPid, firstPid);
   const panel = page.getByRole("region", { name: "Herdr 工作现场" });
   const beforeExpandPid = await app.evaluate(({ app }) =>
-    app.getAppMetrics().filter(item => item.name === "Crewvane Herdr terminal").map(item => item.pid));
+    app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   await page.getByRole("button", { name: "全屏显示现场", exact: true }).click();
   await expect(panel).toHaveClass(/expanded/);
   const expandedPid = await app.evaluate(({ app }) =>
-    app.getAppMetrics().filter(item => item.name === "Crewvane Herdr terminal").map(item => item.pid));
+    app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   assert.deepEqual(expandedPid, beforeExpandPid);
   await page.getByRole("button", { name: "退出全屏现场", exact: true }).click();
   await expect(panel).not.toHaveClass(/expanded/);
   const collapsedPid = await app.evaluate(({ app }) =>
-    app.getAppMetrics().filter(item => item.name === "Crewvane Herdr terminal").map(item => item.pid));
+    app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   assert.deepEqual(collapsedPid, beforeExpandPid);
   const herdr = async (args) => JSON.parse((await exec(herdrExecutable, ["--session", session, ...args], {
     timeout: 20_000,

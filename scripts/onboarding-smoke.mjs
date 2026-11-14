@@ -56,7 +56,7 @@ async function picker(path, canceled = false) {
 }
 try {
   app = await electron.launch({
-    executablePath: resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+    executablePath: resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     env: testEnvironment,
     timeout: 60_000,
   });
@@ -106,15 +106,15 @@ try {
   await page.getByRole("button", { name: "我的工作台", exact: true }).click();
   assert.equal(await page.getByRole("dialog").count(), 0, "workspace overview is navigation, not a directory picker");
   await page.getByRole("button", { name: "设置", exact: true }).click();
-  await page.getByText("让外部 Agent 会使用 Crewvane", { exact: true }).waitFor();
+  await page.getByText("让外部 Agent 会使用 Atte", { exact: true }).waitFor();
   await page.getByRole("button", { name: "安装 / 更新 Skills", exact: true }).click();
   await expect.poll(() => access(join(home, ".agents/skills/crewvane/SKILL.md"))
     .then(() => true).catch(() => false)).toBe(true);
   assert.match(await readFile(join(home, ".agents/skills/crewvane/SKILL.md"), "utf8"), /crewvane ask/);
   await page.evaluate(async () => {
-    await window.crewvane.writeClipboardText("Crewvane clipboard round trip");
+    await window.crewvane.writeClipboardText("Atte clipboard round trip");
   });
-  assert.equal(await page.evaluate(() => window.crewvane.readClipboardText()), "Crewvane clipboard round trip");
+  assert.equal(await page.evaluate(() => window.crewvane.readClipboardText()), "Atte clipboard round trip");
   await page.getByRole("button", { name: "更换工作区", exact: true }).click();
   await page.getByRole("dialog").getByText("当前工作区", { exact: true }).waitFor();
   await page.getByRole("dialog").getByText(await realpath(rootA), { exact: true }).waitFor();
@@ -160,7 +160,7 @@ try {
   await completeAutonomySetup(page);
   await page.getByRole("button", { name: "设置", exact: true }).click();
   // This command exists only as a function in the isolated user's .zshrc.
-  // Finder and Crewvane's directory scan cannot resolve it; the real Herdr
+  // Finder and Atte's directory scan cannot resolve it; the real Herdr
   // pane shell must preserve and execute the configured bare command name.
   const command = `cv-local-agent --model "local test model"`;
   await page.getByLabel("管家启动命令").fill(command);
@@ -190,13 +190,13 @@ try {
     const panes = JSON.parse((await exec(installedExecutable, [
       "--session", session, "pane", "list", "--workspace", firstReference.workspaceId,
     ], { env: testEnvironment })).stdout).result.panes;
-    pluginPaneId = panes.find(pane => pane.label === "Crewvane 注意力")?.pane_id;
+    pluginPaneId = panes.find(pane => pane.label === "Atte 注意力")?.pane_id;
     return pluginPaneId ?? null;
   }, { timeout: 20_000 }).not.toBeNull();
   assert.match(pluginPaneId, new RegExp(`^${firstReference.workspaceId}:p\\d+$`));
   await exec(installedExecutable, [
     "--session", session, "pane", "wait-output", pluginPaneId,
-    "--match", "CREWVANE", "--timeout", "10000",
+    "--match", "Atte", "--timeout", "10000",
   ], { env: testEnvironment, timeout: 20_000 });
   const boardOutput = (await exec(installedExecutable, [
     "--session", session, "pane", "read", pluginPaneId,
@@ -215,7 +215,7 @@ try {
     const panes = JSON.parse((await exec(installedExecutable, [
       "--session", session, "pane", "list", "--workspace", firstReference.workspaceId,
     ], { env: testEnvironment })).stdout).result.panes;
-    newGoalPaneId = panes.find(pane => pane.label === "Crewvane 新目标")?.pane_id;
+    newGoalPaneId = panes.find(pane => pane.label === "Atte 新目标")?.pane_id;
     return newGoalPaneId ?? null;
   }, { timeout: 20_000 }).not.toBeNull();
   await new Promise(resolve => setTimeout(resolve, 1_000));
@@ -428,7 +428,7 @@ try {
   // Remove it when testing a normal restart and persisted workspace recovery.
   delete restoredEnvironment.CREWVANE_TEST_WORKSPACE;
   app = await electron.launch({
-    executablePath: resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+    executablePath: resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     env:restoredEnvironment, timeout:60_000,
   });
   const restored = await app.firstWindow();
@@ -484,12 +484,12 @@ try {
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ ok: true, home, version: installed.version, checks: [
     "official verified auto-install without Homebrew or system PATH", "first workspace selection feedback",
-    "bundled Herdr plugin auto-linked", "real Herdr plugin pane renders Crewvane attention",
+    "bundled Herdr plugin auto-linked", "real Herdr plugin pane renders Atte attention",
     "real Herdr plugin action creates a one-line goal",
     "real Herdr pane close event reaches the matching goal",
     "same directory feedback", "cancel preserves state", "legacy workspace is archived and automatically recovered",
     "workspace switching",
-    "packaged Crewvane skill installs into detected agent directories", "system clipboard round trip",
+    "packaged Atte skill installs into detected agent directories", "system clipboard round trip",
     "arbitrary CLI saves and starts", "native argv preserved", "reuse custom concierge",
     "real goal and delegation-only role delivered to CLI stdin", "raw Herdr opens independently", "restart reuses installed latest and running CLI",
     "visible goal feedback reaches CLI without replacing the next step",

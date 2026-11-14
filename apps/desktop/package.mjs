@@ -66,7 +66,7 @@ try {
       name: "crewvane",
       version: desktopPackage.version,
       description: desktopPackage.description,
-      productName: "Crewvane",
+      productName: "Atte",
       main: "dist/main.cjs",
       dependencies: { "node-pty": createRequire(import.meta.url)("node-pty/package.json").version },
       private: false,
@@ -75,7 +75,7 @@ try {
   const paths = await packager({
     dir: stage,
     out: join(here, "release"),
-    name: "Crewvane",
+    name: "Atte",
     electronVersion,
     appBundleId: "dev.crewvane.desktop",
     platform: "darwin",
@@ -89,7 +89,7 @@ try {
     appCategoryType: "public.app-category.developer-tools",
     extendInfo: {
       NSAppleEventsUsageDescription:
-        "Crewvane uses the selected terminal to open and focus your current Herdr work scene.",
+        "Atte uses the selected terminal to open and focus your current Herdr work scene.",
     },
     ...(electronZipDir ? { electronZipDir } : {}),
     // Electron patches its binaries while packaging. Re-sign every nested

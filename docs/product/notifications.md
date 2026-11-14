@@ -1,4 +1,4 @@
-# Crewvane 消息通知
+# Atte 消息通知
 
 状态：0.5.2 实现
 
@@ -47,11 +47,11 @@
 
 ## 请求
 
-Crewvane 使用 `POST`，`Content-Type: application/json`，并发送：
+Atte 使用 `POST`，`Content-Type: application/json`，并发送：
 
-- `X-Crewvane-Event: goal.status_changed` 或 `attention.required`
-- `X-Crewvane-Delivery: <stable-delivery-id>`
-- `User-Agent: Crewvane/<version>`
+- `X-Atte-Event: goal.status_changed` 或 `attention.required`
+- `X-Atte-Delivery: <stable-delivery-id>`
+- `User-Agent: Atte/<version>`
 - 配置令牌时发送 `Authorization`
 
 注意力示例：
@@ -66,7 +66,7 @@ Crewvane 使用 `POST`，`Content-Type: application/json`，并发送：
     "name": "产品工作区"
   },
   "app": {
-    "name": "Crewvane",
+    "name": "Atte",
     "version": "0.5.0"
   },
   "goal": {
@@ -98,7 +98,7 @@ Crewvane 使用 `POST`，`Content-Type: application/json`，并发送：
 - “测试当前配置”发送独立的 `notification.test`，不写入事件去重账本；
 - Webhook 失败不会回滚目标状态，也不会阻止系统通知、收件箱和人工操作。
 
-通知依赖 Crewvane 主进程运行。关闭窗口只会隐藏应用，菜单栏进程仍会继续同步；显式“退出 Crewvane”后不会在后台投递。
+通知依赖 Atte 主进程运行。关闭窗口只会隐藏应用，菜单栏进程仍会继续同步；显式“退出 Atte”后不会在后台投递。
 
 ## 模块边界
 

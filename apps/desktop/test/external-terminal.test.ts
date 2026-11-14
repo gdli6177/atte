@@ -111,7 +111,7 @@ test("opening an external scene writes a private launcher and reuses its TTY", a
     input = {
       workspaceRoot: workspace,
       session,
-      herdrExecutable: "/Applications/Crewvane.app/Contents/Resources/herdr",
+      herdrExecutable: "/Applications/Atte.app/Contents/Resources/herdr",
     };
   try {
     const opened = await manager.open(input);

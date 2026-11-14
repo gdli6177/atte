@@ -165,7 +165,7 @@ export class CrewvaneSkillInstaller {
         if (phase === "conflict") {
           errors.push({
             id: target.id,
-            message: `${target.label} 的 ${skill.name} 已有同名且非 Crewvane 管理的 skill，已跳过。`,
+            message: `${target.label} 的 ${skill.name} 已有同名且非 Atte 管理的 skill，已跳过。`,
           });
           continue;
         }
@@ -202,7 +202,7 @@ export class CrewvaneSkillInstaller {
       if (await exists(target)) {
         const previousVersion = await managedVersion(target);
         if (previousVersion === undefined)
-          throw new Error("同名 skill 不是 Crewvane 安装的，拒绝覆盖");
+          throw new Error("同名 skill 不是 Atte 安装的，拒绝覆盖");
         await rm(target, { recursive: true, force: true });
       }
       await rename(staging, target);

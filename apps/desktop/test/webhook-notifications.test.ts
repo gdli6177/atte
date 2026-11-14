@@ -237,7 +237,7 @@ test("uses Feishu's bot payload and treats a non-zero business code as a deliver
       kind: "review",
     }), { sent: true });
     assert.equal(requests[0]?.msg_type, "text");
-    assert.match(requests[0]?.content?.text, /Crewvane｜需要你处理/);
+    assert.match(requests[0]?.content?.text, /Atte｜需要你处理/);
     assert.match(requests[0]?.content?.text, /确认上线窗口/);
 
     responseBody = { code: 19001, msg: "params error" };
@@ -310,7 +310,7 @@ test("uses WeCom's robot payload and surfaces a non-zero errcode", async () => {
       kind: "review",
     }), { sent: true });
     assert.equal(requests[0]?.msgtype, "text");
-    assert.match(requests[0]?.text?.content, /Crewvane｜需要你处理/);
+    assert.match(requests[0]?.text?.content, /Atte｜需要你处理/);
     assert.match(requests[0]?.text?.content, /确认预算/);
 
     responseBody = { errcode: 93000, errmsg: "invalid webhook url" };

@@ -58,7 +58,7 @@ try {
     environment: { CREWVANE_BACKEND: "herdr", CREWVANE_GOAL_ID: "test-goal" },
   });
   const request = { requestId, bindingId, attemptId, installationId: "contract-test", backendEpoch: 0,
-    role: "owner", cwd, title: "Crewvane private contract", ...files };
+    role: "owner", cwd, title: "Atte private contract", ...files };
   const created = await adapter.create(request);
   assert.equal(created.status, "created", created.detail);
   scene = created.scene;

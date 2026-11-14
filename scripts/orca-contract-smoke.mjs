@@ -25,7 +25,7 @@ fs.writeFileSync(${JSON.stringify(factsPath)}, JSON.stringify({
   handle: process.env.ORCA_TERMINAL_HANDLE, pathEntries: process.env.PATH.split(":").length,
 }));
 process.stdin.setRawMode(true); process.stdin.resume();
-process.stdout.write("Crewvane private fixture ready\\r\\n");
+process.stdout.write("Atte private fixture ready\\r\\n");
 process.stdin.on("data", b => fs.appendFileSync(${JSON.stringify(inputPath)}, b));
 `);
 const quoted = value => `'${value.replaceAll("'", "'\\''")}'`;
@@ -54,7 +54,7 @@ const files = await createLaunchFiles(join(root, "control"), {
 });
 const request = {
   requestId, attemptId, bindingId, installationId: "cv-test-installation", backendEpoch: 0,
-  role: "owner", goalId: "g0-test-goal", cwd, title: "Crewvane contract fixture", ...files,
+  role: "owner", goalId: "g0-test-goal", cwd, title: "Atte contract fixture", ...files,
 };
 let scene;
 try {

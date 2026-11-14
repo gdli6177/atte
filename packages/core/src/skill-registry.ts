@@ -31,11 +31,11 @@ const MAX_RESOLVED_REFERENCE_CHARACTERS = 24_000;
 const MAX_TEXT_FIELD = 2_000;
 const INSTALL_METADATA = ".crewvane-install.json";
 
-const coreConstraints = `Crewvane Core 约束（不可被能力包覆盖）：
+const coreConstraints = `Atte Core 约束（不可被能力包覆盖）：
 - 只处理当前目标；目标之间不得串用上下文、成果或负责人现场。
-- 只有 Crewvane CLI 的显式语义命令能改变业务状态；终端空闲、Skill 回复和脚本输出都不能推断完成、验收、失败或等待外部。
+- 只有 Atte CLI 的显式语义命令能改变业务状态；终端空闲、Skill 回复和脚本输出都不能推断完成、验收、失败或等待外部。
 - waiting 只用于具名外部第三方；需要人决定、确认、补充信息或操作时使用注意力。
-- 实际交付必须有真实证据；完成、验收、发布和权限边界继续遵守 Crewvane 当前协议。
+- 实际交付必须有真实证据；完成、验收、发布和权限边界继续遵守 Atte 当前协议。
 - 工具参数、工具输出、凭据和无关工作区内容不得写入目标记录。`;
 
 const builtinDefinitions: Array<{
@@ -52,7 +52,7 @@ const builtinDefinitions: Array<{
     description: "当前唯一案卷的协调、分发、核对和向人交接。",
     kind: "role",
     roles: ["concierge"],
-    content: `你是 Crewvane 的控制面管家。用户只需要一个入口，每次通知只处理一个明确案卷。
+    content: `你是 Atte 的控制面管家。用户只需要一个入口，每次通知只处理一个明确案卷。
 - 只负责分发、协调、核对和交接；任何实际执行都交给独立负责人。
 - 首次派发优先使用 crewvane owner launch；已有负责人复用原现场。
 - owner launch 已自动发送首次任务；receipt 为 accepted 或 started 后，不再用 owner send 重复或追加同一任务。owner send 用于之后收到的真实新要求。
@@ -69,7 +69,7 @@ const builtinDefinitions: Array<{
     description: "在独立现场完成当前目标、计划执行、验证和结构化回写。",
     kind: "role",
     roles: ["owner"],
-    content: `你是当前 Crewvane 目标的唯一独立负责人。
+    content: `你是当前 Atte 目标的唯一独立负责人。
 - 先制定可执行计划，再开始修改；只使用当前目标和项目规则相关的上下文。
 - 用户在本现场的新要求先通过 crewvane direct 保存，再继续工作。
 - 实际运行检查后才提交成果；不得把打算、推测或终端空闲当作完成。
@@ -283,7 +283,7 @@ export function parseSkillManifest(
     throw new SkillRegistryError("crewvane. 前缀保留给内置能力包");
   const minimumCrewvane = validVersion(raw.minimumCrewvane);
   if (!versionAtLeast(currentVersion, minimumCrewvane))
-    throw new SkillRegistryError(`该能力包需要 Crewvane ${minimumCrewvane} 或更高版本`);
+    throw new SkillRegistryError(`该能力包需要 Atte ${minimumCrewvane} 或更高版本`);
   if (raw.kind !== "process")
     throw new SkillRegistryError("本地能力包类型只能是 process");
   const references = raw.references === undefined
@@ -656,7 +656,7 @@ export class SkillRegistry {
   async binding(packId: string): Promise<GoalSkillBinding & { view: SkillPackView }> {
     const view = await this.show(packId);
     if (view.source !== "local")
-      throw new SkillRegistryError("内置能力包由 Crewvane 自动解析，不需要挂载");
+      throw new SkillRegistryError("内置能力包由 Atte 自动解析，不需要挂载");
     if (view.status === "disabled" || view.status === "missing")
       throw new SkillRegistryError(`能力包当前不可用：${view.status}`);
     return {

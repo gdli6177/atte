@@ -12,7 +12,7 @@ const home = join(trial, "home"), workspace = join(trial, "workspace");
 const session = `cv-settled-${Date.now().toString(36)}`;
 await mkdir(home); await mkdir(workspace);
 await writeFile(join(workspace, "AGENTS.md"), `# 隔离验收
-只处理 Crewvane 当前案卷，不读取真实用户项目，不提交、不发布、不发送外部消息。
+只处理 Atte 当前案卷，不读取真实用户项目，不提交、不发布、不发送外部消息。
 管家只协调，不能自己执行目标。
 `);
 const service = new WorkspaceService(workspace);
@@ -26,7 +26,7 @@ await service.execute({
   actor: "你",
 });
 const app = await electron.launch({
-  executablePath:resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+  executablePath:resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
   env:{ ...process.env, CREWVANE_TEST_HOME:home, CREWVANE_TEST_USER_DATA:join(trial,"userData"),
     CREWVANE_TEST_WORKSPACE:workspace, CREWVANE_HERDR_SESSION:session,
     PI_CODING_AGENT_DIR:process.env.PI_CODING_AGENT_DIR || join(homedir(),".omp/agent") },

@@ -96,7 +96,7 @@ export function BackendSelectionCard({
 
   if (!status) return (
     <SettingsSection wide icon={<ShieldCheck />} title="执行现场"
-      description="整个 Crewvane 安装一次只使用一套会话后端。">
+      description="整个 Atte 安装一次只使用一套会话后端。">
       <LoadingState label="正在检查会话后端…" />
     </SettingsSection>
   );
@@ -105,7 +105,7 @@ export function BackendSelectionCard({
   const journal = status.journal;
   return <>
     <SettingsSection wide icon={<ShieldCheck />} title="执行现场"
-      description="整个 Crewvane 安装一次只使用一套后端。切换会先核实并停止旧受管现场，再按目标记录恢复；完整终端历史不会搬移。">
+      description="整个 Atte 安装一次只使用一套后端。切换会先核实并停止旧受管现场，再按目标记录恢复；完整终端历史不会搬移。">
       <div className="backend-choice-grid" role="radiogroup" aria-label="会话后端">
         <BackendChoice
           name="Herdr"
@@ -117,7 +117,7 @@ export function BackendSelectionCard({
         />
         <BackendChoice
           name="Orca"
-          detail="原生工作现场、代码与 Diff；Crewvane 聚焦注意力与验收。"
+          detail="原生工作现场、代码与 Diff；Atte 聚焦注意力与验收。"
           selected={status.control.selected === "orca"}
           disabled={busy || switching}
           available={status.orca.detection.status === "compatible"}

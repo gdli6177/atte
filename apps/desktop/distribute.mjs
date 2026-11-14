@@ -22,8 +22,8 @@ if (process.env.GITHUB_REF_TYPE === "tag" && process.env.GITHUB_REF_NAME !== `v$
   throw new Error("Release tag must match the packaged version");
 
 const output = join(here, "release", "installers");
-const app = join(here, "release", "Crewvane-darwin-arm64", "Crewvane.app");
-const stem = `Crewvane-${metadata.version}-macOS-arm64`;
+const app = join(here, "release", "Atte-darwin-arm64", "Atte.app");
+const stem = `Atte-${metadata.version}-macOS-arm64`;
 const stage = await mkdtemp(join(tmpdir(), "crewvane-installer-"));
 const dmg = join(output, `${stem}.dmg`);
 
@@ -31,7 +31,7 @@ async function createDmg() {
   for (let attempt = 1; attempt <= 4; attempt += 1) {
     await rm(dmg, { force: true });
     try {
-      await exec("hdiutil", ["create", "-volname", "Crewvane", "-srcfolder", stage,
+      await exec("hdiutil", ["create", "-volname", "Atte", "-srcfolder", stage,
         "-format", "UDZO", "-ov", dmg], { timeout: 180_000 });
       return;
     } catch (error) {
@@ -48,10 +48,10 @@ async function createDmg() {
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 try {
-  await cp(app, join(stage, "Crewvane.app"), { recursive: true, verbatimSymlinks: true });
+  await cp(app, join(stage, "Atte.app"), { recursive: true, verbatimSymlinks: true });
   await symlink("/Applications", join(stage, "Applications"));
   await writeFile(join(stage, "安装说明.txt"),
-    "Crewvane｜协航\n\n将 Crewvane.app 拖入 Applications 后，从应用程序打开。\n" +
+    "Atte\n\n将 Atte.app 拖入 Applications 后，从应用程序打开。\n" +
     "适用于 Apple Silicon Mac。本内测版采用完整 ad-hoc 签名，但尚未使用 Apple Developer ID 签名与公证。\n" +
     "若提示“无法验证开发者”，请在 macOS 系统设置 > 隐私与安全性中选择“仍要打开”。\n" +
     "若提示“已损坏”，请核对 SHA-256 并从 GitHub Releases 重新下载当前版本，不要继续使用 v0.3.0。\n" +

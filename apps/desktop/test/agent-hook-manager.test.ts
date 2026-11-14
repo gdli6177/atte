@@ -137,7 +137,7 @@ test("all supported detected Agents install once, preserve user hooks, and expos
   }
   const ompPath = join(home, ".omp", "agent", "extensions", "crewvane.js");
   const omp = await readFile(ompPath, "utf8");
-  assert.match(omp, /Crewvane managed OMP extension/);
+  assert.match(omp, /Atte managed OMP extension/);
   assert.match(omp, /pi\.on\("turn_start"/);
   assert.doesNotMatch(omp, /tool_execution_start/);
   assert.equal((await stat(ompPath)).mode & 0o777, 0o600);
@@ -272,7 +272,7 @@ test("every JSON adapter preserves pre-existing hooks and uninstall restores the
     false);
 });
 
-test("disable and uninstall remove only Crewvane entries and stay suppressed across auto-install", async () => {
+test("disable and uninstall remove only Atte entries and stay suppressed across auto-install", async () => {
   const { home, manager } = await fixture(["cursor-agent"]);
   const path = join(home, ".cursor", "hooks.json");
   await mkdir(dirname(path), { recursive: true });
@@ -412,7 +412,7 @@ test("configuration symlinks and unrelated OMP marker comments are never replace
   await assert.rejects(manager.install("cursor"), /真实文件/);
   assert.equal(await readFile(target, "utf8"), body);
   const ompPath = join(home, ".omp", "agent", "extensions", "crewvane.js");
-  const extension = "// user extension\n// mentions Crewvane managed OMP extension\n";
+  const extension = "// user extension\n// mentions Atte managed OMP extension\n";
   await mkdir(dirname(ompPath), { recursive: true });
   await writeFile(ompPath, extension);
   await assert.rejects(manager.install("omp"), /同名文件/);

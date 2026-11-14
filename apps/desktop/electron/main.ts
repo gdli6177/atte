@@ -440,7 +440,7 @@ async function prepareHerdrCompanionsNow(workspace = root) {
   } catch (error) {
     if (window && !window.isDestroyed()) window.webContents.send("crewvane:event", {
       type: "diagnostic",
-      message: `Crewvane CLI 或 Agent Hook 准备暂未完成：${error instanceof Error ? error.message : String(error)}`,
+      message: `Atte CLI 或 Agent Hook 准备暂未完成：${error instanceof Error ? error.message : String(error)}`,
     });
   }
   const control = await sessionControl.status();
@@ -462,7 +462,7 @@ async function installHerdr() {
   } catch (error) {
     if (window && !window.isDestroyed()) window.webContents.send("crewvane:event", {
       type: "diagnostic",
-      message: `Crewvane CLI 或 Agent Hook 准备暂未完成：${error instanceof Error ? error.message : String(error)}`,
+      message: `Atte CLI 或 Agent Hook 准备暂未完成：${error instanceof Error ? error.message : String(error)}`,
     });
   }
   const status = await herdrInstallation.ensure(true);
@@ -565,7 +565,7 @@ async function installCliNow(workspace = root) {
     const target = await readlink(status.path).catch(() => "");
     if (!existing.startsWith("#!/bin/sh\n# Crewvane embedded CLI\n") &&
       linked !== join(status.directory, "crewvane") && target !== join(status.directory, "crewvane"))
-      throw new Error(`${status.path} 已存在，且不是 Crewvane 安装的 CLI。请手动处理后重试。`);
+      throw new Error(`${status.path} 已存在，且不是 Atte 安装的 CLI。请手动处理后重试。`);
   }
   const cliRuntime = app.isPackaged ? join(process.resourcesPath, "cli-node") : process.execPath;
   const cliBundle = app.isPackaged ? join(process.resourcesPath, "app.asar.unpacked/dist/cli/crewvane.cjs") : join(here, "cli/crewvane.cjs");
@@ -984,7 +984,7 @@ function restartOwnerName(goal: Goal) {
 }
 function restartOwnerTask(goal: Goal) {
   return [
-    `目标「${goal.title}」已由用户从 Crewvane 重新启动。`,
+    `目标「${goal.title}」已由用户从 Atte 重新启动。`,
     `目标 ID：${goal.id}`,
     "这是续接原目标，不是新任务。先运行 crewvane goal show " + goal.id +
       " --json 核对当前记录、上次成果和原会话上下文；不要重复已经完成的工作。",
@@ -1036,7 +1036,7 @@ async function doPrepareConcierge(target: WorkspaceService) {
     const reported = (error instanceof Error ? error.message : String(error))
       .split(/\r?\n/).find(line => line.trim())?.trim() ?? "";
     const detail = reported.slice(0, 800) ||
-      "管家初始化尚未确认；请打开原现场核对，Crewvane 不会重复创建或重发。";
+      "管家初始化尚未确认；请打开原现场核对，Atte 不会重复创建或重发。";
     await target.execute({ type: "concierge.status", status: "error", reference: (await target.read()).concierge, detail });
     throw new Error(`管家尚未准备好：${detail}`);
   }
@@ -1540,7 +1540,7 @@ async function requestNeutralSceneReply(workspace: string, goal: Goal) {
     [
       `用户已查看当前现场。如果「${question}」已在现场由用户明确答复，`,
       `立即把这个明确事实与用户原话通过 crewvane goal scene-reply ${goal.id} 写回；`,
-      "不要只回复“已回答”。如果尚未处理，继续当前工作或保持原状态；后续仍需按 Crewvane 语义命令写回。",
+      "不要只回复“已回答”。如果尚未处理，继续当前工作或保持原状态；后续仍需按 Atte 语义命令写回。",
     ].join(""),
   );
   return receipt.status !== "rejected";
@@ -1636,7 +1636,7 @@ async function deliverAttentionNotifications(target: WorkspaceService, state: Aw
     const kind = attentionKind(goal)!;
     if (!goal.attention?.notifiedAt && Notification.isSupported()) {
       try {
-        const notification = new Notification({ title: kind === "review" ? "有一份成果等你验收" : kind === "follow_up" ? "到了该跟进的时候" : "Crewvane · 需要你处理", body: `${goal.title}\n${goal.attention?.summary ?? goal.next}`.slice(0, 220) });
+        const notification = new Notification({ title: kind === "review" ? "有一份成果等你验收" : kind === "follow_up" ? "到了该跟进的时候" : "Atte · 需要你处理", body: `${goal.title}\n${goal.attention?.summary ?? goal.next}`.slice(0, 220) });
         notification.on("click", () => { window.show(); window.webContents.send("crewvane:event", { type: "open-goal", goalId: goal.id }); });
         notification.show();
         await target.execute({ type: "notification.sent", goalId: goal.id, kind,
@@ -1826,6 +1826,7 @@ async function synchronize() {
     if (root === workspace && !window.isDestroyed()) window.webContents.send("crewvane:event", { type: "diagnostic", message: `后台同步暂未成功：${error instanceof Error ? error.message : String(error)}` });
   } finally { syncing = false; }
 }
+app.setPath("userData", process.env.CREWVANE_TEST_USER_DATA ?? join(app.getPath("appData"), "Crewvane"));
 const singleInstance = process.env.CREWVANE_TEST_USER_DATA ? true : app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
 app.on("second-instance", () => { window?.show(); window?.focus(); });
@@ -1921,13 +1922,13 @@ app.whenReady().then(async () => {
     app.getVersion(),
     ["crewvane", "crewvane-local-pack-author"],
   );
-  app.setName("Crewvane");
+  app.setName("Atte");
   // BrowserWindow.icon is ignored by the macOS Dock in development.
   // Packaged builds embed the same artwork as their CFBundleIconFile.
   app.dock?.setIcon(nativeImage.createFromPath(join(here, "assets/crewvane-icon.png")));
   process.env.PATH = (await tools.paths()).join(":");
   const width = Number(process.env.CREWVANE_TEST_WINDOW_WIDTH), height = Number(process.env.CREWVANE_TEST_WINDOW_HEIGHT);
-  window = new BrowserWindow({ width: Number.isFinite(width) && width >= 900 ? width : 1440, height: Number.isFinite(height) && height >= 700 ? height : 960, minWidth: 900, minHeight: 700, title: "Crewvane · 协航", titleBarStyle: "hiddenInset", backgroundColor: WINDOW_BACKGROUND, icon: join(here, "assets/crewvane-icon.png"), webPreferences: { preload: join(here, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  window = new BrowserWindow({ width: Number.isFinite(width) && width >= 900 ? width : 1440, height: Number.isFinite(height) && height >= 700 ? height : 960, minWidth: 900, minHeight: 700, title: "Atte", titleBarStyle: "hiddenInset", backgroundColor: WINDOW_BACKGROUND, icon: join(here, "assets/crewvane-icon.png"), webPreferences: { preload: join(here, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" })); window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   window.on("close", (event) => { if (!quitting) { event.preventDefault(); window.hide(); } });
@@ -1956,7 +1957,7 @@ app.whenReady().then(async () => {
       error = await shell.openPath(path);
     if (error) throw new Error(error);
   });
-  ipcMain.handle("crewvane:workspace", async (event) => { sender(event); const picked = await dialog.showOpenDialog(window, { title: "选择 Crewvane 工作区", properties: ["openDirectory", "createDirectory"] }); if (picked.canceled || !picked.filePaths[0]) return null; await openWorkspace(picked.filePaths[0]); return root; });
+  ipcMain.handle("crewvane:workspace", async (event) => { sender(event); const picked = await dialog.showOpenDialog(window, { title: "选择 Atte 工作区", properties: ["openDirectory", "createDirectory"] }); if (picked.canceled || !picked.filePaths[0]) return null; await openWorkspace(picked.filePaths[0]); return root; });
   ipcMain.handle("crewvane:project", async (event) => { sender(event); const picked = await dialog.showOpenDialog(window, { title: "选择项目目录", properties: ["openDirectory"] }); const path = picked.filePaths[0]; if (!path) return null; const real = await realpath(path); selections.add(real); return real; });
   ipcMain.handle("crewvane:command", async (event, command: CrewvaneCommand) => {
     sender(event); if (!command || JSON.stringify(command).length > 256_000) throw new Error("无效的命令");
@@ -2228,8 +2229,8 @@ app.whenReady().then(async () => {
   const trayIcon = traySource.resize({ width: 18, height: 18, quality: "best" });
   trayIcon.addRepresentation({ scaleFactor: 2, buffer: traySource.resize({ width: 36, height: 36, quality: "best" }).toPNG() });
   trayIcon.setTemplateImage(false);
-  tray = new Tray(trayIcon); tray.setToolTip("Crewvane · 协航"); tray.setContextMenu(Menu.buildFromTemplate([{ label: "打开 Crewvane", click: () => { window.show(); window.focus(); } }, { type: "separator" }, { label: "退出", click: () => app.quit() }])); tray.on("click", () => { window.show(); window.focus(); });
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "Crewvane", submenu: [{ role: "about" }, { type: "separator" }, { role: "hide" }, { role: "quit" }] }, { role: "editMenu" }, { role: "viewMenu" }]));
+  tray = new Tray(trayIcon); tray.setToolTip("Atte"); tray.setContextMenu(Menu.buildFromTemplate([{ label: "打开 Atte", click: () => { window.show(); window.focus(); } }, { type: "separator" }, { label: "退出", click: () => app.quit() }])); tray.on("click", () => { window.show(); window.focus(); });
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "Atte", submenu: [{ role: "about" }, { type: "separator" }, { role: "hide" }, { role: "quit" }] }, { role: "editMenu" }, { role: "viewMenu" }]));
   await window.loadURL(rendererURL);
   if (process.env.CREWVANE_TEST_SKIP_HERDR_SETUP !== "1")
     void prepareHerdrCompanions().catch(() => { /* persistent readiness error is shown by the renderer */ });

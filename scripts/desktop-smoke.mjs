@@ -144,7 +144,7 @@ await service.execute({
 });
 const app = await electron.launch({
   executablePath: resolve(process.env.CREWVANE_APP_PATH ||
-    "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+    "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
   args: [],
   env: {
     ...process.env,
@@ -608,7 +608,7 @@ try {
     "auto",
   );
   await page.screenshot({ path: join(home, "settings-scrolled-fixed-topbar-dark.png"), animations: "disabled" });
-  await page.getByText(new RegExp(`Crewvane ${appVersion.replaceAll(".", "\\.")} · 一位管家`)).waitFor();
+  await page.getByText(new RegExp(`Atte ${appVersion.replaceAll(".", "\\.")} · 一位管家`)).waitFor();
   await page.getByRole("button", { name: "浅色模式" }).click();
   await page.getByRole("button", { name: "注意力", exact: true }).click();
   const riskGoal = await page.evaluate(() => window.crewvane.command({

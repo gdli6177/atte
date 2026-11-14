@@ -141,7 +141,7 @@ test("decision ledger suppresses repeated approvals and rejections and writes re
   assert.match(approved, /批准周六上线/);
   assert.match(approved, /Herdr 注意力面板/);
   assert.match(rejected, /拒绝删除旧数据/);
-  assert.match(rejected, /Crewvane 桌面/);
+  assert.match(rejected, /Atte 桌面/);
 });
 
 test("all mandatory high-risk actions escalate even when the project policy is automatic", async () => {

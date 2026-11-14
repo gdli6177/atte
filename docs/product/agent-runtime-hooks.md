@@ -1,6 +1,6 @@
 # Agent Runtime Hooks 与即时事件
 
-Crewvane 0.7 将 Agent 生命周期观测统一到一个受管的 Agent Runtime Adapter 层。它解决的是“会话发生了什么”的可见性问题，不替代 Crewvane 的目标语义协议。
+Atte 0.7 将 Agent 生命周期观测统一到一个受管的 Agent Runtime Adapter 层。它解决的是“会话发生了什么”的可见性问题，不替代 Atte 的目标语义协议。
 
 ## 边界
 
@@ -13,7 +13,7 @@ Hook 只证明如下事实：
 
 Hook 不证明目标已完成、交付可验收、第三方正在等待、需要人决定或安全风险已经消失。这些业务事实仍只能由 `crewvane goal progress / wait / review / decide / risk / ship / accept / ...` 写入。
 
-Crewvane 不解析终端画面，不根据 `idle`、`done` 或自然语言猜测状态，也不把工具调用参数、工具结果或终端滚动全文存入目标。
+Atte 不解析终端画面，不根据 `idle`、`done` 或自然语言猜测状态，也不把工具调用参数、工具结果或终端滚动全文存入目标。
 
 ## 组件
 
@@ -45,7 +45,7 @@ crewvane hook ingest --adapter <id>
 
 | Agent | 接入方式 | 生命周期事件 | 配置位置 | 降级或信任 |
 | --- | --- | --- | --- | --- |
-| Codex | 官方 command Hooks | SessionStart、UserPromptSubmit、PermissionRequest、Stop、Interrupt、SessionEnd | `~/.codex/hooks.json` | 需要在 `/hooks` 中信任 Crewvane 条目 |
+| Codex | 官方 command Hooks | SessionStart、UserPromptSubmit、PermissionRequest、Stop、Interrupt、SessionEnd | `~/.codex/hooks.json` | 需要在 `/hooks` 中信任 Atte 条目 |
 | Claude Code | 官方 command Hooks | SessionStart、UserPromptSubmit、Notification、Stop、SessionEnd | `~/.claude/settings.json` | 保留用户已有 Hook；Stop 可提供回复正文 |
 | Cursor | 官方 v1 Hooks | sessionStart、beforeSubmitPrompt、afterAgentResponse、stop、sessionEnd | `~/.cursor/hooks.json` | v2 或未知格式显示“版本不支持” |
 | Qoder | 官方 command Hooks | SessionStart、UserPromptSubmit、Notification/Permission、Stop、SessionEnd | `~/.qoder/settings.json` | 兼容 Claude 式 grouped config |
@@ -53,7 +53,7 @@ crewvane hook ingest --adapter <id>
 
 v1 不安装 PreToolUse / PostToolUse Hook。工具级事件每次启动进程并在高并发下重复写盘，对本版目标没有足够收益；Herdr 的工作心跳和 Hook 的 turn 生命周期已经覆盖主要需求。
 
-配置安装采用 marker、首次备份、JSON 解析合并与原子替换。重复安装幂等；“停用”和“卸载”只移除 Crewvane 管理条目。损坏 JSON、未来 schema、同名 OMP extension 或无法识别的版本会停止自动更新并保留原文件。
+配置安装采用 marker、首次备份、JSON 解析合并与原子替换。重复安装幂等；“停用”和“卸载”只移除 Atte 管理条目。损坏 JSON、未来 schema、同名 OMP extension 或无法识别的版本会停止自动更新并保留原文件。
 
 自动安装、手动安装、停用、卸载与信任记录按同一修改队列串行执行，临时文件使用唯一名称，避免首次启动与设置操作并发时相互覆盖。
 
@@ -63,7 +63,7 @@ Agent 启动停在 Hook 或目录信任提示时保留真实现场，不自动�
 
 状态解释使用固定优先级：
 
-1. 当前目标的结构化 Crewvane CLI 写回；
+1. 当前目标的结构化 Atte CLI 写回；
 2. 当前 attempt 的原生 Hook 事件；
 3. Herdr 生命周期；
 4. Watchdog。

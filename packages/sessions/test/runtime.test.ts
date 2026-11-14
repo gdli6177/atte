@@ -117,7 +117,7 @@ test("rediscovering a created concierge initializes its identity once before any
   const scene = await f.runtime.prepareConcierge();
   assert.equal(f.created.length, 1);
   assert.equal(f.sent.length, 1);
-  assert.match(f.sent[0]!.text, /这是 Crewvane 身份初始化/);
+  assert.match(f.sent[0]!.text, /这是 Atte 身份初始化/);
   const restartedRuntime = new SessionRuntime(f.runtime.options);
   await restartedRuntime.prepareConcierge();
   assert.equal(f.sent.length, 1);

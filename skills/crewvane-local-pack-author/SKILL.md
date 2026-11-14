@@ -1,9 +1,9 @@
 ---
 name: crewvane-local-pack-author
-description: Create, validate, and install a Crewvane local method pack from a user's workflow, checklist, or existing SOP. Use when the user asks to save a repeatable Crewvane method, turn a completed workflow into a reusable capability, or install a local capability pack.
+description: Create, validate, and install a Atte local method pack from a user's workflow, checklist, or existing SOP. Use when the user asks to save a repeatable Atte method, turn a completed workflow into a reusable capability, or install a local capability pack.
 ---
 
-# Crewvane Local Pack Author
+# Atte Local Pack Author
 
 Create a reusable method from the user's real workflow. Keep the experience conversational: the user should not edit JSON or know the storage layout.
 

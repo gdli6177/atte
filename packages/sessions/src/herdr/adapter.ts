@@ -294,7 +294,7 @@ export class HerdrAdapter implements SessionAdapter {
             const directory = await privateDirectory(join(this.options.directory, "payloads"));
             const path = `${childPath(directory, input.deliveryId)}.txt`;
             await writeFile(path, input.text, { mode: 0o600, flag: "wx" });
-            prompt = `这是 Crewvane 的一次受管消息投递，不是 shell 命令。请先用文件读取工具完整读取 ${path}，再按其中的角色、案卷和 Crewvane CLI 协议执行。不要只回复已读。投递 ID：${input.deliveryId}；正文 SHA-256：${input.payloadSha256}。`;
+            prompt = `这是 Atte 的一次受管消息投递，不是 shell 命令。请先用文件读取工具完整读取 ${path}，再按其中的角色、案卷和 Atte CLI 协议执行。不要只回复已读。投递 ID：${input.deliveryId}；正文 SHA-256：${input.payloadSha256}。`;
           }
           await this.raw(["agent", "prompt", scene.locator.paneId, prompt, "--wait", "--until", "working", "--timeout", "10000"], 12_000);
           receipt.status = "started";

@@ -172,7 +172,7 @@ test("OMP response capture ignores tool-result messages", () => {
   assert.equal(JSON.stringify(normalized).includes("private tool output"), false);
 });
 
-test("events outside a managed Crewvane target are a no-op", async () => {
+test("events outside a managed Atte target are a no-op", async () => {
   const workspace = await root();
   let called = false;
   const result = await ingestAgentHook({

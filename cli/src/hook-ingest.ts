@@ -72,7 +72,7 @@ export async function ingestAgentHook(input: HookIngestInput): Promise<{
     token = environment.CREWVANE_HOOK_TOKEN?.trim(),
     agent = environment.CREWVANE_AGENT_NAME?.trim(),
     workspace = environment.CREWVANE_WORKSPACE?.trim();
-  // Installed Hooks are global. An Agent outside a Crewvane target is a no-op.
+  // Installed Hooks are global. An Agent outside a Atte target is a no-op.
   if (!goalId || !attemptId || !token || !agent || !workspace)
     return { accepted: false, reason: "not_managed" };
   if (!isAgentRuntimeAdapter(input.adapter))

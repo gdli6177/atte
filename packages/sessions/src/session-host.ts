@@ -36,7 +36,7 @@ Promise<{ handled: false } | { handled: true; result: unknown }> {
   }
   if (!record(value) || value.version !== 1 || typeof value.CREWVANE_RECOVERY_DIRECTORY !== "string" ||
     typeof value.CREWVANE_RECOVERY_TOKEN !== "string")
-    throw new Error("会话 Host 描述文件损坏；请重新打开 Crewvane。");
+    throw new Error("会话 Host 描述文件损坏；请重新打开 Atte。");
   const result = await requestSessionRecovery({
     CREWVANE_RECOVERY_DIRECTORY: value.CREWVANE_RECOVERY_DIRECTORY,
     CREWVANE_RECOVERY_TOKEN: value.CREWVANE_RECOVERY_TOKEN,

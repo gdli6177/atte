@@ -2,7 +2,7 @@
 set -eu
 
 if [ "${HERDR_ENV:-}" != "1" ]; then
-  printf '%s\n' "Crewvane: open this action from inside Herdr." >&2
+  printf '%s\n' "Atte: open this action from inside Herdr." >&2
   exit 1
 fi
 

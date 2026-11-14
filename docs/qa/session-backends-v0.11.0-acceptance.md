@@ -1,4 +1,4 @@
-# Crewvane 0.11.0 双后端选择：开发验收合同
+# Atte 0.11.0 双后端选择：开发验收合同
 
 日期：2026-11-13。规格：[设置切换 Herdr / Orca](../product/session-backends-v0.11.0.md)。
 
@@ -21,7 +21,7 @@
 | --- | --- | --- |
 | INV01 | 设置选择 Herdr / Orca | 只有一个 selected；不能按目标/项目覆盖 |
 | INV02 | 切换两方向 | 所有旧受管执行进程先确认停止，才出现新 backend 的首个业务 Agent |
-| INV03 | 新目标、关注、状态写回 | 目标、attention、决定和验收只有 Crewvane 一份；Orca Task 不参与 |
+| INV03 | 新目标、关注、状态写回 | 目标、attention、决定和验收只有 Atte 一份；Orca Task 不参与 |
 | INV04 | 旧 backendEpoch/attempt 事件迟到 | 不能改当前状态、结束目标、解掉新问题或启动旧 backend |
 | INV05 | 终端 idle/completed/blocked/unread | 运行事实与业务状态分开，不能自动验收 |
 | INV06 | 目标消息已经被接受但返回超时 | 保留 unconfirmed；原 ID/正文不被换新后自动重放 |
@@ -99,7 +99,7 @@
 | ORC06 | 应用身份、代码签名或完整性校验失败 | 标记 `incompatible`，不执行、不激活、不关闭旧后端；不能提示用户清除 quarantine 来绕过 |
 | ORC07 | 用户通过 `选择已有 Orca` 选中已安装应用 | 验证 bundle、官方 CLI/runtime、版本和能力；兼容时复用已运行 runtime 并激活，不启动第二份 server |
 | ORC08 | 找到 Orca 应用但 CLI/runtime 缺失，或版本不在兼容表 | 分别为 `unverified` / `incompatible`；引导修复或官方升级并支持 `重新检测`；修复前保持不可选 |
-| ORC09 | 用户已有 Orca、运行中的工程和自定义全局设置 | Crewvane 不静默覆盖、降级或替换应用，不启动第二份 runtime，不改工程和全局设置 |
+| ORC09 | 用户已有 Orca、运行中的工程和自定义全局设置 | Atte 不静默覆盖、降级或替换应用，不启动第二份 runtime，不改工程和全局设置 |
 | ORC10 | 设置点击检查更新/更新 Orca，并取消、离线或发现未验证新版 | 展示已装与已验证版本；仅开放已验证官方包，安装后重检，失败/取消保留选择，更新期间不重复派发或误认旧现场 |
 
 ## 4. 打包应用真实端到端试用
@@ -110,13 +110,13 @@
 | --- | --- | --- |
 | E2E01 | 从 Finder 打开包 → 默认 Herdr → 一句话同时提出两个目标，分别生成阶段工件并progress回报 | 一个管家、两个负责人；两目标都保持active且有明确下一步，不提前进入review；工件断言通过，互不串目标 |
 | E2E02 | 两个负责人均已回报 → 设置确认切 Orca | 旧受管 Agent 停止；创建一个新管家；两个目标依据案卷继续，无重复产物/副作用 |
-| E2E03 | 切回 Herdr | 同样的互斥与恢复保证；Orca 不再接收 Crewvane 新业务任务 |
+| E2E03 | 切回 Herdr | 同样的互斥与恢复保证；Orca 不再接收 Atte 新业务任务 |
 | E2E04 | Orca 选中、Herdr 二进制不可用 | 新目标、管家、负责人、语义写回、人工决定、验收、结束完整通过 |
 | E2E05 | 新配置没有 Orca | ORC01–ORC09通过；安装前选择不生效，不要求用户敲 brew/Node 命令 |
-| E2E06 | 保持用户自己开的 Orca 工程和 Herdr default | 两方向切换后它们仍存在且内容/全局配置未被 Crewvane 改写 |
+| E2E06 | 保持用户自己开的 Orca 工程和 Herdr default | 两方向切换后它们仍存在且内容/全局配置未被 Atte 改写 |
 | E2E07 | 同普通目录、跨两个项目、无 Git 的个人事项 | 创建与精确聚焦正确；没有额外 git init、分支或 worktree |
 | E2E08 | 连续20次从不同目标“回到现场”，再关闭 Orca 窗口重开 | 定位对应真实 terminal，不新建20个现场或Agent |
-| E2E09 | `.zshrc` alias 和函数 cursor-2；中文/空格 cwd；长 PATH | 启动的真实程序、argv、cwd、Crewvane root 正确；不替换成 cursor-agent |
+| E2E09 | `.zshrc` alias 和函数 cursor-2；中文/空格 cwd；长 PATH | 启动的真实程序、argv、cwd、Atte root 正确；不替换成 cursor-agent |
 | E2E10 | 提交20,000字单段目标、长补充与图片 | 目标不因首行超长失败；任务正文不截断，图片文件可读取 |
 | E2E11 | 原生 Orca 现场复制/粘贴文本、粘贴图片、输入法、Agent快捷键 | 使用与单独 Orca 相同路径；Crewvane不吞键；Agent实际识别图片内容 |
 | E2E12 | 在负责人现场回答 attention 问题，执行CLI写回 | 解决当前问题，app及时更新；旧attention的迟到答案不能解除新问题 |

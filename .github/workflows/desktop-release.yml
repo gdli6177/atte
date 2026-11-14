@@ -77,7 +77,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > notes.md <<'NOTES'
-          Crewvane｜协航 0.11.0 · macOS Apple Silicon
+          Atte 0.11.0 · macOS Apple Silicon
 
           ## 本版更新
 
@@ -86,20 +86,20 @@ jobs:
           - 双向切换保留目标、消息、注意力与验收，停止旧现场后按案卷恢复；不搬终端全文。
           - 注意力与 Agent 现场双向同步：问题、人的现场原话与管家解除事项使用同一 ID；旧回执不能清掉新问题。
           - 修复 OMP 长案卷输入可能停在未提交草稿的问题：完整正文使用私有文件传递，已结束且过保留期的正文自动清理。
-          - 统一保护 Codex、Claude Code、Cursor、Qoder 与 OMP 的已有 Hooks / Extensions；安装和升级合并配置，停用和卸载只移除 Crewvane 条目，保留 OpenViking 等第三方能力。
+          - 统一保护 Codex、Claude Code、Cursor、Qoder 与 OMP 的已有 Hooks / Extensions；安装和升级合并配置，停用和卸载只移除 Atte 条目，保留 OpenViking 等第三方能力。
           - 交接等待真实现场或结构化协调证据；未知结果保持恢复状态，不把输入被接受当作处理完成，也不自动重发任务。
           - 修复 Orca 后台终端误报不可达，以及复用已初始化管家后一直显示“正在准备”的问题。
           - 管家上一回合结束后才切换下一案卷；正常启动与投递复用桌面受控通道，避免受限 Agent 的进程查询权限阻塞负责人启动。
-          - 代码负责传输、身份、幂等、状态与恢复；Skills 负责协调与执行方法。Crewvane CLI 仍是唯一业务语义写入口。
+          - 代码负责传输、身份、幂等、状态与恢复；Skills 负责协调与执行方法。Atte CLI 仍是唯一业务语义写入口。
           - 保留注意力、协调收件箱、Agent Hooks、Webhook、自主目标、外部终端和内嵌轻现场原有行为。
 
           ## 安装
 
-          仅支持 Apple Silicon Mac（arm64）。从 Assets 下载 .dmg，将 Crewvane.app 拖入 Applications；也可下载 .zip 解压安装。
+          仅支持 Apple Silicon Mac（arm64）。从 Assets 下载 .dmg，将 Atte.app 拖入 Applications；也可下载 .zip 解压安装。
           SHA256SUMS.txt 可用于校验下载文件。GitHub 自动生成的 Source code 是源码，不是安装包。
-          安装或替换应用后，请在设置中重新安装 Crewvane CLI，并检查“Agent 接入”和“工作方法”。
-          如旧版已安装 Crewvane Skill，请在设置中重新安装 Skill，以同时获得主协议和本地能力包创建器。
-          Codex 首次使用受管 Hook 时，请按 Codex 提示在 /hooks 中审核并信任 Crewvane 条目。
+          安装或替换应用后，请在设置中重新安装 Atte CLI，并检查“Agent 接入”和“工作方法”。
+          如旧版已安装 Atte Skill，请在设置中重新安装 Skill，以同时获得主协议和本地能力包创建器。
+          Codex 首次使用受管 Hook 时，请按 Codex 提示在 /hooks 中审核并信任 Atte 条目。
           有效 v3 工作区会先备份到 .crewvane/state.v3.backup.json 后迁移到 v4；有效 v2 同样先备份再迁移。
           当前安装包没有 Apple Developer ID 签名与公证，macOS 可能提示无法验证开发者。
           核对发布来源后，可在系统设置 > 隐私与安全性中按提示选择仍要打开。
@@ -110,5 +110,5 @@ jobs:
             gh release upload "$RELEASE_TAG" installers/* --clobber
           else
             gh release create "$RELEASE_TAG" installers/* --draft --prerelease --verify-tag \
-              --title "Crewvane $RELEASE_TAG" --notes-file notes.md
+              --title "Atte $RELEASE_TAG" --notes-file notes.md
           fi

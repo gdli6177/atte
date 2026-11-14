@@ -536,9 +536,9 @@ function App() {
       </a>
       <aside className="sidebar">
         <div className="brand">
-          <img src={pixelMark} alt="Crewvane" />
+          <img src={pixelMark} alt="Atte" />
           <div>
-            <strong>Crewvane</strong>
+            <strong>Atte</strong>
             <span>协 航</span>
           </div>
         </div>
@@ -768,7 +768,7 @@ function App() {
         )}
           {!workspace ? (
             <section className="welcome">
-              <img src={pixelMark} alt="Crewvane" />
+              <img src={pixelMark} alt="Atte" />
               <span className="eyebrow">YOUR MIND, CLEARER</span>
               <h1>
                 把事情放下，
@@ -1153,7 +1153,7 @@ function App() {
                     setSkills(result.status);
                     notify(result.errors.length
                       ? `Skills 已更新；${result.errors.length} 个目录因已有同名技能而跳过。`
-                      : "Crewvane Skills 已安装到检测到的 Agent。");
+                      : "Atte Skills 已安装到检测到的 Agent。");
                   }
                   if (action === "agent-hooks") {
                     setAgentHooks(await api.agentRuntimeStatus());
@@ -1201,7 +1201,7 @@ function App() {
       {modal === "workspace" && <Modal title="工作区存储位置" description="这里只设置所有目标、提醒和管家的保存位置，不是选择项目。" error={error} onClose={() => setModal("")}>
         <div className="workspace-location">
           <Folder size={22} />
-          <div><strong>{workspace ? "当前工作区" : "先选择一个工作区文件夹"}</strong><p>{workspace || "建议创建一个专门的文件夹，例如 Documents/Crewvane。"}</p></div>
+          <div><strong>{workspace ? "当前工作区" : "先选择一个工作区文件夹"}</strong><p>{workspace || "建议创建一个专门的文件夹，例如 Documents/Atte。"}</p></div>
         </div>
         <p className="workspace-help">要处理某个代码项目，请在左侧「项目」旁点 + 添加。切换工作区后，将显示所选目录自己的目标和管家。</p>
         <div className="form-actions">
@@ -1803,7 +1803,7 @@ function Settings({
               <div className="external-herdr-command" role="group" aria-label="在外部终端打开同一 Herdr 会话">
                 <div>
                   <strong>在 iTerm2 / Terminal 中打开同一现场</strong>
-                  <p>裸跑 herdr 默认连接 default Session，不会自动显示这个工作区；复制下面的命令才能进入 Crewvane 当前 Session。</p>
+                  <p>裸跑 herdr 默认连接 default Session，不会自动显示这个工作区；复制下面的命令才能进入 Atte 当前 Session。</p>
                   <code>herdr session attach {herdr.session}</code>
                 </div>
                 <Button
@@ -1886,7 +1886,7 @@ function Settings({
         <MethodLibrary busy={busy} notify={notify} workspace={workspace} />
         <SettingsSection
           icon={<Zap />}
-          title="Crewvane 命令行"
+          title="Atte 命令行"
           description="管家通过它读写当前案卷，不能列出或修改其他目标。应用内置，无需另外安装 Node。"
         >
           <div className="settings-facts">
@@ -1905,8 +1905,8 @@ function Settings({
         </SettingsSection>
         <SettingsSection
           icon={<Bot />}
-          title="让外部 Agent 会使用 Crewvane"
-          description="安装随应用打包的 Crewvane Skill。Codex、Claude Code、Cursor 或其他读取通用 Agent Skills 目录的工具，可以直接提交目标、查看目标并追加说明。"
+          title="让外部 Agent 会使用 Atte"
+          description="安装随应用打包的 Atte Skill。Codex、Claude Code、Cursor 或其他读取通用 Agent Skills 目录的工具，可以直接提交目标、查看目标并追加说明。"
         >
           {skills?.targets?.length ? (
             <div className="skill-targets">
@@ -2023,7 +2023,7 @@ function Settings({
           </div>
         </section>
         <p className="settings-foot">
-          Crewvane {version} · 一位管家 · {state.projects.length} 个项目 ·{" "}
+          Atte {version} · 一位管家 · {state.projects.length} 个项目 ·{" "}
           {state.goals.length} 个目标
         </p>
       </div>
@@ -2125,8 +2125,8 @@ function SceneSettingsEditor({
           />
           <p>
             {openWith === "external"
-              ? "使用你熟悉的真实终端，Crewvane 只负责定位同一 Herdr Session 和目标 Tab。"
-              : "不离开 Crewvane，复杂快捷键或图片输入可随时切到外部终端。"}
+              ? "使用你熟悉的真实终端，Atte 只负责定位同一 Herdr Session 和目标 Tab。"
+              : "不离开 Atte，复杂快捷键或图片输入可随时切到外部终端。"}
           </p>
         </div>
         <div>
@@ -2302,9 +2302,9 @@ function MethodLibrary({
   async function copyAuthorPrompt() {
     try {
       await api.writeClipboardText(
-        `请使用 crewvane-local-pack-author，把我接下来描述的工作方法创建成 Crewvane 本地能力包。先问我真正缺少的信息，使用 crewvane skill draft / validate 创建草稿，展示名称、适用范围、步骤、检查清单和 script SHA-256；得到我明确确认后再 install。工作区：${workspace}`,
+        `请使用 crewvane-local-pack-author，把我接下来描述的工作方法创建成 Atte 本地能力包。先问我真正缺少的信息，使用 crewvane skill draft / validate 创建草稿，展示名称、适用范围、步骤、检查清单和 script SHA-256；得到我明确确认后再 install。工作区：${workspace}`,
       );
-      notify("创建说明已复制，可发给任意已安装 Crewvane Skills 的 Agent。");
+      notify("创建说明已复制，可发给任意已安装 Atte Skills 的 Agent。");
     } catch (reason) {
       setFailure(errorText(reason));
     }
@@ -2434,7 +2434,7 @@ function MethodLibrary({
                 <BookOpen size={14} />
                 {builtinPacks.length} 个内置方法
               </span>
-              <small>由 Crewvane 随版本维护，可查看，不占用目标的本地槽位。</small>
+              <small>由 Atte 随版本维护，可查看，不占用目标的本地槽位。</small>
             </summary>
             <div>
               {builtinPacks.map(pack => (
@@ -3017,7 +3017,7 @@ function AgentRuntimeSettings({
       notify(action === "disable"
         ? "已停用 Hook；该 Agent 仍可使用当前会话后端与巡检状态。"
         : action === "uninstall"
-          ? "已移除 Crewvane 管理的 Hook，其他用户 Hook 保持不变。"
+          ? "已移除 Atte 管理的 Hook，其他用户 Hook 保持不变。"
           : "Agent Hook 已更新。");
     } catch (reason) {
       setFailure(String(reason).replace(
@@ -3033,7 +3033,7 @@ function AgentRuntimeSettings({
       wide
       icon={<Bot />}
       title="Agent 接入"
-      description="检测到兼容 Agent 后自动安装受管 Hook。Hook 只证明会话、回合和阻塞等生命周期；目标完成、外部等待、找人决定和验收仍由 Crewvane CLI 结构化写回。"
+      description="检测到兼容 Agent 后自动安装受管 Hook。Hook 只证明会话、回合和阻塞等生命周期；目标完成、外部等待、找人决定和验收仍由 Atte CLI 结构化写回。"
     >
       <div className="agent-runtime-list">
         {adapters.length ? adapters.map(adapter => {
@@ -3056,7 +3056,7 @@ function AgentRuntimeSettings({
               <div className="agent-runtime-detail">
                 <span>
                   {adapter.status === "waiting-trust"
-                    ? "在 Codex 中打开 /hooks 并信任 Crewvane 的条目后开始生效。"
+                    ? "在 Codex 中打开 /hooks 并信任 Atte 的条目后开始生效。"
                     : adapter.status === "not-installed"
                       ? adapter.command ? "已检测到本机 CLI，可安装受管 Hook。" : "未检测到本机 CLI。"
                       : adapter.status === "installed"
@@ -3113,7 +3113,7 @@ function AgentRuntimeSettings({
       </div>
       {failure && <p className="ui-field__error" role="alert">{failure}</p>}
       <p className="ui-field__hint">
-        Codex 官方 Hook 需要你在其 Hook 审查界面信任后才会运行。Crewvane 不会绕过信任流程，也不会覆盖你已有 Hooks 或 OMP extensions。
+        Codex 官方 Hook 需要你在其 Hook 审查界面信任后才会运行。Atte 不会绕过信任流程，也不会覆盖你已有 Hooks 或 OMP extensions。
       </p>
     </SettingsSection>
   );
@@ -3132,7 +3132,7 @@ function AgentPreferencesEditor({ preferences, options, busy, onSave }: {
       wide
       icon={<Bot />}
       title="Agent 启动命令"
-      description="填写每个角色的启动命令，可附带模型等原生参数。Crewvane 不替换 CLI，也不借用 Codex 等运行时专属的沙箱参数；已有会话继续工作，新会话使用保存后的命令。"
+      description="填写每个角色的启动命令，可附带模型等原生参数。Atte 不替换 CLI，也不借用 Codex 等运行时专属的沙箱参数；已有会话继续工作，新会话使用保存后的命令。"
     >
       <form
         className="ui-form"
@@ -3172,7 +3172,7 @@ function AgentPreferencesEditor({ preferences, options, busy, onSave }: {
         </datalist>
         <div className="ui-form__footer">
           <p className="ui-form__note">
-            填写本机任意交互式 CLI 和参数，例如 codex --model gpt-5、npx --yes my-agent。支持绝对路径与 ~/ 路径；切换 Herdr 或 Orca 后仍使用同一条命令。管家案卷边界由 Crewvane CLI 约束，不是操作系统文件沙箱。环境变量和 shell 表达式请放入自己的启动脚本。
+            填写本机任意交互式 CLI 和参数，例如 codex --model gpt-5、npx --yes my-agent。支持绝对路径与 ~/ 路径；切换 Herdr 或 Orca 后仍使用同一条命令。管家案卷边界由 Atte CLI 约束，不是操作系统文件沙箱。环境变量和 shell 表达式请放入自己的启动脚本。
           </p>
           <Button type="submit" variant="secondary" disabled={busy}>
             保存偏好

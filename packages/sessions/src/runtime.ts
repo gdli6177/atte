@@ -164,7 +164,7 @@ export class SessionRuntime {
       ...intent, installationId: control.installationId, cwd, executable, args: command.args, environment,
     });
     const launch: StoredLaunch = {
-      intent, files, cwd, title: input.role === "concierge" ? "Crewvane · 管家" : `Crewvane · ${goal!.title.slice(0, 60)}`,
+      intent, files, cwd, title: input.role === "concierge" ? "Atte · 管家" : `Atte · ${goal!.title.slice(0, 60)}`,
       hookTokenHash: createHash("sha256").update(hookToken).digest("hex"), runtimeAdapter: adapterId(executable),
     };
     await atomicJSON(this.launchPath(intent.requestId), launch);

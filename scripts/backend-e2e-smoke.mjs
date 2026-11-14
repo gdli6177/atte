@@ -1,5 +1,5 @@
 // Packaged-app, real-model trial. The concierge must create the owners itself.
-// Only this isolated Crewvane installation and named Herdr session are owned.
+// Only this isolated Atte installation and named Herdr session are owned.
 import assert from "node:assert/strict";
 import { _electron as electron, expect } from "@playwright/test";
 import { mkdtemp, mkdir, readFile, writeFile, realpath, access } from "node:fs/promises";
@@ -19,19 +19,19 @@ const workspace = join(trial, "工作 区"), home = join(trial, "home"), userDat
 await Promise.all([mkdir(workspace), mkdir(home)]);
 await writeFile(join(workspace, "AGENTS.md"), `# 隔离产品验收
 只处理本隔离工作区，不访问其他用户文件；不得提交、发布或发送外部消息。
-管家必须使用 Crewvane CLI 创建独立负责人，不能代为创建工件或执行业务检查。
+管家必须使用 Atte CLI 创建独立负责人，不能代为创建工件或执行业务检查。
 每个实际执行回合都写回 progress，不结束整个目标，不请求不必要的用户确认。
 `);
 const session = `cv-backend-${randomUUID().slice(0, 8)}`;
 const executablePath = resolve(process.env.CREWVANE_APP_PATH ||
-  "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane");
+  "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte");
 const env = { ...process.env, CREWVANE_TEST_WORKSPACE: workspace, CREWVANE_TEST_HOME: home,
   CREWVANE_TEST_USER_DATA: userData, CREWVANE_HERDR_SESSION: session, ORCA_USER_DATA_PATH: profile,
   // ORCA_USER_DATA_PATH isolates Orca's profile. Orca still needs the real
   // macOS user HOME for LaunchServices and its local runtime handshake.
   CREWVANE_ORCA_HOST_HOME: process.env.HOME };
 // The packaged app applies CREWVANE_TEST_HOME after startup, but this smoke
-// test also invokes the installed Crewvane CLI directly. Point both Crewvane's
+// test also invokes the installed Atte CLI directly. Point both Atte's
 // embedded CLI and Herdr at the same isolated home; CREWVANE_TEST_HOME alone is
 // intentionally an application-only test hook.
 const cliEnv = {

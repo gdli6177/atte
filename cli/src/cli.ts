@@ -29,13 +29,13 @@ import {
 const exec = promisify(execFile);
 async function managedRuntime(workspace: string, managedContext: ReturnType<typeof managedSessionContext>) {
   const directory = process.env.CREWVANE_CONTROL_DIRECTORY?.trim();
-  if (!directory) throw new Error("受管 CLI 缺少 Crewvane 后端控制目录；请从 Crewvane 桌面或已接入的负责人现场运行。");
+  if (!directory) throw new Error("受管 CLI 缺少 Atte 后端控制目录；请从 Atte 桌面或已接入的负责人现场运行。");
   const control = new SessionControl(directory);
   // A managed Agent may be unable to inspect OS processes. The desktop owns
   // admission/identity checks; its current descriptor is discovered below.
   if (!managedContext) await control.initialize();
   const cliDirectory = process.env.CREWVANE_CLI_DIRECTORY?.trim();
-  if (!cliDirectory) throw new Error("受管 CLI 缺少可执行的 Crewvane 命令目录。");
+  if (!cliDirectory) throw new Error("受管 CLI 缺少可执行的 Atte 命令目录。");
   return new SessionRuntime({
     control,
     workspace,
@@ -52,7 +52,7 @@ async function managedRuntime(workspace: string, managedContext: ReturnType<type
     }),
   });
 }
-const usage = `Crewvane — 把所有事整理成清晰的下一步
+const usage = `Atte — 把所有事整理成清晰的下一步
 
 人的消息入口（保存原话，不从文本推断批准或完成）：
   crewvane status [--json]
@@ -245,7 +245,7 @@ ${description}
 ## 完成前检查
 
 - 实际结果已经验证。
-- 证据和下一步已经通过 Crewvane CLI 写回。
+- 证据和下一步已经通过 Atte CLI 写回。
 `;
   await writeFile(join(root, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
   await writeFile(join(root, "SKILL.md"), skill, { mode: 0o600 });
@@ -522,7 +522,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
     }
     if (verifierMode) {
       if (!managedAgentName)
-        throw new Error("独立复核者必须由 Crewvane 启动并登记身份");
+        throw new Error("独立复核者必须由 Atte 启动并登记身份");
       if (!verifierGoalId)
         throw new Error("独立复核者缺少当前复核目标");
       const allowed = group === "status" ||
@@ -1305,7 +1305,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
     }
     else if (group === "event" && action === "herdr") {
       const current = result as { matched: number };
-      io.out(current.matched ? `已同步 ${current.matched} 个目标的现场状态。` : "没有需要同步的 Crewvane 目标。");
+      io.out(current.matched ? `已同步 ${current.matched} 个目标的现场状态。` : "没有需要同步的 Atte 目标。");
     }
     else if (group === "goal" && action === "show") {
       const goal = result as import("../../packages/core/src/index.js").Goal,

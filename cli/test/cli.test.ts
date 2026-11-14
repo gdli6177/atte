@@ -49,6 +49,17 @@ async function call(root: string, argv: string[]) {
   const code = await run([...argv, "--root", root, "--json"], { out: (text) => { stdout += text; }, error: (text) => { stderr += text; } });
   return { code, stdout, stderr, json: stdout ? JSON.parse(stdout) : undefined };
 }
+test("the executable presents Atte while keeping the public crewvane command", async () => {
+  const { stdout, stderr } = await promisify(execFile)(
+    "pnpm",
+    ["--dir", "cli", "exec", "tsx", "src/main.ts", "--help"],
+    { cwd: new URL("../../", import.meta.url), timeout: 30_000 },
+  );
+  assert.equal(stderr, "");
+  assert.match(stdout, /^Atte —/);
+  assert.match(stdout, /crewvane goal message ID --text TEXT/);
+  assert.doesNotMatch(stdout, /Crewvane/);
+});
 async function callProcess(
   root: string,
   environment: Record<string, string>,
@@ -506,7 +517,7 @@ test("owner launch is routed through the current concierge case", async () => {
       ])
     );
     assert.equal(result.code, 1);
-    assert.match(result.stderr, /缺少 Crewvane 后端控制目录/);
+    assert.match(result.stderr, /缺少 Atte 后端控制目录/);
   } finally {
     if (previousEnv === undefined) delete process.env.HERDR_ENV;
     else process.env.HERDR_ENV = previousEnv;
@@ -796,7 +807,7 @@ test("Herdr board renders actionable attention without terminal escape codes", a
     actor: "管家",
   });
   const plain = renderBoardPlain(await service.read(), decision.id);
-  assert.match(plain, /CREWVANE/);
+  assert.match(plain, /Atte/);
   assert.match(plain, /1 件需要你/);
   assert.match(plain, /周六还是周日上线/);
   assert.match(plain, /上线 external-approval/);

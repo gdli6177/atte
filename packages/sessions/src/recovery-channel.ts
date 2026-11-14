@@ -104,7 +104,7 @@ export async function requestSessionRecovery(environment: NodeJS.ProcessEnv, req
       try {
         await rename(path, canceled);
         await rm(canceled, { force: true });
-        throw new SessionError("backend_unreachable", "桌面会话服务未连接，请重新打开 Crewvane；本请求未执行。");
+        throw new SessionError("backend_unreachable", "桌面会话服务未连接，请重新打开 Atte；本请求未执行。");
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         claimed = true;

@@ -45,7 +45,7 @@ async function capture(label) {
 }
 try {
   app = await electron.launch({
-    executablePath:resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+    executablePath:resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     env:{...process.env,CREWVANE_TEST_HOME:home,CREWVANE_TEST_USER_DATA:join(trial,"userData"),
       CREWVANE_TEST_WORKSPACE:workspace,CREWVANE_HERDR_SESSION:session},
     timeout:60_000,
@@ -121,7 +121,7 @@ try {
     const { execFile } = process.getBuiltinModule("node:child_process");
     return await new Promise(resolve => execFile("herdr", [
       "--session", session, "agent", "prompt", currentConciergePane,
-      `这是用户直接发给你的 Herdr 终端消息。按你的身份协议，只把原话同步回 Crewvane 当前目标，不要开始新的执行或创建负责人。原话：追加下一步 ${directMarker}`,
+      `这是用户直接发给你的 Herdr 终端消息。按你的身份协议，只把原话同步回 Atte 当前目标，不要开始新的执行或创建负责人。原话：追加下一步 ${directMarker}`,
       "--wait", "--timeout", "180000",
     ], {timeout:190_000,maxBuffer:512_000}, (error, stdout, stderr) =>
       resolve({error:error?.message,stdout,stderr})));
@@ -169,7 +169,7 @@ try {
   console.log(JSON.stringify({step:"direct-terminal-new-goal-synced",goalId:directNew.id,newTaskMarker}));
   await app.close();
   app = await electron.launch({
-    executablePath:resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+    executablePath:resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     env:{...process.env,CREWVANE_TEST_HOME:home,CREWVANE_TEST_USER_DATA:join(trial,"userData"),
       CREWVANE_TEST_WORKSPACE:workspace,CREWVANE_HERDR_SESSION:session},timeout:60_000,
   });

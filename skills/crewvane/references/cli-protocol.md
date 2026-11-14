@@ -1,6 +1,6 @@
-# Crewvane state protocol
+# Atte state protocol
 
-Read this file only when the current agent is acting as a registered Crewvane owner or the global concierge. Every state command requires a real event; natural language alone never proves approval, acceptance, completion, or a passed check.
+Read this file only when the current agent is acting as a registered Atte owner or the global concierge. Every state command requires a real event; natural language alone never proves approval, acceptance, completion, or a passed check.
 
 ## Progress and waiting
 
@@ -9,7 +9,7 @@ crewvane goal progress "$GOAL_ID" --summary "$ACTUAL_RESULT" --next "$NEXT_STEP"
 crewvane goal wait "$GOAL_ID" --reason "$WAITING_REASON" --owner "$WAITING_OWNER" --remind-at "$ISO_TIME" --root "$WORKSPACE"
 ```
 
-Use `progress` after an observable result, not as a heartbeat. Use `wait` only while a named external third party (a contact, organization or external service) outside the human and every Crewvane Agent is blocking work. `--owner` is required and stores the external party in `waitingFor`; it does not replace the execution owner. The CLI rejects missing targets, the human, the concierge and registered Agents.
+Use `progress` after an observable result, not as a heartbeat. Use `wait` only while a named external third party (a contact, organization or external service) outside the human and every Atte Agent is blocking work. `--owner` is required and stores the external party in `waitingFor`; it does not replace the execution owner. The CLI rejects missing targets, the human, the concierge and registered Agents.
 
 Human choices, confirmations, information or manual actions use `decide`; delivery uses `review`. Neither belongs in external waiting. Coordination with an owner or worker stays `active`; ending a turn or an idle terminal never proves external waiting. `remind` changes only the schedule, including on active goals.
 
@@ -22,7 +22,7 @@ crewvane goal decide "$GOAL_ID" --question "$SPECIFIC_QUESTION" --next "$PLANNED
 crewvane goal risk "$GOAL_ID" --category "$CATEGORY" --summary "$PROPOSED_ACTION" --root "$WORKSPACE"
 ```
 
-Use `decide` for a concrete choice Crewvane cannot resolve. Use `risk` before deleting data, stopping a service, spending money, sending an external message, changing product direction, creating or rotating a secret, changing permissions, or changing shipping policy. High-risk work waits for the human even when a project policy is automatic.
+Use `decide` for a concrete choice Atte cannot resolve. Use `risk` before deleting data, stopping a service, spending money, sending an external message, changing product direction, creating or rotating a secret, changing permissions, or changing shipping policy. High-risk work waits for the human even when a project policy is automatic.
 
 ## Human replies in an owner scene
 
@@ -92,7 +92,7 @@ For an unrecognized interactive CLI, verify its foreground PID and add:
 --transport pane --process-id "$FOREGROUND_PID"
 ```
 
-After the goal is completed or dropped, Crewvane releases the owner scene. Do not register the global concierge or another active goal's pane as the owner.
+After the goal is completed or dropped, Atte releases the owner scene. Do not register the global concierge or another active goal's pane as the owner.
 
 If `owner launch` preserved a real scene but could not confirm environment injection,
 bind that exact scene only:
@@ -115,4 +115,4 @@ goal are rejected. Never replay the original task during recovery.
 - Owners and external agents do not accept, approve, or close for the human. The current-case concierge may record an explicit human decision, preserving the original words and matching receipt.
 - Do not bypass a rejected CLI scope by editing state files directly.
 - Do not retry an external effect without current authorization.
-- Treat Crewvane's coordinator scope as a data API boundary, not an operating-system sandbox.
+- Treat Atte's coordinator scope as a data API boundary, not an operating-system sandbox.

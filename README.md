@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="apps/desktop/assets/brand/crewvane-mage.png" width="112" alt="Crewvane pixel mage">
+<img src="apps/desktop/assets/brand/crewvane-mage.png" width="112" alt="Atte pixel mage">
 
-# Crewvane
+# Atte
 
 **The attention layer for parallel AI work.**
 
@@ -17,9 +17,9 @@ One workspace. Many projects. One concierge. Only what needs you reaches you.
 
 </div>
 
-![Crewvane attention center](docs/assets/crewvane-overview.png)
+![Atte attention center](docs/assets/crewvane-overview.png)
 
-Crewvane is an open-source macOS desktop app for one person working with many
+Atte is an open-source macOS desktop app for one person working with many
 projects and many CLI coding agents at the same time.
 
 It gives every project and personal task a persistent home, routes execution
@@ -27,7 +27,7 @@ through a single concierge agent, and brings only
 decisions, reviews, due follow-ups, and genuine interventions to your attention.
 The regular work in between stays out of your way.
 
-Crewvane does not replace Codex, Claude Code, OMP, Cursor, Qoder, or another agent.
+Atte does not replace Codex, Claude Code, OMP, Cursor, Qoder, or another agent.
 It works with interactive CLI agents that can already run in a terminal, keeps
 the terminal sessions in Herdr or Orca, and adds the durable workflow around them:
 state, ownership, waiting, evidence, approvals, and recovery.
@@ -35,15 +35,15 @@ state, ownership, waiting, evidence, approvals, and recovery.
 > **Status:** early preview (`0.11.x`). The desktop UI is currently in Simplified
 > Chinese and the packaged app supports macOS on Apple Silicon.
 
-## Why Crewvane
+## Why Atte
 
 AI agents made it possible to run more work in parallel. They also created a new
 kind of overload: too many sessions, invisible waits, and context switching every
 time you try to remember what is happening where.
 
-Crewvane changes the unit of work from **terminal session** to **goal**.
+Atte changes the unit of work from **terminal session** to **goal**.
 
-| Without a coordination layer | With Crewvane |
+| Without a coordination layer | With Atte |
 | --- | --- |
 | You monitor a growing list of terminal tabs. | You scan one attention center. |
 | A finished-looking agent may be mistaken for finished work. | Delivery requires evidence plus independent review or human acceptance. |
@@ -85,7 +85,7 @@ become an attention item.
 ### Autonomous goals, with the human still in charge
 
 A goal can carry a structured brief with its outcome, scope, completion criteria,
-external effects and verification plan. Crewvane then persists short execution
+external effects and verification plan. Atte then persists short execution
 continuations outside any Agent session: checkpoint, external wait, recovery,
 independent verification and human-decision triggers all survive restarts.
 
@@ -116,7 +116,7 @@ user's exact words.
 
 Configure the launch command and native arguments for the concierge, owners, and
 workers. A command such as `codex --model my-model`, an absolute script path, or
-another interactive CLI can be used directly. Crewvane does not own model keys,
+another interactive CLI can be used directly. Atte does not own model keys,
 proxy API calls, or replace the agent runtime.
 
 Herdr provides the persistent terminal sessions and agent communication layer.
@@ -125,7 +125,7 @@ plugin adds attention, one-line goal intake, and concierge shortcuts inside
 Herdr.
 
 Settings can instead select [Orca](https://github.com/stablyai/orca) as the one
-active session backend. Orca provides its native work interface; Crewvane keeps
+active session backend. Orca provides its native work interface; Atte keeps
 goals, attention, evidence and acceptance in its own Core, never a second Orca
 task state. Install or update Orca from Settings, then switch explicitly. A
 switch preserves goals and messages, stops verified old scenes and resumes from
@@ -138,7 +138,7 @@ the matching attention item and concierge, so an old reply cannot close a new qu
 
 ### Reusable work methods
 
-Crewvane ships role and process Skills for the concierge, owners, independent
+Atte ships role and process Skills for the concierge, owners, independent
 verifiers, delivery, discovery, release review, Agent setup, and scene recovery.
 Teams can also install a local method pack from a folder, preview its roles and
 references, and attach it only to matching goals.
@@ -162,11 +162,11 @@ changed bindings fail closed before a new Agent turn starts.
 
 Choose Herdr or Orca in Settings. One installation uses one backend at a time.
 A switch first verifies that the old managed Agents have stopped, then continues
-from saved goal records. Goals and attention remain in the same Crewvane store.
+from saved goal records. Goals and attention remain in the same Atte store.
 
 In Herdr mode, “Open scene” launches the same session in iTerm2, Terminal, or Ghostty
 by default, preserving native shortcuts, image paste, IME behavior, and terminal
-semantics. Crewvane reuses an existing window and remembers the terminal choice.
+semantics. Atte reuses an existing window and remembers the terminal choice.
 An embedded lightweight scene remains available for quick inspection and shares
 the exact same Herdr session. When the clipboard contains only an image, the
 embedded scene sends one `Ctrl+V` to the active Agent so the Agent can read the
@@ -179,7 +179,7 @@ sessions resume only where verified; otherwise, work continues from goal records
 
 ### Instant lifecycle, explicit decisions
 
-Crewvane detects Codex, Claude Code, Cursor, Qoder, and OMP and installs managed
+Atte detects Codex, Claude Code, Cursor, Qoder, and OMP and installs managed
 lifecycle Hooks where the Agent provides an official integration. Events travel
 through a private local socket, or a bounded offline queue when the app is not
 running. User-owned Hooks and OMP extensions are preserved, and Codex still asks
@@ -187,8 +187,8 @@ you to trust new Hooks through its own `/hooks` review.
 
 A Hook proves only that a session or turn changed state. It never marks a goal
 complete, waiting on a third party, ready for review, or safe for an external
-action. Those facts still come from Crewvane's semantic CLI. After a turn stops,
-Crewvane waits briefly for that write-back, reminds the same owner once if it is
+action. Those facts still come from Atte's semantic CLI. After a turn stops,
+Atte waits briefly for that write-back, reminds the same owner once if it is
 missing, and then asks the concierge to reconcile. The selected backend and watchdog remain
 the fallback when an Agent has no compatible Hook.
 
@@ -206,7 +206,7 @@ context or treated as proof of completion.
 ### Human control at hard boundaries
 
 Each project has a shipping policy, with external approval as the default.
-Crewvane returns an authorization decision; it does not merge, deploy, or send
+Atte returns an authorization decision; it does not merge, deploy, or send
 external messages on its own.
 
 Nine categories always require an explicit human decision, even for projects set
@@ -222,7 +222,7 @@ to automatic shipping:
 8. changing permissions; or
 9. changing the shipping policy.
 
-These categories are an application-level protocol check in Crewvane's core,
+These categories are an application-level protocol check in Atte's core,
 not an operating-system sandbox. A third-party agent's file and network
 permissions still come from its own CLI.
 
@@ -240,9 +240,9 @@ does not write back to the goal or upload message history and attachments.
 
 ```mermaid
 flowchart LR
-    Human[You] --> Desktop[Crewvane Desktop]
-    Desktop --> Core[Crewvane Core]
-    CLI[Crewvane CLI] --> Core
+    Human[You] --> Desktop[Atte Desktop]
+    Desktop --> Core[Atte Core]
+    CLI[Atte CLI] --> Core
     Desktop <--> Sessions[Herdr or Orca: one selected backend]
     Sessions --> Concierge[Concierge]
     Sessions --> Owners[Owners and CLI Agents]
@@ -258,7 +258,7 @@ The key boundary is that messages and state changes are separate:
 - Session lifecycle events update whether a real agent site is reachable; and
   they never declare a goal completed.
 
-`waiting` means a named external party outside you and all Crewvane Agents.
+`waiting` means a named external party outside you and all Atte Agents.
 Human decisions belong in Attention; internal coordination stays active.
 Handing an external wait back to an Agent resumes active coordination until the
 concierge reconciles it. Reminders do not change the goal lifecycle.
@@ -270,19 +270,19 @@ concierge reconciles it. Reminders do not change the goal lifecycle.
 Download the latest installer from
 [GitHub Releases](https://github.com/gdli6177/crewvane/releases/latest):
 
-- `Crewvane-<version>-macOS-arm64.dmg`
-- `Crewvane-<version>-macOS-arm64.zip`
+- `Atte-<version>-macOS-arm64.dmg`
+- `Atte-<version>-macOS-arm64.zip`
 - `SHA256SUMS.txt`
 
-Open the DMG, drag **Crewvane.app** into **Applications**, then launch it. The
-packaged app includes Electron, the Crewvane CLI runtime, and a verified Herdr
+Open the DMG, drag **Atte.app** into **Applications**, then launch it. The
+packaged app includes Electron, the Atte CLI runtime, and a verified Herdr
 binary; Node.js and Homebrew are not required for normal installation.
 
 In Settings, choose whether “Open scene” should use an external terminal or the
 embedded lightweight scene. The default is the first installed standard terminal
 among iTerm2, Terminal, and Ghostty.
 
-Your agent CLIs still need to be installed and authenticated separately. Crewvane
+Your agent CLIs still need to be installed and authenticated separately. Atte
 uses the commands you configure and does not read their credentials.
 
 The current package is ad-hoc signed but not notarized by Apple. macOS may show
@@ -293,7 +293,7 @@ is damaged, redownload the latest release instead of bypassing Gatekeeper.
 ### First run
 
 1. Choose a dedicated workspace directory.
-2. Open **Settings**, install the Crewvane CLI and optional Crewvane Skills,
+2. Open **Settings**, install the Atte CLI and optional Atte Skills,
    review **Agent access** and **Work methods**, then configure the agent launch
    command for the concierge, owner, or worker.
 3. Prepare the concierge.
@@ -309,7 +309,7 @@ The desktop app installs a workspace-aware CLI at `~/.local/bin/crewvane`.
 Use `CREWVANE_WORKSPACE` or `--root` to select the workspace.
 
 ```sh
-export CREWVANE_WORKSPACE="$HOME/Crewvane"
+export CREWVANE_WORKSPACE="$HOME/Atte"
 
 crewvane status
 crewvane ask "Audit the release workflow and attach the evidence"
@@ -349,7 +349,7 @@ Run `crewvane --help` after installation to see the complete protocol.
 apps/desktop/       Electron shell, React UI, in-app Herdr terminal, plugin
 packages/core/      Goals, attention, policy, storage, attachments, recovery
 cli/                Human commands and explicit agent state protocol
-skills/             Packaged Crewvane and local-pack-author Skills
+skills/             Packaged Atte and local-pack-author Skills
 scripts/            Desktop, Herdr, onboarding, and installer acceptance tests
 docs/               Product specification, architecture, QA, and release notes
 ```
@@ -390,9 +390,9 @@ packaged app with an interactive custom CLI. It does not require a model login.
   packaged yet.
 - The desktop UI is currently Simplified Chinese.
 - This is an early preview; storage and CLI details may evolve.
-- Crewvane is not a model gateway, scheduler, or hosted service. Its Agent Hooks
+- Atte is not a model gateway, scheduler, or hosted service. Its Agent Hooks
   observe lifecycle events without replacing each Agent's runtime.
-- Crewvane coordinates goals and agent sites but does not sandbox third-party
+- Atte coordinates goals and agent sites but does not sandbox third-party
   agents. Agent file access and network permissions remain governed by that CLI.
 - Agent execution requires either Herdr or the verified compatible Orca version.
   Planning, records, reminders, and manual review remain readable if the selected
@@ -405,7 +405,7 @@ packaged app with an interactive custom CLI. It does not require a model login.
 Issues and focused pull requests are welcome.
 
 For a substantial feature, open an issue first so the change can be checked
-against Crewvane's product boundaries: one concierge per workspace, explicit
+against Atte's product boundaries: one concierge per workspace, explicit
 state over prompt parsing, evidence before acceptance, and local-first data.
 
 Before opening a pull request:
@@ -421,4 +421,4 @@ generated release artifacts.
 
 ## License
 
-Crewvane is released under the [MIT License](LICENSE).
+Atte is released under the [MIT License](LICENSE).

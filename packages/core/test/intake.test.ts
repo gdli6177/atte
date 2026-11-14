@@ -25,7 +25,7 @@ test("one natural-language request preserves the full request without a workflow
 test("project context is preserved when already selected; an unknown project is rejected", async () => {
   const root = await mkdtemp(join(tmpdir(), "crewvane-intake-project-")); roots.push(root);
   const service = new WorkspaceService(root);
-  const project = await service.execute({ type: "project.add", name: "Crewvane" }) as { id: string };
+  const project = await service.execute({ type: "project.add", name: "Atte" }) as { id: string };
   const goal = await service.execute({ type: "goal.intake", text: "修复目标创建", projectId: project.id }) as Goal;
   assert.equal(goal.projectId, project.id);
   await assert.rejects(service.execute({ type: "goal.intake", text: "其他事", projectId: "missing" }), /有效项目/);

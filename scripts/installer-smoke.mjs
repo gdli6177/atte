@@ -13,7 +13,7 @@ const repo = dirname(dirname(fileURLToPath(import.meta.url)));
 const exec = promisify(execFile);
 const { version } = JSON.parse(await readFile(join(repo, "apps/desktop/package.json"), "utf8"));
 const installers = join(repo, "apps/desktop/release/installers");
-const stem = `Crewvane-${version}-macOS-arm64`;
+const stem = `Atte-${version}-macOS-arm64`;
 // Keep the isolated HOME and Herdr socket paths below macOS's AF_UNIX
 // sun_path limit. CI's TMPDIR is otherwise long enough to make Herdr's own
 // plugin subcommand fail before the installed UI can be exercised.
@@ -72,7 +72,7 @@ async function launchInstalled(appPath, label) {
   const home = join(trial, `${label}-home`);
   await mkdir(workspace); await mkdir(join(home, ".local/bin"), { recursive: true });
   const app = await electron.launch({
-    executablePath: join(appPath, "Contents/MacOS/Crewvane"),
+    executablePath: join(appPath, "Contents/MacOS/Atte"),
     args: [],
     env: { ...process.env, CREWVANE_TEST_HOME: home,
       CREWVANE_TEST_USER_DATA: join(trial, `${label}-userData`),
@@ -114,16 +114,16 @@ let mounted = false;
 const mount = join(trial, "volume");
 try {
   await exec("ditto", ["-x", "-k", join(installers, `${stem}.zip`), join(trial, "zip")]);
-  await launchInstalled(join(trial, "zip/Crewvane.app"), "zip");
+  await launchInstalled(join(trial, "zip/Atte.app"), "zip");
   await mkdir(mount);
   await exec("hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mount,
     join(installers, `${stem}.dmg`)]);
   mounted = true;
   await access(join(mount, "Applications"));
-  await exec("ditto", [join(mount, "Crewvane.app"), join(trial, "installed/Crewvane.app")]);
+  await exec("ditto", [join(mount, "Atte.app"), join(trial, "installed/Atte.app")]);
   await exec("hdiutil", ["detach", mount]);
   mounted = false;
-  await launchInstalled(join(trial, "installed/Crewvane.app"), "dmg");
+  await launchInstalled(join(trial, "installed/Atte.app"), "dmg");
   console.log("Installer verification passed (DMG + ZIP + SHA-256)");
 } finally {
   if (mounted) await exec("hdiutil", ["detach", mount]);
