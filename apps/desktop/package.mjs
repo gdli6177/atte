@@ -39,7 +39,6 @@ try {
   // Electron/main, preload, CLI and renderer are bundled by build.mjs.
   // Deploying the source package also copies its previous release directory,
   // recursively shipping old applications/installers with every new build.
-  await import("./scripts/build-icons.mjs");
   await cp(join(here, "dist"), join(stage, "dist"), { recursive: true });
   const nativePackage = dirname(createRequire(import.meta.url).resolve("node-pty/package.json"));
   await cp(nativePackage, join(stage, "node_modules/node-pty"), {
@@ -48,7 +47,7 @@ try {
   });
   const addonPackage = dirname(createRequire(join(nativePackage, "package.json")).resolve("node-addon-api/package.json"));
   await cp(addonPackage, join(stage, "node_modules/node-addon-api"), { recursive: true });
-  await cp(join(here, "assets/brand/crewvane-icon.png"), join(stage, "dist/assets/crewvane-icon.png"));
+  await cp(join(here, "assets/brand/atte-icon-baseline-1024.png"), join(stage, "dist/assets/atte-icon.png"));
   const bundledSkills = join(stage, "crewvane-skills");
   await mkdir(bundledSkills, { recursive: true });
   await cp(join(here, "../../skills/crewvane"), join(bundledSkills, "crewvane"), { recursive: true });
@@ -80,7 +79,7 @@ try {
     appBundleId: "dev.crewvane.desktop",
     platform: "darwin",
     arch: "arm64",
-    icon: join(here, "assets/brand/crewvane-icon.icns"),
+    icon: join(here, "assets/brand/atte-icon-baseline.icns"),
     asar: { unpack: "{**/dist/cli/**,**/node_modules/node-pty/**}" },
     extraResource: [cliNode, join(here, "herdr-plugin"), bundledSkills, herdrBinary],
     ignore: [/^\/cli-node$/, /^\/dist\/.*\.map$/],

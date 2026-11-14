@@ -58,6 +58,7 @@
   --lh-display: 38px;
   --fs-hero: 48px;
   --lh-hero: 56px;
+  --brand-about-size: 64px;
 }
 :root[data-theme="light"] {
   color: #1d2a27;
@@ -88,6 +89,7 @@
   --shadow-card: 0 1px 2px #1820390d, 0 12px 32px #18203912;
 }
 .ui-choice-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); padding: var(--space-1); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg); }
+.about-mark img { width: var(--brand-about-size); height: auto; object-fit: contain; image-rendering: auto; }
 .ui-choice-group .ui-button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
 .task-meta, .task-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
 .task-meta > span:not(.ui-badge) { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--secondary); font-size: var(--fs-meta); }

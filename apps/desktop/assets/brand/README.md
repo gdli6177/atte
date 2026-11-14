@@ -1,19 +1,28 @@
-# Atte 品牌标识
+# Atte 品牌资产准备
 
-界面中的品牌角色是 **Atte 像素魔法师**。它是用户的全局管家：不必盯着每一个会话，魔法师会把分散的项目与个人事项整理成清晰的下一步。macOS 应用图标保留同一角色的兜帽、双眼与流带识别点，但去掉像素、星环和全身细节，避免在 Dock 中缩成模糊头像。
+本轮只建立现有像素吉祥物的导出链与替换挂点，没有定稿新 logo。
+`baseline` 表示已有图形的过渡导出，不是已批准的新品牌方向。
+最终图形、颜色与首页目标尺寸见 [待决策表](../../../../../docs/product/atte-iteration.md#待决策)。
 
-- `crewvane-mage-source.png`：使用内置图像生成创建的原始像素魔法师，透明背景。
-- `crewvane-mage.png`：供 React 界面使用的 512px 版本，使用 nearest-neighbor 缩放。
-- `crewvane-macos-source.png`：内置 ImageGen 基于魔法师角色生成的 macOS 应用图标原稿。深靛蓝圆角底板上保留偏斜兜帽、暖白双眼与单一薄荷流带；透明留白位于圆角底板外。
-- `crewvane-icon.png`：1024px macOS 专用图标。不要用全身角色图直接铺满方形底板，Dock 中会显得过大且难以辨认。
-- `crewvane-icon.icns`：从应用图标生成的 macOS 图标包。
+## 保留原图
 
-界面品牌采用像素游戏气质，但不让界面成为难用的复古控制台。任务正文使用系统字体；像素角色、点阵和少量光点负责个性。macOS 图标是同一角色的现代简化版本，保持单主体、低细节和纯色识别，缩小到 16–32px 仍能辨认。深靛蓝、暖白与薄荷绿是识别色，状态色保持独立可读。
+- `crewvane-mage-source.png`：原始像素吉祥物。
+- `crewvane-mage.png`：已有 512px 透明吉祥物。
+- `crewvane-macos-source.png`：已有 macOS 图标原稿。
+- `crewvane-icon.png`、`crewvane-icon.icns`、`crewvane-trayTemplate.png`：原有导出，保留供追溯。
 
-不得将界面中的魔法师拉伸、加上文字或替换为其他概念。macOS 图标不得加入文字、星形、星环、全身角色或微小装饰；后续迭代保持兜帽、双眼与单一流带这三个识别点。
+原图不覆盖、不删除，不新增图形，不把已有设计的形状和配色当后续约束。
 
-在 macOS 上运行 `node apps/desktop/scripts/build-icons.mjs`，从专用原稿生成 PNG 和含 16–1024px 尺寸的 ICNS。打包器使用 ICNS，开发与正式应用的 Dock 使用同源 PNG。
+## 新挂点
 
-菜单栏也使用 `crewvane-icon.png`，在运行时生成 18pt 和 Retina 36px 表示，保持彩色原图，不再使用独立的单色占位符 `crewvane-trayTemplate.png`。
+- `atte-mascot-baseline-512.png`：原吉祥物的完整副本，用于首页、首启和侧栏。
+- `atte-icon-baseline-{32,64,128,256,512,1024}.png`：从已有 macOS 原稿导出。
+- `atte-icon-baseline.icns`：含 16–1024px 表示的应用图标包。
+- `atte-assets.json`：记录 `baseline-preparation` 状态、来源、输出与 SHA-256。
 
-macOS 图标原稿提示词要点：以像素魔法师为身份参考，保留偏斜尖帽轮廓、深色脸腔、两只暖白长眼和一条薄荷流带；简化为单主体几何徽记。深靛蓝圆角底板，克制而高级的哑光质感，透明外边距，无文字、星形、星环、全身角色或像素网格。使用内置 ImageGen 生成，随后仅做格式与尺寸导出。
+`src/ui/BrandMark.tsx` 是界面替换入口，应用、Dock、菜单栏、打包器与 favicon
+都读取对应新挂点。最终素材批准后替换来源再导出，无需逐页找图片。
+
+在 macOS 上运行 `pnpm --dir apps/desktop exec node scripts/build-icons.mjs`。
+构建也执行同一导出。所有文件明确命名，原图不会被写回。
+深浅背景与缩小显示纳入桌面验收；最终图形的设计签字仍待董事长确认。

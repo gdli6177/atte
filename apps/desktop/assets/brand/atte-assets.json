@@ -1,0 +1,47 @@
+{
+  "status": "baseline-preparation",
+  "sources": [
+    {
+      "path": "crewvane-mage.png",
+      "sha256": "c1d4a7d13c8f540bee3f43a1bfdfddc398258dddd08190b0214839e991161343"
+    },
+    {
+      "path": "crewvane-macos-source.png",
+      "sha256": "ad26687dbf811640a657f9304f52bfeeca9ab502d1442eb639343bbf8553f817"
+    }
+  ],
+  "files": [
+    {
+      "path": "atte-mascot-baseline-512.png",
+      "sha256": "c1d4a7d13c8f540bee3f43a1bfdfddc398258dddd08190b0214839e991161343"
+    },
+    {
+      "path": "atte-icon-baseline-32.png",
+      "sha256": "c553858765a841c4ee77c83cfcbe26a86c499e06885d09d4aca4ba239cf4bce4"
+    },
+    {
+      "path": "atte-icon-baseline-64.png",
+      "sha256": "2037d65f7b9e3ae39decbd2a5ccb5d3288f51440d4fa7c21756f7b5a483d394c"
+    },
+    {
+      "path": "atte-icon-baseline-128.png",
+      "sha256": "1d1a3ea6758d8bfb0114443b2c3611f71c360a062cffc003bbbc08ae3d301a09"
+    },
+    {
+      "path": "atte-icon-baseline-256.png",
+      "sha256": "e6a30f0fe43a506f0fb51d67d7a19405b1b00a78a78a910add4510dab16829eb"
+    },
+    {
+      "path": "atte-icon-baseline-512.png",
+      "sha256": "e17f6bd30388c346889f3c17c5e622b33f6ca5f4c9e4450b48d8045ab7420374"
+    },
+    {
+      "path": "atte-icon-baseline-1024.png",
+      "sha256": "628f9b31fe9b568b28858b7c51ebfed99b2fa4f5fc51c37e4c2e6459c30ded3e"
+    },
+    {
+      "path": "atte-icon-baseline.icns",
+      "sha256": "5854f31598063ab3ad9596d74c53c88bca25b9ba6823dd5abae0baa98eafdd80"
+    }
+  ]
+}

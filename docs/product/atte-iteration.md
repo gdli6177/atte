@@ -57,3 +57,11 @@ P2（BR-5、VI-3、VI-4）推进。没有源码的独立官网或商店条目不
 
 CLI 的 `goal rework` 是保留的显式状态协议，不是交互按钮或命令别名。
 终端控制台移除直接返工快捷键，`c` 发送反馈，`a` 明确验收。
+
+## 图标准备（BR-4）
+
+界面使用 `BrandMark`，应用、Dock、菜单栏、favicon 与打包器已切换到 `atte-*`
+挂点。提供 1024、512、256、128、64、32px PNG 与 ICNS，来源及 SHA-256
+记录在 `apps/desktop/assets/brand/atte-assets.json`；原图完整保留。
+本轮没有创造新图形，输出状态为 `baseline-preparation`。
+这满足本轮缩小后的资产准备范围，最终 logo 升级与“全新图形已验收”尚未完成。

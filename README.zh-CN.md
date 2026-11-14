@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="apps/desktop/assets/brand/crewvane-mage.png" width="112" alt="Atte 像素魔法师">
+<img src="apps/desktop/assets/brand/atte-mascot-baseline-512.png" width="112" alt="Atte 像素魔法师">
 
 # Atte
 

@@ -7,3 +7,4 @@ export type { SurfaceTone } from "./Surface.js";
 export { Modal } from "./Modal.js";
 export { Checkbox, Field, Select, TextArea, TextInput, Toggle } from "./Field.js";
 export { ChoiceGroup } from "./ChoiceGroup.js";
+export { BrandMark } from "./BrandMark.js";

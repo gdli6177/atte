@@ -67,6 +67,7 @@ import { goalProgressLabel, presentSceneContext, sceneSyncPresentation } from ".
 import type { GoalDetailService } from "./features/goals/goalService.js";
 import {
   Button,
+  BrandMark,
   Checkbox,
   ChoiceGroup,
   EmptyState,
@@ -89,7 +90,6 @@ import type {
   ManagedAdapterId,
 } from "../electron/agent-hook-manager.js";
 import type { CoordinatorInboxStatus } from "../electron/coordinator-inbox.js";
-import pixelMark from "../assets/brand/crewvane-mage.png";
 import "./style.css";
 const HerdrTerminal = lazy(() => import("./terminal.js").then((module) => ({ default: module.HerdrTerminal })));
 const pages = {
@@ -536,7 +536,7 @@ function App() {
       </a>
       <aside className="sidebar">
         <div className="brand">
-          <img src={pixelMark} alt="Atte" />
+          <BrandMark />
           <div>
             <strong>Atte</strong>
             <span>注意力中心</span>
@@ -655,7 +655,7 @@ function App() {
         </div>
         <div className="concierge">
           <div className="concierge-orb">
-            <img src={pixelMark} alt="" />
+            <BrandMark decorative />
             <i />
           </div>
           <strong>所有事，找管家。</strong>
@@ -768,7 +768,7 @@ function App() {
         )}
           {!workspace ? (
             <section className="welcome">
-              <img src={pixelMark} alt="Atte" />
+              <BrandMark />
               <span className="eyebrow">Atte · 注意力中心</span>
               <h1>
                 把注意力留给重要的事。
@@ -819,7 +819,7 @@ function App() {
                   <i />
                   <i />
                   <i />
-                  <img src={pixelMark} alt="" />
+                  <BrandMark decorative />
                 </div>
               </section>
               <section className="attention-section">
@@ -2021,6 +2021,7 @@ function Settings({
           </div>
         </section>
         <SettingsSection icon={<Bot />} title="关于 Atte" description="注意力中心">
+          <div className="about-mark"><BrandMark variant="icon" /></div>
           <div className="settings-facts">
             <p>人只做拍板，Agent 并行推进。管家把决定、验收和需要介入的事项带到你面前。</p>
             <p>当前版本：{version}</p>

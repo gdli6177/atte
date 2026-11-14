@@ -1930,10 +1930,10 @@ app.whenReady().then(async () => {
   });
   // BrowserWindow.icon is ignored by the macOS Dock in development.
   // Packaged builds embed the same artwork as their CFBundleIconFile.
-  app.dock?.setIcon(nativeImage.createFromPath(join(here, "assets/crewvane-icon.png")));
+  app.dock?.setIcon(nativeImage.createFromPath(join(here, "assets/atte-icon.png")));
   process.env.PATH = (await tools.paths()).join(":");
   const width = Number(process.env.CREWVANE_TEST_WINDOW_WIDTH), height = Number(process.env.CREWVANE_TEST_WINDOW_HEIGHT);
-  window = new BrowserWindow({ width: Number.isFinite(width) && width >= 900 ? width : 1440, height: Number.isFinite(height) && height >= 700 ? height : 960, minWidth: 900, minHeight: 700, title: "Atte", titleBarStyle: "hiddenInset", backgroundColor: WINDOW_BACKGROUND, icon: join(here, "assets/crewvane-icon.png"), webPreferences: { preload: join(here, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  window = new BrowserWindow({ width: Number.isFinite(width) && width >= 900 ? width : 1440, height: Number.isFinite(height) && height >= 700 ? height : 960, minWidth: 900, minHeight: 700, title: "Atte", titleBarStyle: "hiddenInset", backgroundColor: WINDOW_BACKGROUND, icon: join(here, "assets/atte-icon.png"), webPreferences: { preload: join(here, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" })); window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   window.on("close", (event) => { if (!quitting) { event.preventDefault(); window.hide(); } });
@@ -2230,7 +2230,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("crewvane:show-cli", async (event) => { sender(event); shell.showItemInFolder((await cliStatus()).path); });
   // Use the approved application artwork, with a Retina representation.
-  const traySource = nativeImage.createFromPath(join(here, "assets/crewvane-icon.png"));
+  const traySource = nativeImage.createFromPath(join(here, "assets/atte-icon.png"));
   const trayIcon = traySource.resize({ width: 18, height: 18, quality: "best" });
   trayIcon.addRepresentation({ scaleFactor: 2, buffer: traySource.resize({ width: 36, height: 36, quality: "best" }).toPNG() });
   trayIcon.setTemplateImage(false);
