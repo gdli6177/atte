@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" color="#F3F1EA" role="img" aria-labelledby="atte-app-icon-title atte-app-icon-desc">
+  <title id="atte-app-icon-title">atte app icon</title>
+  <desc id="atte-app-icon-desc">Atte app icon. A flat ink background with 224 unit corner radius, warm white Six Vectors and an amber central square.</desc>
+  <metadata>{&quot;brand&quot;:&quot;Atte&quot;,&quot;direction&quot;:&quot;04 Six Vectors&quot;,&quot;parameters&quot;:{&quot;canvas&quot;:1024,&quot;center&quot;:512,&quot;armWidth&quot;:160,&quot;capOverhang&quot;:24,&quot;capChamfer&quot;:40,&quot;shoulderChamfer&quot;:24,&quot;capFlatLength&quot;:48,&quot;outerRadius&quot;:368,&quot;innerRadius&quot;:112,&quot;hubRadius&quot;:160,&quot;coreSize&quot;:128,&quot;smallArmWidth&quot;:176,&quot;smallOuterRadius&quot;:416,&quot;background&quot;:&quot;#14181B&quot;,&quot;cornerRadius&quot;:224,&quot;symbolHeightRatio&quot;:0.71875}}</metadata>
+  <rect width="1024" height="1024" rx="224" fill="#14181B"/>
+  <defs>
+    <path id="atte-app-arm" d="M432 400 L432 256 L408 232 L408 184 L448 144 L576 144 L616 184 L616 232 L592 256 L592 400 Z"/>
+  </defs>
+  <g fill="currentColor">
+    <use href="#atte-app-arm" transform="rotate(0 512 512)"/>
+    <use href="#atte-app-arm" transform="rotate(60 512 512)"/>
+    <use href="#atte-app-arm" transform="rotate(120 512 512)"/>
+    <use href="#atte-app-arm" transform="rotate(180 512 512)"/>
+    <use href="#atte-app-arm" transform="rotate(240 512 512)"/>
+    <use href="#atte-app-arm" transform="rotate(300 512 512)"/>
+    <path d="M512 352 L650.56406 432 L650.56406 592 L512 672 L373.43594 592 L373.43594 432 Z"/>
+  </g>
+  <rect x="448" y="448" width="128" height="128" fill="#F5A524"/>
+</svg>

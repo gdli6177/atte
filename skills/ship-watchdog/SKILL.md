@@ -3,7 +3,7 @@ name: ship-watchdog
 description: >-
   Slash command /ship-watchdog. The skill name is ship-watchdog, matching
   that command, so hosts that support skills load this file when the human
-  types /ship-watchdog. A timer runs the deterministic crewvane watchdog
+  types /ship-watchdog. A timer runs the deterministic Atte watchdog
   CLI. It files a blocked inbox item only when a slice is stalled or
   drifting. The captain does not run this loop. Also use when installing or
   removing the local cron or launchd timer.
@@ -14,51 +14,51 @@ description: >-
 The watchdog is a deterministic check. It does not call a model. A timer runs
 it. The captain (the LLM) is involved only after the check files a `blocked`
 item because something is wrong. `limits.example.json` is
-`$HOME/.crewvane/current/templates/limits.example.json`.
+`$HOME/.atte/current/templates/limits.example.json`.
 
 ## Lifecycle
 
-1. Dispatch runs `crewvane slice start` when a slice opens. If that is the
+1. Dispatch runs `atte slice start` when a slice opens. If that is the
    first queued or running slice, the command installs a local timer.
-2. The timer runs `crewvane watchdog` every five minutes. On Linux and WSL,
+2. The timer runs `atte watchdog` every five minutes. On Linux and WSL,
    `watchdog install` adds one marked block with `crontab -l | … | crontab -`.
    Other crontab lines stay. On macOS it writes the plist to
    `~/Library/LaunchAgents` and runs `launchctl bootstrap gui/$UID`.
    `watchdog uninstall` removes only that entry (`bootout` on macOS).
    `--dry-run` prints the entry and does not register it. A copy of the cron
-   line and plist is saved only after registration succeeds, under `~/.config/crewvane/` (or
-   `CREWVANE_TIMER_HOME`), and is never committed. If registration fails,
+   line and plist is saved only after registration succeeds, under `~/.config/atte/` (or
+   `ATTE_TIMER_HOME`), and is never committed. If registration fails,
    slice start refuses admission unless --allow-untimed explicitly selects manual supervision.
    An orchestrator scheduler or the owner's assistant routine can run the
    same CLI instead of the timer.
-3. Each run reads `.crewvane/events.jsonl` first. If no slice is `queued` or
+3. Each run reads `.atte/events.jsonl` first. If no slice is `queued` or
    `running`, it retains an installed timer and exits; explicit uninstall removes it. It does not call `check` and it
    does not file an inbox item.
 4. Otherwise it compares the latest `worker_progress` heartbeat and the last
    git commit time on the slice branch with `stale_minutes`, and it runs
-   `crewvane check`. A miss files one `blocked` item (`stalled` or `drift`).
+   `atte check`. A miss files one `blocked` item (`stalled` or `drift`).
    That inbox item is the only handoff to the captain.
 
-Run these in the project directory. Use `crewvane` on `PATH`. If that command is not found, use `node $HOME/.crewvane/current/cli/bin/crewvane.js` with the same arguments.
+Run these in the project directory. Use `atte` on `PATH`. If that command is not found, use `node $HOME/.atte/current/cli/bin/atte.js` with the same arguments.
 
 ```bash
-crewvane watchdog install
-crewvane watchdog
-crewvane watchdog uninstall
-crewvane status --stale
+atte watchdog install
+atte watchdog
+atte watchdog uninstall
+atte status --stale
 ```
 
 The registered cron line looks like:
 
 ```cron
-# crewvane-watchdog-begin <slug>
-*/5 * * * * <node> <kit>/cli/bin/crewvane.js watchdog --root <project>
-# crewvane-watchdog-end <slug>
+# atte-watchdog-begin <slug>
+*/5 * * * * <node> <kit>/cli/bin/atte.js watchdog --root <project>
+# atte-watchdog-end <slug>
 ```
 
-`watchdog install` inserts that block. You do not paste it yourself. `watchdog uninstall` deletes that block and leaves every other crontab line. On macOS the same command bootstraps `~/Library/LaunchAgents/com.crewvane.watchdog.<slug>.plist`, and uninstall runs `launchctl bootout` and deletes that plist.
+`watchdog install` inserts that block. You do not paste it yourself. `watchdog uninstall` deletes that block and leaves every other crontab line. On macOS the same command bootstraps `~/Library/LaunchAgents/com.atte.watchdog.<slug>.plist`, and uninstall runs `launchctl bootout` and deletes that plist.
 
-`--stale-minutes` overrides `.crewvane/limits.json`. If that file is
+`--stale-minutes` overrides `.atte/limits.json`. If that file is
 missing, the window is 30 minutes. Shape:
 
 ```json
@@ -79,10 +79,10 @@ last_exit_code、last_run_at、last_success_at 与 warning。launchd 读取真�
 
 ## What it reads
 
-`.crewvane/events.jsonl` holds `worker_dispatched` and `worker_progress`
+`.atte/events.jsonl` holds `worker_dispatched` and `worker_progress`
 events (`events/schema.json`). A slice still `queued` or `running` is stale
 when the latest heartbeat is older than the window. `created_at` on the
-dispatch counts until the first heartbeat. A failing `crewvane check` for
+dispatch counts until the first heartbeat. A failing `atte check` for
 that contract is drift, not a silent stall.
 
 ## What it files

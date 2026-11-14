@@ -34,7 +34,7 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-owner-launch-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-owner-launch-"));
   fixtures.push(root);
   return { root, service: new WorkspaceService(root) };
 }
@@ -93,7 +93,7 @@ function fakeRunner(options: {
 }
 
 test("launch receipt directories stay private and reject symlinks", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-launch-receipt-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-launch-receipt-"));
   fixtures.push(root);
   const receiptDirectory = join(root, "receipts"),
     outside = join(root, "outside");
@@ -134,7 +134,7 @@ test("launches the configured agent with an isolated owner environment", async (
     {
       environment: {
         HERDR_ENV: "1",
-        HERDR_SESSION: "crewvane-test",
+        HERDR_SESSION: "atte-test",
         HOME: root,
         PATH: "/usr/bin:/bin",
       },
@@ -149,17 +149,17 @@ test("launches the configured agent with an isolated owner environment", async (
   );
   const environmentScript = environmentCalls.map(args => args[3]).join("; ");
   assert.ok(environmentCalls.length);
-  assert.match(environmentScript, /unset CREWVANE_COORDINATOR CREWVANE_COORDINATOR_SCOPE_FILE/);
+  assert.match(environmentScript, /unset ATTE_COORDINATOR ATTE_COORDINATOR_SCOPE_FILE/);
   assert.match(
     environmentScript,
-    new RegExp(`CREWVANE_WORKSPACE='${await realpath(root)}'`),
+    new RegExp(`ATTE_WORKSPACE='${await realpath(root)}'`),
   );
-  assert.match(environmentScript, /CREWVANE_AGENT_NAME='case-owner'/);
+  assert.match(environmentScript, /ATTE_AGENT_NAME='case-owner'/);
   const exported = await promisify(execFile)("/bin/sh", ["-c", `${environmentScript}; /usr/bin/env`],
-    { env: { PATH: "/usr/bin:/bin", CREWVANE_COORDINATOR: "1", CREWVANE_COORDINATOR_SCOPE_FILE: "old-scope" } });
-  assert.match(exported.stdout, new RegExp(`CREWVANE_GOAL_ID=${goal.id}`));
-  assert.match(exported.stdout, new RegExp(`CREWVANE_WORKSPACE=${await realpath(root)}`));
-  assert.doesNotMatch(exported.stdout, /CREWVANE_COORDINATOR=/);
+    { env: { PATH: "/usr/bin:/bin", ATTE_COORDINATOR: "1", ATTE_COORDINATOR_SCOPE_FILE: "old-scope" } });
+  assert.match(exported.stdout, new RegExp(`ATTE_GOAL_ID=${goal.id}`));
+  assert.match(exported.stdout, new RegExp(`ATTE_WORKSPACE=${await realpath(root)}`));
+  assert.doesNotMatch(exported.stdout, /ATTE_COORDINATOR=/);
   const start = mock.calls.find(
     (args) =>
       args[0] === "agent" &&
@@ -210,7 +210,7 @@ test("uses a file receipt instead of pane output and retries only environment se
   }, {
     environment: {
       HERDR_ENV: "1",
-      HERDR_SESSION: "crewvane-test",
+      HERDR_SESSION: "atte-test",
       HERDR_TAB_ID: "w1:t1",
       HOME: root,
       PATH: "/usr/bin:/bin",
@@ -237,7 +237,7 @@ test("uses a file receipt instead of pane output and retries only environment se
 
   assert.equal(result.reference.agent, "receipt-owner");
   assert.equal(receiptWrites, 2);
-  assert.equal(receiptCommands.every(command => command.includes("crewvane-owner-launch-")), true);
+  assert.equal(receiptCommands.every(command => command.includes("atte-owner-launch-")), true);
   assert.equal(
     calls.filter(args => args[0] === "tab" && args[1] === "focus").map(args => args[2]).join(","),
     "w7:t3,w1:t1",
@@ -422,7 +422,7 @@ test("reopens the original Agent kind with its native resume arguments", async (
     {
       environment: {
         HERDR_ENV: "1",
-        HERDR_SESSION: "crewvane-test",
+        HERDR_SESSION: "atte-test",
         HOME: root,
         PATH: "/usr/bin:/bin",
       },
@@ -471,7 +471,7 @@ test("launches a custom interactive CLI and records its real foreground process"
     {
       environment: {
         HERDR_ENV: "1",
-        HERDR_SESSION: "crewvane-test",
+        HERDR_SESSION: "atte-test",
         HOME: root,
         PATH: "/usr/bin:/bin",
       },
@@ -526,7 +526,7 @@ test("an owner command is resolved by the new pane shell, including aliases and 
     {
       environment: {
         HERDR_ENV: "1",
-        HERDR_SESSION: "crewvane-test",
+        HERDR_SESSION: "atte-test",
         HOME: root,
         PATH: "/usr/bin:/bin",
       },
@@ -568,7 +568,7 @@ test("names a custom CLI that Herdr detects and uses lifecycle-aware prompts", a
     {
       environment: {
         HERDR_ENV: "1",
-        HERDR_SESSION: "crewvane-test",
+        HERDR_SESSION: "atte-test",
         HOME: root,
         PATH: "/usr/bin:/bin",
       },
@@ -600,7 +600,7 @@ test("environment setup never sends one oversized line through a canonical termi
   } }) as Goal;
   const mock = fakeRunner();
   await launchOwner(service, { goalId:goal.id, name:"long-path-owner" }, {
-    environment:{ HERDR_ENV:"1", HERDR_SESSION:"crewvane-test", HOME:root,
+    environment:{ HERDR_ENV:"1", HERDR_SESSION:"atte-test", HOME:root,
       PATH:Array.from({length:40},(_,index)=>`/opt/${"a".repeat(90)}/${index}`).join(":") },
     run:mock.run,
   });
@@ -632,7 +632,7 @@ test("keeps a bound owner site when Herdr reports a stalled prompt", async () =>
     {
       environment: {
         HERDR_ENV: "1",
-        HERDR_SESSION: "crewvane-test",
+        HERDR_SESSION: "atte-test",
         HOME: root,
         PATH: "/usr/bin:/bin",
       },
@@ -656,7 +656,7 @@ test("a failed launch is recorded rather than presented as ongoing execution", a
   } }) as Goal;
   const calls: string[][] = [];
   await assert.rejects(launchOwner(service, {goalId:goal.id, name:"failed-owner"}, {
-    environment:{HERDR_ENV:"1",HERDR_SESSION:"crewvane-test",PATH:"/usr/bin:/bin"},
+    environment:{HERDR_ENV:"1",HERDR_SESSION:"atte-test",PATH:"/usr/bin:/bin"},
     run:async args => {
       calls.push(args);
       if (args[0]==="agent" && args[1]==="start" && args.includes("--help"))

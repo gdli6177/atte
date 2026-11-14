@@ -1,11 +1,11 @@
-# Crewvane 模块化与插件化架构
+# Atte 模块化与插件化架构
 
 日期：2026-11-04
 状态：架构约束；首个目标详情模块按此拆分
 
 ## 1. 插件化不是把所有东西都搬出主程序
 
-Crewvane 先保证一个可靠内核，再把会变化的部分放到稳定的能力边界后面。外部插件、随应用分发的第一方功能和内置实现使用同一套贡献协议。内置能力不能绕过协议直接写状态，否则一旦需要替换就会形成隐性耦合。
+Atte 先保证一个可靠内核，再把会变化的部分放到稳定的能力边界后面。外部插件、随应用分发的第一方功能和内置实现使用同一套贡献协议。内置能力不能绕过协议直接写状态，否则一旦需要替换就会形成隐性耦合。
 
 核心原则：
 
@@ -52,7 +52,7 @@ Crewvane 先保证一个可靠内核，再把会变化的部分放到稳定的�
 - `Activity` / `GoalMessage`：按 `goalId` 隔离的原始消息与附件事实，不对正文做语义推断。
 - `Attention`：说明为什么需要人，不保存某一种界面的按钮结构。
 - `Decision`：人明确做出的批准或拒绝，以及原话、来源和时间。
-- `CrewvaneCommand`：唯一写入口。桌面、CLI 和插件都提交命令。
+- `AtteCommand`：唯一写入口。桌面、CLI 和插件都提交命令。
 - `WorkspaceEvent`：提交成功后的追加事件，供索引、通知和即时界面消费。
 
 内核禁止：
@@ -97,7 +97,7 @@ interface InvocationContext {
 适配器是一个能力包，可同时包含后台逻辑和声明式 UI。建议的最小接口：
 
 ```ts
-interface CrewvaneAdapter<TConfig = unknown> {
+interface AtteAdapter<TConfig = unknown> {
   manifest: AdapterManifest;
   activate(context: AdapterContext<TConfig>): Promise<Disposable>;
 }

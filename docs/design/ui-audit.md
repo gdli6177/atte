@@ -135,7 +135,7 @@
 
 本轮使用已安装的 `ui-ux-pro-max` skill 完成产品系统检索、React 焦点规则核对和
 页面级视觉审查。检索结果为“Teal focus + warm action”的 AI 生产力工具方向；
-实现时降低饱和度并保留 Crewvane 的像素魔法师品牌，不直接采用模板色。
+实现时降低饱和度并保留 Atte 的像素魔法师品牌，不直接采用模板色。
 
 ### 6.1 主题与语义 token
 
@@ -168,7 +168,7 @@
 
 ### 6.3 自动验收
 
-`CREWVANE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop` 在打包后的 Electron 中生成
+`ATTE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop` 在打包后的 Electron 中生成
 54 张审计截图，覆盖 3 种尺寸 × 深浅主题 × 注意力、待办池顶部和两类分类、
 全部目标、设置页顶部与底部、目标详情、新建目标。最终结果：
 

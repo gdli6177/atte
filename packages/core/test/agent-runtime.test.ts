@@ -97,7 +97,7 @@ test("a written Hook receipt beats Herdr idle, while expired receipt timers cann
 });
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-agent-runtime-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-agent-runtime-"));
   roots.push(root);
   const service = new WorkspaceService(root);
   const goal = await service.execute({
@@ -113,7 +113,7 @@ async function fixture() {
     type: "session.set",
     goalId: goal.id,
     reference: {
-      session: "crewvane-test",
+      session: "atte-test",
       workspaceId: "w1",
       tabId: "w1:t2",
       paneId: "w1:p2",

@@ -4,10 +4,10 @@ import {
   AutonomyScheduler,
   type AutonomyCandidate,
 } from "../electron/autonomy-scheduler.js";
-import type { CrewvaneCommand } from "../../../packages/core/src/index.js";
+import type { AtteCommand } from "../../../packages/core/src/index.js";
 
 test("scheduler claims each due continuation, dispatches with its lease, and reports sent", async () => {
-  const calls: CrewvaneCommand[] = [],
+  const calls: AtteCommand[] = [],
     candidate: AutonomyCandidate = {
       goalId: "goal_1",
       continuationId: "continuation_1",
@@ -47,13 +47,13 @@ test("scheduler claims each due continuation, dispatches with its lease, and rep
     "autonomy.claim",
     "autonomy.report",
   ]);
-  const report = calls[2] as Extract<CrewvaneCommand, { type: "autonomy.report" }>;
+  const report = calls[2] as Extract<AtteCommand, { type: "autonomy.report" }>;
   assert.equal(report.outcome, "sent");
   assert.equal(report.leaseId, "lease_current");
 });
 
 test("scheduler turns dispatch failures into an actionable failed report", async () => {
-  let reported: Extract<CrewvaneCommand, { type: "autonomy.report" }> | undefined;
+  let reported: Extract<AtteCommand, { type: "autonomy.report" }> | undefined;
   const scheduler = new AutonomyScheduler({
     service: () => ({
       async execute(command) {

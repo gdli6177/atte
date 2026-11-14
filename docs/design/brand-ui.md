@@ -1,11 +1,13 @@
 # 品牌 UI 原则与原语入口
 
-状态：0.6.6 逐页 UI/UX 复核后的落地说明。视觉基线仍是 `DESIGN.md`，本文只解释
+状态：Atte 迭代已用平面容器、三层 token 与统一消息入口更新基线；
+六类 token 详见 [tokens.md](tokens.md)。下文保留 0.6.6 走查记录供追溯，当前规范以
+`DESIGN.md` 为准。本文只解释
 这次为什么这样收敛，以及后续 agent 从哪里改。
 
 ## 方向
 
-Crewvane 的品牌不是“更花”，而是“更少打扰、更可核对”。界面只抬升真正需要人的
+Atte 的品牌不是“更花”，而是“更少打扰、更可核对”。界面只抬升真正需要人的
 决定、验收、到期跟进和现场介入；其余推进留在后台。对应的 UI 判断：
 
 1. **先回答状态，再给动作**：页面标题/首句说明“现在需不需要你”，需要时只留一个主 CTA。
@@ -16,7 +18,7 @@ Crewvane 的品牌不是“更花”，而是“更少打扰、更可核对”�
 5. **像素只留给品牌图形**：界面控件保持平滑圆角与线性图标，像素画按最近邻渲染。
 
 当前主题采用 UI/UX Pro Max 为 AI 生产力工具匹配的“Teal focus + warm action”
-方向，但降低饱和度以保持 Crewvane 自己的气质：墨青工作台承载长时间阅读，海沫青
+方向，但降低饱和度以保持 Atte 自己的气质：墨青工作台承载长时间阅读，海沫青
 只表示主动作、选中和需要人处理，暖琥珀承载外部等待与恢复，绿色独立表示完成。
 深浅主题分别校准对比度，深色不再是默认主题之外的粗略反转。
 
@@ -58,10 +60,10 @@ Crewvane 的品牌不是“更花”，而是“更少打扰、更可核对”�
 pnpm typecheck
 pnpm test
 pnpm --dir apps/desktop exec vite build
-CREWVANE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop
+ATTE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop
 ```
 
 桌面门禁在三种窗口尺寸、深浅主题下覆盖注意力首页、待办池两类、全部目标、设置页
 顶部与底部、目标详情和新建目标；自动检查对比度、横向裁切、无名称按钮、小点击目标、
 右上角状态与主按钮的垂直中心，以及三目标并发响应。视觉原则仍见
-`skills/crewvane-ui/references/checklist.md`。
+`skills/atte-ui/references/checklist.md`。

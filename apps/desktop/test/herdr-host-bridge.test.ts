@@ -7,7 +7,7 @@ import { HerdrHostBridge } from "../electron/herdr-host-bridge.ts";
 import { runHostHerdr } from "../../../cli/src/host-bridge.ts";
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-host-bridge-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-host-bridge-"));
   const executable = join(root, "fake-herdr.cjs");
   await writeFile(executable, `#!/usr/bin/env node
 const args = process.argv.slice(2);
@@ -20,7 +20,7 @@ process.stdout.write(JSON.stringify(args));
   await chmod(executable, 0o700);
   const bridge = new HerdrHostBridge(
     root,
-    "crewvane-test",
+    "atte-test",
     async () => executable,
   );
   await bridge.start();
@@ -44,7 +44,7 @@ test("Host Bridge accepts its token and preserves Herdr stdout", async () => {
     );
     assert.deepEqual(JSON.parse(output), [
       "--session",
-      "crewvane-test",
+      "atte-test",
       "agent",
       "list",
     ]);
@@ -57,12 +57,12 @@ test("Host Bridge keeps socket paths short and isolated for deeply nested worksp
   const deepRoot = `/tmp/${"very-long-workspace/".repeat(12)}project`;
   const first = new HerdrHostBridge(
     deepRoot,
-    "crewvane-a",
+    "atte-a",
     async () => "/bin/true",
   );
   const second = new HerdrHostBridge(
     `${deepRoot}-other`,
-    "crewvane-b",
+    "atte-b",
     async () => "/bin/true",
   );
   assert.ok(Buffer.byteLength(first.socketPath) < 104);
@@ -118,7 +118,7 @@ test("Host Bridge falls back to a private workspace file channel when sockets ar
     );
     assert.deepEqual(JSON.parse(output), [
       "--session",
-      "crewvane-test",
+      "atte-test",
       "pane",
       "list",
     ]);
@@ -156,7 +156,7 @@ process.stdout.write("should-not-run");
   await context.bridge.stop();
   const bridge = new HerdrHostBridge(
     context.root,
-    "crewvane-test",
+    "atte-test",
     async () => executable,
   );
   try {
@@ -192,7 +192,7 @@ process.stdout.write("should-not-run");
 });
 
 test("CLI Host Bridge reports unavailable and silent sockets promptly", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-host-bridge-empty-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-host-bridge-empty-"));
   try {
     await assert.rejects(
       runHostHerdr(join(root, "missing.sock"), "token", ["agent", "list"], 100),

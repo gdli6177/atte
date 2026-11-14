@@ -27,6 +27,8 @@ import {
   type AgentRuntimeAdapterId,
   type HerdrReference,
   type OwnerResume,
+  environmentValue,
+  workspaceDataDirectory,
 } from "../../packages/core/src/index.js";
 
 const exec = promisify(execFile);
@@ -89,7 +91,7 @@ export function ownerLaunchReceiptPath(root: string, recoveryId: string) {
     .slice(0, 16);
   return join(
     tmpdir(),
-    `crewvane-owner-launch-${workspaceKey}`,
+    `atte-owner-launch-${workspaceKey}`,
     `${recoveryId}.ready`,
   );
 }
@@ -185,12 +187,12 @@ export function createRunner(environment: NodeJS.ProcessEnv): HerdrCommandRunner
   const session = environment.HERDR_SESSION?.trim();
   if (!session)
     throw new Error("负责人启动需要当前 Herdr Session");
-  const hostSocket = environment.CREWVANE_HOST_SOCKET?.trim();
-  const hostToken = environment.CREWVANE_HOST_TOKEN?.trim();
+  const hostSocket = environmentValue(environment, "HOST_SOCKET")?.trim();
+  const hostToken = environmentValue(environment, "HOST_TOKEN")?.trim();
   if (hostSocket && hostToken)
     return args => runHostHerdr(hostSocket, hostToken, args);
   const binary =
-    environment.CREWVANE_HERDR_BINARY?.trim() ||
+    environmentValue(environment, "HERDR_BINARY")?.trim() ||
     environment.HERDR_BIN_PATH?.trim() ||
     "herdr";
   return async (args) => {
@@ -243,7 +245,7 @@ function automaticTask(goal: {
     `目标 ID：${goal.id}`,
     `完整目标原文：\n${goal.description}`,
     goal.next.trim() ? `当前下一步：\n${goal.next}` : "",
-    `实际执行由你完成；咨询用 crewvane goal progress ${goal.id} --summary "<具体答案>" 写回。只有等待用户和所有 Agent 之外的具名外部第三方时，才用 crewvane goal wait ${goal.id} --reason "<外部等待原因>" --owner "<外部联系人或机构>"；需要用户选择、确认、提供信息或操作时，用 crewvane goal decide ${goal.id} --question "<具体问题>" 提出问题并结束本回合，不得记为 waiting。你、管家、工人和其他 Agent 之间的内部协调保持 active，通过 progress 写回实际结果；不要把终端空闲或结束一回合当成等待。remind 只设置提醒，不改变生命周期。只有有实际可验收成果时才运行真实检查并用 crewvane goal review 提交成果摘要、位置与检查记录；不要为等待或咨询伪造交付。`,
+    `实际执行由你完成；咨询用 atte goal progress ${goal.id} --summary "<具体答案>" 写回。只有等待用户和所有 Agent 之外的具名外部第三方时，才用 atte goal wait ${goal.id} --reason "<外部等待原因>" --owner "<外部联系人或机构>"；需要用户选择、确认、提供信息或操作时，用 atte goal decide ${goal.id} --question "<具体问题>" 提出问题并结束本回合，不得记为 waiting。你、管家、工人和其他 Agent 之间的内部协调保持 active，通过 progress 写回实际结果；不要把终端空闲或结束一回合当成等待。remind 只设置提醒，不改变生命周期。只有有实际可验收成果时才运行真实检查并用 atte goal review 提交成果摘要、位置与检查记录；不要为等待或咨询伪造交付。`,
   ].filter(Boolean).join("\n\n");
 }
 function automaticVerificationTask(goal: {
@@ -263,12 +265,12 @@ function automaticVerificationTask(goal: {
   return [
     `你是目标「${goal.title}」的独立复核者，不负责实现、不修改代码、不代表用户验收。`,
     `目标 ID：${goal.id}`,
-    `运行 crewvane goal show ${goal.id} --json，读取委托摘要、候选版本和交付证据；再独立读取实际成果并运行必要的真实检查。`,
+    `运行 atte goal show ${goal.id} --json，读取委托摘要、候选版本和交付证据；再独立读取实际成果并运行必要的真实检查。`,
     "不得复用原负责人现场，不得让原负责人自检代替本次复核，不得相信只有文字声明而没有可定位证据的结论。",
     `必选完成条件：${required.map(criterion => `${criterion.id}：${criterion.statement}`).join("；") || "未提供"}`,
     `交付证据 ID：${evidenceIds.join("、") || "未提供"}`,
     `每项必选条件都要给出 passed 或 failed，并引用真实证据 ID。所有必选条件通过时才可提交 --outcome passed。`,
-    `提交示例：crewvane goal verify ${goal.id} --delivery ${goal.delivery?.id ?? "<delivery-id>"} --outcome passed --summary "<具体复核结论>" --criterion "${exampleCriterion}::passed::<evidence-id>"`,
+    `提交示例：atte goal verify ${goal.id} --delivery ${goal.delivery?.id ?? "<delivery-id>"} --outcome passed --summary "<具体复核结论>" --criterion "${exampleCriterion}::passed::<evidence-id>"`,
     "若证据不足、候选不一致、无法确认独立性或检查失败，使用 --outcome failed，并写明缺失证据和复现结果。提交后结束，不轮询，不进入实现返工。",
   ].join("\n\n");
 }
@@ -394,7 +396,7 @@ export async function launchOwner(
   const executableDirectory = executable.includes("/")
     ? dirname(executable)
     : "";
-  const label = `Crewvane · ${goal.title.trim().slice(0, 60)}`;
+  const label = `Atte · ${goal.title.trim().slice(0, 60)}`;
 
   let tabId: string | undefined;
   let verifierReference: HerdrReference | undefined;
@@ -457,28 +459,28 @@ export async function launchOwner(
     }
 
     const ownerEnvironment = [
-      "unset CREWVANE_COORDINATOR CREWVANE_COORDINATOR_SCOPE_FILE",
-      `export CREWVANE_ROLE=${verifier ? "verifier" : "owner"} CREWVANE_AGENT_NAME=${quoteShell(input.name)}`,
-      `export CREWVANE_GOAL_ID=${quoteShell(goal.id)}`,
+      "unset ATTE_COORDINATOR ATTE_COORDINATOR_SCOPE_FILE CREWVANE_COORDINATOR CREWVANE_COORDINATOR_SCOPE_FILE",
+      `export ATTE_ROLE=${verifier ? "verifier" : "owner"} ATTE_AGENT_NAME=${quoteShell(input.name)} CREWVANE_ROLE=${verifier ? "verifier" : "owner"} CREWVANE_AGENT_NAME=${quoteShell(input.name)}`,
+      `export ATTE_GOAL_ID=${quoteShell(goal.id)} CREWVANE_GOAL_ID=${quoteShell(goal.id)}`,
       ...(!verifier ? [
-        `export CREWVANE_ATTEMPT_ID=${quoteShell(attemptId!)}`,
-        `export CREWVANE_HOOK_TOKEN=${quoteShell(hookToken!)}`,
+        `export ATTE_ATTEMPT_ID=${quoteShell(attemptId!)} CREWVANE_ATTEMPT_ID=${quoteShell(attemptId!)}`,
+        `export ATTE_HOOK_TOKEN=${quoteShell(hookToken!)} CREWVANE_HOOK_TOKEN=${quoteShell(hookToken!)}`,
       ] : []),
-      `export CREWVANE_WORKSPACE=${quoteShell(workspaceRoot)}`,
+      `export ATTE_WORKSPACE=${quoteShell(workspaceRoot)} CREWVANE_WORKSPACE=${quoteShell(workspaceRoot)}`,
       ...(!verifier ? [
-        `export CREWVANE_HOOK_SOCKET=${quoteShell(agentRuntimeSocketPath(workspaceRoot))}`,
-        `export CREWVANE_HOOK_SPOOL=${quoteShell(join(workspaceRoot, ".crewvane", "runtime", "spool"))}`,
+        `export ATTE_HOOK_SOCKET=${quoteShell(agentRuntimeSocketPath(workspaceRoot))} CREWVANE_HOOK_SOCKET=${quoteShell(agentRuntimeSocketPath(workspaceRoot))}`,
+        `export ATTE_HOOK_SPOOL=${quoteShell(join(workspaceDataDirectory(workspaceRoot), "runtime", "spool"))} CREWVANE_HOOK_SPOOL=${quoteShell(join(workspaceDataDirectory(workspaceRoot), "runtime", "spool"))}`,
       ] : []),
-      `export CREWVANE_HERDR_BINARY=${quoteShell(
-        environment.CREWVANE_HERDR_BINARY?.trim() ||
+      `export ATTE_HERDR_BINARY=${quoteShell(
+        environmentValue(environment, "HERDR_BINARY")?.trim() ||
         environment.HERDR_BIN_PATH?.trim() ||
         "herdr",
       )}`,
-      ...(environment.CREWVANE_HOST_SOCKET?.trim()
-        ? [`export CREWVANE_HOST_SOCKET=${quoteShell(environment.CREWVANE_HOST_SOCKET.trim())}`]
+      ...(environmentValue(environment, "HOST_SOCKET")?.trim()
+        ? [`export ATTE_HOST_SOCKET=${quoteShell(environmentValue(environment, "HOST_SOCKET")!.trim())} CREWVANE_HOST_SOCKET=${quoteShell(environmentValue(environment, "HOST_SOCKET")!.trim())}`]
         : []),
-      ...(environment.CREWVANE_HOST_TOKEN?.trim()
-        ? [`export CREWVANE_HOST_TOKEN=${quoteShell(environment.CREWVANE_HOST_TOKEN.trim())}`]
+      ...(environmentValue(environment, "HOST_TOKEN")?.trim()
+        ? [`export ATTE_HOST_TOKEN=${quoteShell(environmentValue(environment, "HOST_TOKEN")!.trim())} CREWVANE_HOST_TOKEN=${quoteShell(environmentValue(environment, "HOST_TOKEN")!.trim())}`]
         : []),
       `export HERDR_ENV=1 HERDR_SESSION=${quoteShell(session)}`,
       `export HERDR_WORKSPACE_ID=${quoteShell(workspaceId)}`,
@@ -517,7 +519,7 @@ export async function launchOwner(
     }
     if (!ready)
       throw new Error(
-        `负责人环境注入未确认；可在核对现场后使用 crewvane owner attach 绑定，恢复 ID：${recoveryId}`,
+        `负责人环境注入未确认；可在核对现场后使用 atte owner attach 绑定，恢复 ID：${recoveryId}`,
       );
     await rm(launchReceiptPath, { force: true }).catch(() => {});
 

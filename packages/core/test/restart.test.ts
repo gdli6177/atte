@@ -12,7 +12,7 @@ afterEach(async () => {
 });
 
 async function serviceFixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-restart-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-restart-"));
   fixtures.push(root);
   return new WorkspaceService(root);
 }
@@ -31,7 +31,7 @@ async function completedGoal(service: WorkspaceService) {
     type: "session.set",
     goalId: goal.id,
     reference: {
-      session: "crewvane-test",
+      session: "atte-test",
       workspaceId: "w1",
       tabId: "w1:t2",
       paneId: "w1:p2",
@@ -200,7 +200,7 @@ test("owner resume identity is accepted only for an ended live owner", async () 
     type: "session.set",
     goalId: goal.id,
     reference: {
-      session: "crewvane-test",
+      session: "atte-test",
       tabId: "w1:t2",
       paneId: "w1:p2",
       agent: "owner-a",

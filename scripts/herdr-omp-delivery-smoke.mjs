@@ -8,13 +8,13 @@ import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { HerdrAdapter, OrcaAdapter, createLaunchFiles } from "../packages/sessions/src/index.ts";
 
-const backend = process.env.CREWVANE_OMP_DELIVERY_BACKEND ?? "herdr";
+const backend = process.env.ATTE_OMP_DELIVERY_BACKEND ?? "herdr";
 assert(["herdr", "orca"].includes(backend));
-const profile = process.env.CREWVANE_TEST_ORCA_PROFILE;
+const profile = process.env.ATTE_TEST_ORCA_PROFILE;
 if (backend === "orca") assert(profile?.startsWith("/private/tmp/"), "Use an isolated Orca profile.");
-const executable = resolve(process.env.CREWVANE_TEST_HERDR_BINARY ||
-  "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/Resources/herdr");
-const agent = process.env.CREWVANE_TRIAL_AGENT;
+const executable = resolve(process.env.ATTE_TEST_HERDR_BINARY ||
+  "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/Resources/herdr");
+const agent = process.env.ATTE_TRIAL_AGENT;
 assert(agent?.startsWith("/"), "Choose a real installed OMP executable or wrapper.");
 const root = await realpath(await mkdtemp("/tmp/cv-omp-transport-"));
 const cwd = join(root, "工作 区");
@@ -80,11 +80,11 @@ try {
   const requestId = randomUUID(), bindingId = randomUUID(), attemptId = randomUUID();
   const files = await createLaunchFiles(join(root, "control"), {
     requestId, bindingId, attemptId, installationId: "omp-transport-trial", backendEpoch: 0,
-    executable: agent, args: [], cwd, environment: { CREWVANE_BACKEND: backend },
+    executable: agent, args: [], cwd, environment: { ATTE_BACKEND: backend },
   });
   const created = await adapter.create({
     requestId, bindingId, attemptId, installationId: "omp-transport-trial", backendEpoch: 0,
-    role: "owner", cwd, title: "Crewvane OMP transport trial", ...files,
+    role: "owner", cwd, title: "Atte OMP transport trial", ...files,
   });
   assert.equal(created.status, "created", created.detail);
   scene = created.scene;
@@ -96,13 +96,13 @@ try {
   }
   assert(nativeAgentShapes.length, "Real Herdr must recognize OMP before sending.");
   const proof = join(cwd, "proof.txt"), marker = randomUUID();
-  const scenario = process.env.CREWVANE_OMP_DELIVERY_SCENARIO ?? "multiline";
+  const scenario = process.env.ATTE_OMP_DELIVERY_SCENARIO ?? "multiline";
   const background = scenario === "long"
     ? `背景：${"需要保留的单一案卷背景。".repeat(700)}`
     : Array.from({ length: 120 }, (_, index) =>
       `背景 ${index + 1}：保留当前案卷事实，不能把终端空闲解释为任务完成。`).join("\n");
   const text = [
-    "这是隔离的 Crewvane 传输验收，只处理本次消息，不访问其他用户文件。",
+    "这是隔离的 Atte 传输验收，只处理本次消息，不访问其他用户文件。",
     `先完整读取背景，再用文件工具把 ${JSON.stringify(marker)} 原样写入 ${JSON.stringify(proof)}，然后结束。`,
     "不得执行 Git、发布、通知或其他外部操作。",
     background,

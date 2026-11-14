@@ -135,7 +135,7 @@ const webhookUrl = `http://127.0.0.1:${webhookAddress.port}/attention`;
 const service = new WorkspaceService(workspace);
 // UI regression tests never start the user's signed-in model or Herdr Session.
 // Real transport and arbitrary CLI behavior are covered by onboarding-smoke.
-await service.execute({ type: "agents.configure", preferences: { concierge: "/missing/crewvane-test-agent" } });
+await service.execute({ type: "agents.configure", preferences: { concierge: "/missing/atte-test-agent" } });
 await service.execute({
   type: "workspace.autonomy.set",
   acceptance: "human-review",
@@ -143,19 +143,21 @@ await service.execute({
   actor: "你",
 });
 const app = await electron.launch({
-  executablePath: resolve(process.env.CREWVANE_APP_PATH ||
-    "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+  executablePath: resolve(process.env.ATTE_APP_PATH ||
+    "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
   args: [],
   env: {
     ...process.env,
-    CREWVANE_TEST_USER_DATA: join(home, "userData"),
-    CREWVANE_TEST_HOME: home,
-    CREWVANE_TEST_WORKSPACE: workspace,
-    CREWVANE_TEST_ISOLATE_TOOLS: "1",
-    CREWVANE_TEST_SKIP_HERDR_SETUP: "1",
+    ATTE_TEST_USER_DATA: join(home, "userData"),
+    ATTE_TEST_HOME: home,
+    ATTE_TEST_WORKSPACE: workspace,
+    ATTE_TEST_ISOLATE_TOOLS: "1",
+    ATTE_TEST_SKIP_HERDR_SETUP: "1",
     HOME: home,
     XDG_CONFIG_HOME: join(home, ".config"),
     XDG_STATE_HOME: join(home, ".local/state"),
+    ATTE_HERDR_SESSION: "atte-desktop-smoke",
+    CREWVANE_HERDR_SESSION: "atte-desktop-smoke",
     PATH: "/usr/bin:/bin",
   },
   timeout: 60_000,
@@ -251,7 +253,7 @@ try {
   await page.getByRole("dialog", { name: /桌面试用交付/ }).waitFor();
   await page.locator(".goal-attachments").getByText("selected.png", { exact: true }).waitFor();
   await page.locator(".goal-attachments").getByText("pasted.png", { exact: true }).waitFor();
-  let state = await page.evaluate(() => window.crewvane.command({ type: "snapshot" })),
+  let state = await page.evaluate(() => window.atte.command({ type: "snapshot" })),
     goalId = state.goals[0].id;
   assert.equal(state.goals[0].attachments.length, 2);
   for (const attachment of state.goals[0].attachments) {
@@ -260,12 +262,12 @@ try {
     assert.equal((await stat(attachmentPath)).mode & 0o777, 0o600);
   }
   const attachmentPreview = await page.evaluate(async ({ goalId, attachmentId }) =>
-    window.crewvane.attachmentPreview(goalId, attachmentId), {
+    window.atte.attachmentPreview(goalId, attachmentId), {
     goalId: state.goals[0].id,
     attachmentId: state.goals[0].attachments[0].id,
   });
   assert.match(attachmentPreview, /^data:image\/png;base64,/);
-  const persistedState = await readFile(join(workspace, ".crewvane", "state.json"), "utf8");
+  const persistedState = await readFile(join(workspace, ".atte", "state.json"), "utf8");
   assert.doesNotMatch(persistedState, /data:image|iVBORw0KGgo|base64/i);
   const removedAttachment = state.goals[0].attachments[0];
   page.once("dialog", dialog => void dialog.accept());
@@ -273,7 +275,7 @@ try {
   await page.getByText(removedAttachment.name, { exact: true }).waitFor({ state: "detached" });
   await page.getByRole("dialog", { name: /桌面试用交付/ }).waitFor();
   await assert.rejects(stat(join(workspace, removedAttachment.path)), /ENOENT/);
-  state = await page.evaluate(() => window.crewvane.command({ type: "snapshot" }));
+  state = await page.evaluate(() => window.atte.command({ type: "snapshot" }));
   assert.equal(state.goals[0].attachments.length, 1);
   assert.ok(!state.goals[0].attachments.some(item => item.id === removedAttachment.id));
   await page
@@ -288,12 +290,12 @@ try {
   await page.getByText("reply.png", { exact: true }).waitFor();
   // A background dispatch result can arrive while the person is composing.
   // Exercise both removal and replacement of the current attention request.
-  await page.evaluate(id => window.crewvane.command({
+  await page.evaluate(id => window.atte.command({
     type: "goal.dispatch", goalId: id, status: "sent",
   }), goalId);
   await page.locator(".goal-focus").getByText("联系管家失败", { exact: true })
     .waitFor({ state: "detached" });
-  await page.evaluate(id => window.crewvane.command({
+  await page.evaluate(id => window.atte.command({
     type: "goal.dispatch", goalId: id, status: "failed", detail: "后台确认管家不可达",
   }), goalId);
   await page.locator(".goal-focus").getByText("联系管家失败", { exact: true }).waitFor();
@@ -303,7 +305,7 @@ try {
   await expect(page.getByRole("button", { name: "交给管家", exact: true })).toBeEnabled();
   await page.waitForTimeout(250);
   await page.screenshot({ path: join(home, "goal-reply-dark.png"), animations: "disabled" });
-  const nextBeforeFeedback = (await page.evaluate(() => window.crewvane.command({type:"snapshot"}))).goals[0].next;
+  const nextBeforeFeedback = (await page.evaluate(() => window.atte.command({type:"snapshot"}))).goals[0].next;
   await page.getByRole("button", { name: "交给管家", exact: true }).click();
   await page.getByText("请保留现有验收记录，不要扩大范围。", { exact: true }).waitFor();
   let feedbackSnapshot;
@@ -321,7 +323,7 @@ try {
     activity.text === "请保留现有验收记录，不要扩大范围。" &&
     activity.attachmentIds?.length === 1));
   for (let index = 1; index <= 5; index += 1) {
-    await page.evaluate(({ id, index }) => window.crewvane.command({
+    await page.evaluate(({ id, index }) => window.atte.command({
       type: "goal.progress",
       goalId: id,
       summary: index === 5
@@ -358,7 +360,7 @@ try {
     "older conversation history must remain visible after more than four activity records",
   );
   state = await page.evaluate(() =>
-      window.crewvane.command({ type: "snapshot" }),
+      window.atte.command({ type: "snapshot" }),
     );
   const dispatchBeforeDirect = state.goals[0].dispatch?.id;
   await run("pnpm", [
@@ -366,7 +368,7 @@ try {
     "外部 Herdr 终端追加下一步", "--goal", goalId, "--root", workspace, "--json",
   ], { cwd: resolve("."), timeout: 30_000 });
   await page.getByText("外部 Herdr 终端追加下一步", { exact: true }).waitFor();
-  state = await page.evaluate(() => window.crewvane.command({ type: "snapshot" }));
+  state = await page.evaluate(() => window.atte.command({ type: "snapshot" }));
   assert.equal(state.goals[0].dispatch?.id, dispatchBeforeDirect,
     "external terminal feedback must not create a duplicate handoff");
   assert.ok(state.goals[0].activities.some(activity =>
@@ -374,7 +376,7 @@ try {
   await page.locator(".goal-detail-advanced").evaluate(element => { element.open = true; });
   await page.getByRole("button", { name: "我来处理", exact: true }).click();
   await page.waitForFunction(async id => {
-    const snapshot = await window.crewvane.command({ type: "snapshot" });
+    const snapshot = await window.atte.command({ type: "snapshot" });
     return snapshot.goals.find(goal => goal.id === id)?.mode === "manual";
   }, goalId);
   await page.screenshot({ path: join(home, "intake-dark.png"), animations: "disabled" });
@@ -400,7 +402,7 @@ try {
       checks: [
         {
           name: "真实读取",
-          command: "crewvane goal show",
+          command: "atte goal show",
           result: "passed",
           note: "命令退出码 0",
         },
@@ -408,7 +410,7 @@ try {
     },
   });
   await page.waitForFunction(async id => {
-    const snapshot = await window.crewvane.command({ type: "snapshot" });
+    const snapshot = await window.atte.command({ type: "snapshot" });
     return snapshot.goals.find(goal => goal.id === id)?.status === "review";
   }, goalId);
   await page.reload();
@@ -418,14 +420,20 @@ try {
   assert.equal(await page.locator(".goal-detail-modal").count(), 0);
   await page.getByText("成果与证据", { exact: true }).waitFor();
   await page.screenshot({ path: join(home, "review-dark.png") });
-  await page.getByRole("button", { name: "退回修改", exact: true }).click();
-  await page.getByLabel("退回说明", { exact: true }).fill("请补充桌面端的实际验收说明");
-  await page.getByRole("button", { name: "退回并交给管家", exact: true }).click();
-  await page.locator(".goal-attention-modal").waitFor({ state: "detached" });
+  await expect(page.getByRole("button", { name: "退回修改", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "问管家", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "给管家发消息", exact: true }).click();
+  await page.getByLabel("发给管家的消息", { exact: true }).fill("请补充桌面端的实际验收说明");
+  await page.getByRole("button", { name: "交给管家", exact: true }).click();
   await page.waitForFunction(async id => {
-    const snapshot = await window.crewvane.command({ type: "snapshot" });
-    return snapshot.goals.find(goal => goal.id === id)?.status === "active";
+    const snapshot = await window.atte.command({ type: "snapshot" });
+    const current = snapshot.goals.find(goal => goal.id === id);
+    return current?.status === "review" &&
+      current.activities.some(item => item.kind === "message" && item.text === "请补充桌面端的实际验收说明");
   }, goalId);
+  await expect(page.getByRole("button", { name: "验收通过", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await service.execute({ type: "goal.rework", goalId, note: "管家根据补充要求明确安排修改", actor: "管家" });
   await service.execute({
     type: "goal.review",
     goalId,
@@ -438,7 +446,7 @@ try {
     },
   });
   await page.waitForFunction(async id => {
-    const snapshot = await window.crewvane.command({ type: "snapshot" });
+    const snapshot = await window.atte.command({ type: "snapshot" });
     return snapshot.goals.find(goal => goal.id === id)?.status === "review";
   }, goalId);
   await page.reload();
@@ -491,11 +499,16 @@ try {
   await page.screenshot({ path: join(home, "webhook-dark.png"), animations: "disabled" });
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.getByRole("button", { name: "设置", exact: true }).click();
-  await page.getByText(/herdr session attach crewvane-/).waitFor();
+  await page.getByText("herdr session attach atte-desktop-smoke", { exact: true }).waitFor()
+    .catch(async error => {
+      throw new Error(`${error.message}\nSettings: ${await page.locator(".settings").innerText()}\n` +
+        `Herdr status: ${JSON.stringify(await page.evaluate(() => window.atte.herdrStatus()))}`);
+    });
   const externalHerdr = page.getByRole("group", { name: "在外部终端打开同一 Herdr 会话" });
-  const attachCommand = await externalHerdr.locator("code").filter({ hasText: "herdr session attach crewvane-" }).innerText();
+  const attachCommand = await externalHerdr.locator("code")
+    .filter({ hasText: "herdr session attach atte-desktop-smoke" }).innerText();
   await externalHerdr.getByRole("button", { name: "复制外部终端 attach 命令", exact: true }).click();
-  assert.equal(await page.evaluate(() => window.crewvane.readClipboardText()), attachCommand);
+  assert.equal(await page.evaluate(() => window.atte.readClipboardText()), attachCommand);
   await externalHerdr.getByRole("button", { name: "复制外部终端 attach 命令", exact: true }).getByText("已复制").waitFor();
   await page.getByRole("button", { name: "管理 Webhook", exact: true }).click();
   await page.getByRole("button", { name: "测试当前配置", exact: true }).click();
@@ -574,7 +587,7 @@ try {
     "a goal entering review must send one attention notification, not a status notification as well",
   );
   assert.equal(
-    reviewNotifications[0]?.headers["x-crewvane-delivery"],
+    reviewNotifications[0]?.headers["x-atte-delivery"],
     reviewNotifications[0]?.body.deliveryId,
   );
   await page.screenshot({ path: join(home, "settings-dark.png") });
@@ -608,18 +621,20 @@ try {
     "auto",
   );
   await page.screenshot({ path: join(home, "settings-scrolled-fixed-topbar-dark.png"), animations: "disabled" });
-  await page.getByText(new RegExp(`Crewvane ${appVersion.replaceAll(".", "\\.")} · 一位管家`)).waitFor();
+  await page.getByText(new RegExp(
+    `Atte ${appVersion.replaceAll(".", "\\.")} · 注意力中心 · The attention layer`,
+  )).waitFor();
   await page.getByRole("button", { name: "浅色模式" }).click();
   await page.getByRole("button", { name: "注意力", exact: true }).click();
-  const riskGoal = await page.evaluate(() => window.crewvane.command({
+  const riskGoal = await page.evaluate(() => window.atte.command({
     type: "goal.create",
     input: { title: "权限变更试用", projectId: "personal", mode: "manual" },
   }));
-  await page.evaluate((goalId) => window.crewvane.command({
+  await page.evaluate((goalId) => window.atte.command({
     type: "goal.progress", goalId, summary: "负责人已核对：只读权限可以完成验收，不需要增加管理员。",
     actor: "负责人",
   }), riskGoal.id);
-  await page.evaluate((goalId) => window.crewvane.command({
+  await page.evaluate((goalId) => window.atte.command({
     type: "goal.risk", goalId, category: "change-permissions",
     summary: "给生产环境增加一名管理员", actor: "管家",
   }), riskGoal.id);
@@ -645,7 +660,7 @@ try {
   await page.getByLabel("你的决定").fill("只允许只读权限，不增加管理员。");
   await page.getByRole("button", { name: "批准并继续", exact: true }).click();
   await page.getByText("已记入批准账本，正在通知管家", { exact: true }).waitFor();
-  const ledger = await readFile(join(workspace, ".crewvane", "decisions.md"), "utf8");
+  const ledger = await readFile(join(workspace, ".atte", "decisions.md"), "utf8");
   assert.match(ledger, /只允许只读权限/);
   assert.match(ledger, /change-permissions/);
   await page.locator(".goal-attention-modal").waitFor({ state: "detached" });
@@ -690,7 +705,7 @@ try {
   await page.locator(".goal-detail-advanced").evaluate(element => { element.open = true; });
   await page.getByRole("button", { name: "我来处理", exact: true }).click();
   await page.waitForFunction(async title => {
-    const state = await window.crewvane.command({ type: "snapshot" });
+    const state = await window.atte.command({ type: "snapshot" });
     return state.goals.find(goal => goal.title === title)?.mode === "manual";
   }, "个人事项界面闭环");
   await page.getByRole("button", { name: "补充说明", exact: true }).click();
@@ -733,7 +748,7 @@ try {
   assert.equal(await page.getByLabel("当前安排").count(), 0);
   await page.getByRole("button", { name: "1 小时后提醒", exact: true }).click();
   await page.waitForFunction(async goalId => {
-    const state = await window.crewvane.command({ type: "snapshot" });
+    const state = await window.atte.command({ type: "snapshot" });
     return Date.parse(state.goals.find(goal => goal.id === goalId)?.remindAt ?? "") > Date.now();
   }, waiting.id);
   let waitingState = (await service.read()).goals.find(item => item.id === waiting.id);
@@ -756,7 +771,7 @@ try {
   await page.getByLabel("发给管家的消息", { exact: true }).fill("审批通过了，请管家判断下一步并继续推进。");
   await page.getByRole("button", { name: "交给管家", exact: true }).click();
   await page.waitForFunction(async goalId => {
-    const state = await window.crewvane.command({ type: "snapshot" });
+    const state = await window.atte.command({ type: "snapshot" });
     const goal = state.goals.find(item => item.id === goalId);
     return goal?.status === "active" && goal.waitingFor === undefined &&
       goal.mode === "concierge" &&
@@ -809,14 +824,14 @@ try {
     type: "session.set",
     goalId: sceneGoal.id,
     reference: {
-      session: "crewvane-ui-test",
+      session: "atte-ui-test",
       agent: "owner-ui-test",
       paneId: "w1:p2",
       tabId: "w1:t2",
     },
   });
   const sceneUpdate = await page.evaluate(goalId =>
-    window.crewvane.command({
+    window.atte.command({
       type: "goal.update",
       goalId,
       patch: { next: "继续核实现场入口" },
@@ -848,7 +863,7 @@ try {
   await page.getByLabel("放弃原因", { exact: true }).fill("验证放弃操作不再依赖系统弹窗");
   await page.getByRole("button", { name: "确认放弃", exact: true }).click();
   await page.waitForFunction(async goalId => {
-    const state = await window.crewvane.command({ type: "snapshot" });
+    const state = await window.atte.command({ type: "snapshot" });
     return state.goals.find(goal => goal.id === goalId)?.status === "dropped";
   }, droppable.id);
   await page.getByText("目标已放弃，记录仍可查看", { exact: true }).waitFor();
@@ -858,7 +873,7 @@ try {
   assert.equal(await page.locator(".goal-attention-modal").count(), 0,
     "an ended goal must open its history, not a live attention card");
   await page.getByRole("button", { name: "关闭", exact: true }).click();
-  const offline = await page.evaluate(() => window.crewvane.command({
+  const offline = await page.evaluate(() => window.atte.command({
     type: "goal.create",
     input: { title: "联系管家失败界面", projectId: "personal", mode: "concierge" },
   }));
@@ -871,7 +886,7 @@ try {
     detail: "测试环境无法连接管家",
   });
   await page.waitForFunction(async goalId => {
-    const snapshot = await window.crewvane.command({ type: "snapshot" });
+    const snapshot = await window.atte.command({ type: "snapshot" });
     const current = snapshot.goals.find(goal => goal.id === goalId);
     return current?.attention?.source === "dispatch" && current.dispatch?.status === "failed";
   }, offline.id);
@@ -900,7 +915,7 @@ try {
     observer.observe({ type: "longtask", buffered: true });
     const createdAt = performance.now();
     const goals = await Promise.all([1, 2, 3].map(index =>
-      window.crewvane.command({
+      window.atte.command({
         type: "goal.create",
         input: {
           title: `并行性能测试 ${index}`,
@@ -914,9 +929,9 @@ try {
     await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
     const frameMs = performance.now() - frameStartedAt;
     await Promise.all(goals.map(goal =>
-      window.crewvane.command({ type: "goal.drop", goalId: goal.id, note: "性能测试清理" })));
+      window.atte.command({ type: "goal.drop", goalId: goal.id, note: "性能测试清理" })));
     await Promise.all(goals.map(goal =>
-      window.crewvane.command({ type: "goal.delete", goalId: goal.id })));
+      window.atte.command({ type: "goal.delete", goalId: goal.id })));
     await new Promise(resolve => setTimeout(resolve, 50));
     observer.disconnect();
     return { createMs, frameMs, maxLongTaskMs: Math.max(0, ...longTasks) };
@@ -1014,16 +1029,16 @@ try {
     capabilities: ["session.started"],
   });
   await app.evaluate(({ BrowserWindow }) =>
-    BrowserWindow.getAllWindows()[0].webContents.send("crewvane:event", {
+    BrowserWindow.getAllWindows()[0].webContents.send("atte:event", {
       type: "terminal-open", session: "cv-live-scene-fixture", title: "隔离现场",
     }));
   await expect(page.locator(".terminal-panel")).toBeVisible();
   const ingested = await ingestAgentHook({
     adapter: "codex",
     environment: {
-      CREWVANE_WORKSPACE: await realpath(workspace), CREWVANE_GOAL_ID: sceneFixture.id,
-      CREWVANE_ATTEMPT_ID: attemptId, CREWVANE_AGENT_NAME: "owner-live-scene",
-      CREWVANE_HOOK_TOKEN: hookToken,
+      ATTE_WORKSPACE: await realpath(workspace), ATTE_GOAL_ID: sceneFixture.id,
+      ATTE_ATTEMPT_ID: attemptId, ATTE_AGENT_NAME: "owner-live-scene",
+      ATTE_HOOK_TOKEN: hookToken,
     },
     stdin: async () => JSON.stringify({ hook_event_name: "SessionStart" }),
   });
@@ -1093,5 +1108,5 @@ try {
   await app.close();
   await new Promise((resolve, reject) =>
     webhookServer.close(error => error ? reject(error) : resolve()));
-  if (process.env.CREWVANE_KEEP_TEST_ARTIFACTS !== "1") await rm(home, { recursive: true, force: true });
+  if (process.env.ATTE_KEEP_TEST_ARTIFACTS !== "1") await rm(home, { recursive: true, force: true });
 }

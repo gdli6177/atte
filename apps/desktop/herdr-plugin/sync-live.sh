@@ -1,17 +1,17 @@
 #!/bin/sh
 set -eu
 
-cli=${CREWVANE_CLI_PATH:-${HOME}/.local/bin/crewvane}
+cli=${ATTE_CLI_PATH:-${HOME}/.local/bin/atte}
 if [ ! -x "$cli" ]; then
   printf '%s\n' \
-    "Crewvane CLI is not available at $cli." \
-    "Open Crewvane once, choose a workspace, then reopen this plugin." >&2
+    "Atte CLI is not available at $cli." \
+    "Open Atte once, choose a workspace, then reopen this plugin." >&2
   exit 1
 fi
 
 # Plugin events run inside the Herdr server and must never inherit the current
 # case scope from a concierge that happened to start that server.
-unset CREWVANE_COORDINATOR CREWVANE_COORDINATOR_SCOPE_FILE
-CREWVANE_HERDR_BINARY=${HERDR_BIN_PATH:-herdr}
-export CREWVANE_HERDR_BINARY
+unset ATTE_COORDINATOR ATTE_COORDINATOR_SCOPE_FILE
+ATTE_HERDR_BINARY=${HERDR_BIN_PATH:-herdr}
+export ATTE_HERDR_BINARY
 exec "$cli" event herdr --json

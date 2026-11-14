@@ -17,3 +17,5 @@ export * from "./reconciliation.js";
 export { readEvents, withLock } from "./storage.js";
 
 export * from "./owner-instructions.js";
+export * from "./compatibility.js";
+export * from "./state-migration.js";

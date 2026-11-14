@@ -3,6 +3,8 @@ import { chmod, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, wri
 import { basename, isAbsolute, join, posix, relative, resolve } from "node:path";
 import { newId } from "./model.js";
 import type { GoalAttachment } from "./types.js";
+import { prepareWorkspaceState } from "./state-migration.js";
+import { STATE_DIRECTORY } from "./compatibility.js";
 
 export const ATTACHMENT_LIMITS = {
   count: 8,
@@ -74,7 +76,7 @@ function assertByteLimits(inputs: AttachmentBytesInput[], buffers: Buffer[]) {
 }
 
 async function attachmentDirectory(root: string) {
-  const owner = await realpath(root), state = join(owner, ".crewvane");
+  const owner = await realpath(root), { directory: state } = await prepareWorkspaceState(root);
   await mkdir(state, { recursive: true });
   if ((await lstat(state)).isSymbolicLink()) throw new Error("状态目录不能是符号链接");
   const directory = join(state, "attachments");
@@ -84,11 +86,15 @@ async function attachmentDirectory(root: string) {
 }
 
 export function attachmentAbsolutePath(root: string, attachment: Pick<GoalAttachment, "path">): string {
-  if (typeof attachment.path !== "string" || !attachment.path.startsWith(".crewvane/attachments/"))
+  if (typeof attachment.path !== "string" ||
+    ![".atte/attachments/", ".crewvane/attachments/"].some(prefix => attachment.path.startsWith(prefix)))
     throw new Error("附件路径不在工作区附件目录中");
-  const base = resolve(root, ".crewvane/attachments"), path = resolve(root, attachment.path),
+  const base = resolve(root, STATE_DIRECTORY, "attachments"),
+    legacyBase = resolve(root, ".crewvane", "attachments"), path = resolve(root, attachment.path),
     rel = relative(base, path);
-  if (!rel || rel.startsWith("..") || isAbsolute(rel))
+  const legacyRel = relative(legacyBase, path);
+  if ((!rel || rel.startsWith("..") || isAbsolute(rel)) &&
+    (!legacyRel || legacyRel.startsWith("..") || isAbsolute(legacyRel)))
     throw new Error("附件路径不在工作区附件目录中");
   return path;
 }
@@ -97,6 +103,7 @@ export async function importAttachmentBytes(root: string, inputs: AttachmentByte
   if (!Array.isArray(inputs)) throw new Error("图片列表无效");
   const buffers = inputs.map(input => asBuffer(input?.bytes));
   assertByteLimits(inputs, buffers);
+  const { owner, directory } = await attachmentDirectory(root);
 
   const prepared = inputs.map((input, index) => {
     const bytes = buffers[index]!, format = detectImageFormat(bytes);
@@ -106,7 +113,7 @@ export async function importAttachmentBytes(root: string, inputs: AttachmentByte
       bytes, id, format, metadata: {
         id,
         name: displayName(input.name, format),
-        path: posix.join(".crewvane", "attachments", `${id}.${format.extension}`),
+        path: posix.join(relative(owner, directory).split("\\").join("/"), `${id}.${format.extension}`),
         mime: format.mime,
         size: bytes.length,
         sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -115,7 +122,7 @@ export async function importAttachmentBytes(root: string, inputs: AttachmentByte
     };
   });
 
-  const { directory } = await attachmentDirectory(root), written: string[] = [];
+  const written: string[] = [];
   try {
     for (const item of prepared) {
       const temporary = join(directory, `.${item.id}.tmp`);
@@ -157,8 +164,9 @@ function normalizedMetadata(value: unknown): GoalAttachment {
     throw new Error("附件名称无效");
   const format = typeof item.mime === "string" ? formatByMime.get(item.mime) : undefined;
   if (!format) throw new Error("附件类型无效");
-  const expectedPath = posix.join(".crewvane", "attachments", `${item.id}.${format.extension}`);
-  if (item.path !== expectedPath) throw new Error("附件路径无效");
+  const expectedPath = posix.join(".atte", "attachments", `${item.id}.${format.extension}`),
+    legacyPath = posix.join(".crewvane", "attachments", `${item.id}.${format.extension}`);
+  if (item.path !== expectedPath && item.path !== legacyPath) throw new Error("附件路径无效");
   if (!Number.isSafeInteger(item.size) || item.size! < 1 || item.size! > ATTACHMENT_LIMITS.bytesPerFile)
     throw new Error("附件大小无效");
   if (typeof item.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(item.sha256))
@@ -168,7 +176,7 @@ function normalizedMetadata(value: unknown): GoalAttachment {
   return {
     id: item.id,
     name: item.name.trim(),
-    path: expectedPath,
+    path: item.path,
     mime: format.mime,
     size: item.size!,
     sha256: item.sha256,
@@ -211,11 +219,12 @@ export async function cleanupOrphanAttachmentFiles(
   minimumAgeMs = 24 * 60 * 60 * 1000,
   now = Date.now(),
 ): Promise<number> {
-  const { directory } = await attachmentDirectory(root), referenced = new Set(referencedPaths);
+  const { owner, directory } = await attachmentDirectory(root), referenced = new Set(referencedPaths);
   let removed = 0;
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (entry.isDirectory() || entry.isSymbolicLink()) continue;
-    const path = join(directory, entry.name), relativePath = posix.join(".crewvane", "attachments", entry.name);
+    const path = join(directory, entry.name),
+      relativePath = relative(owner, path).split("\\").join("/");
     if (referenced.has(relativePath)) continue;
     const info = await stat(path).catch(() => undefined);
     if (!info?.isFile() || now - info.mtimeMs < minimumAgeMs) continue;

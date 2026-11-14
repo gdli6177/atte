@@ -35,7 +35,7 @@ afterEach(async () => {
 const token = "runtime-secret", hash = createHash("sha256").update(token).digest("hex");
 
 async function fixture(base = Date.now()) {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-runtime-broker-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-runtime-broker-"));
   roots.push(root);
   const service = new WorkspaceService(root);
   const goal = await service.execute({
@@ -51,7 +51,7 @@ async function fixture(base = Date.now()) {
     type: "session.set",
     goalId: goal.id,
     reference: {
-      session: "crewvane-test",
+      session: "atte-test",
       workspaceId: "w1",
       tabId: "w1:t2",
       paneId: "w1:p2",
@@ -193,7 +193,7 @@ test("a settled turn reminds once, then hands protocol_missing to the concierge"
     assert.equal(state.agentRuntime?.receipt?.status, "reminded");
   });
   assert.equal(reminders.length, 1);
-  assert.match(reminders[0]!, /crewvane goal progress/);
+  assert.match(reminders[0]!, /atte goal progress/);
   assert.match(reminders[0]!, /不要只回复/);
   assert.doesNotMatch(reminders[0]!, /\n/);
   assert.equal(clock.scheduled.filter(item => !item.cleared && !item.fired).length, 1);
@@ -416,7 +416,7 @@ test("an unconfirmed reminder is handed to the concierge without claiming delive
 
 test("spool drain accepts the valid token, leaves an invalid file, and rejects stale attempts", async () => {
   const base = Date.now(), { root, service, goalId } = await fixture(base);
-  const spool = join(root, ".crewvane", "runtime", "spool");
+  const spool = join(root, ".atte", "runtime", "spool");
   const valid = event(goalId, 1, "turn.started", {
     at: new Date(base + 100).toISOString(),
     turnId: "turn-1",
@@ -453,11 +453,36 @@ test("spool drain accepts the valid token, leaves an invalid file, and rejects s
     assert.equal(remaining.length, 1);
     const diagnostics = await import("node:fs/promises")
       .then(({ readFile }) =>
-        readFile(join(root, ".crewvane", "runtime", "diagnostics.jsonl"), "utf8"));
+        readFile(join(root, ".atte", "runtime", "diagnostics.jsonl"), "utf8"));
     assert.match(diagnostics, /old_attempt/);
   } finally {
     await broker.stop();
   }
+});
+
+test("legacy Agents can spool after migration and refresh drains both queues in sequence order", async () => {
+  const base = Date.now(), { root, service, goalId } = await fixture(base);
+  const broker = new AgentRuntimeBroker({
+    service: () => service, workspace: () => root,
+    remindOwner: async () => {}, notifyConcierge: async () => {},
+  });
+  const legacy = join(root, ".crewvane", "runtime", "spool");
+  await spoolAgentRuntimeEvents(legacy, [{ token, events: [
+    event(goalId, 1, "turn.started", { at: new Date(base + 100).toISOString(), turnId: "turn-legacy" }),
+  ] }]);
+  await spoolAgentRuntimeEvents(join(root, ".atte", "runtime", "spool"), [{ token, events: [
+    event(goalId, 2, "agent.response", { at: new Date(base + 200).toISOString(),
+      turnId: "turn-legacy", content: {
+        text: "旧 Agent 的回复", sha256: createHash("sha256").update("旧 Agent 的回复").digest("hex"),
+        truncated: false,
+      } }),
+  ] }]);
+  await broker.refresh();
+  const runtime = (await service.read()).goals.find(goal => goal.id === goalId)!.agentRuntime!;
+  assert.equal(runtime.lastEventId, "event-2");
+  assert.equal(runtime.currentTurnId, "turn-legacy");
+  assert.equal((await readdir(legacy)).filter(name => name.endsWith(".json")).length, 0);
+  await broker.stop();
 });
 
 test("ended goals immediately discard recovered receipt timers", async () => {
@@ -510,11 +535,11 @@ test("the real socket acknowledges an asynchronously persisted event without spo
     const result = await ingestAgentHook({
       adapter: "codex",
       environment: {
-        CREWVANE_GOAL_ID: goalId,
-        CREWVANE_ATTEMPT_ID: "attempt_broker",
-        CREWVANE_HOOK_TOKEN: token,
-        CREWVANE_AGENT_NAME: "owner-a",
-        CREWVANE_WORKSPACE: root,
+        ATTE_GOAL_ID: goalId,
+        ATTE_ATTEMPT_ID: "attempt_broker",
+        ATTE_HOOK_TOKEN: token,
+        ATTE_AGENT_NAME: "owner-a",
+        ATTE_WORKSPACE: root,
       },
       stdin: async () => JSON.stringify({
         hook_event_name: "UserPromptSubmit",
@@ -577,7 +602,7 @@ test("an automatic reminder's own Stop goes to the concierge without sending ano
 
 test("spool replay uses attempt sequence rather than random same-millisecond file names", async () => {
   const { root, service, goalId } = await fixture();
-  const spool = join(root, ".crewvane", "runtime", "spool");
+  const spool = join(root, ".atte", "runtime", "spool");
   await mkdir(spool, { recursive: true });
   const stamp = Date.now();
   for (const [name, item] of [
@@ -634,7 +659,7 @@ test("disabling an Adapter cancels receipts and ignores Hooks cached by an alrea
   const { root, service, goalId } = await fixture();
   const home = join(root, "home");
   await mkdir(join(home, ".local/bin"), { recursive: true });
-  await writeFile(join(home, ".local/bin/crewvane"), "# fixture");
+  await writeFile(join(home, ".local/bin/atte"), "# fixture");
   const manager = new AgentHookManager({
     home, userData: join(root, "userData"),
     commandPath: async name => name === "codex" ? "/fixture/codex" : undefined,
@@ -654,7 +679,7 @@ test("disabling an Adapter cancels receipts and ignores Hooks cached by an alrea
   try {
     await broker.recover();
     assert.equal((await service.read()).goals[0]!.agentRuntime?.receipt?.status, "cancelled");
-    const spool = join(root, ".crewvane/runtime/spool");
+    const spool = join(root, ".atte/runtime/spool");
     await spoolAgentRuntimeEvents(spool, [{ token, events: [
       event(goalId, 3, "turn.started", { turnId: "cached-hook" }),
     ] }]);

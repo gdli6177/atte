@@ -14,9 +14,9 @@ afterEach(async () => {
 });
 
 test("coordinator scope replaces atomically and keeps the latest case", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-coordinator-scope-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-coordinator-scope-"));
   fixtures.push(root);
-  await mkdir(join(root, ".crewvane"));
+  await mkdir(join(root, ".atte"));
 
   await writeCoordinatorScope(root, "goal_first", "request_first");
   await writeCoordinatorScope(root, "goal_latest", "request_latest", {
@@ -30,7 +30,7 @@ test("coordinator scope replaces atomically and keeps the latest case", async ()
 
   const path = coordinatorScopePath(root),
     value = JSON.parse(await readFile(path, "utf8")),
-    entries = await readdir(join(root, ".crewvane"));
+    entries = await readdir(join(root, ".atte"));
   assert.equal(value.goalId, "goal_latest");
   assert.equal(value.requestId, "request_latest");
   assert.equal(value.attentionId, "attention_1");
@@ -40,9 +40,9 @@ test("coordinator scope replaces atomically and keeps the latest case", async ()
 });
 
 test("concurrent scope updates always leave one complete JSON document", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-coordinator-scope-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-coordinator-scope-"));
   fixtures.push(root);
-  await mkdir(join(root, ".crewvane"));
+  await mkdir(join(root, ".atte"));
 
   await Promise.all(Array.from({ length: 24 }, (_, index) =>
     writeCoordinatorScope(root, `goal_${index}`, `request_${index}`)));
@@ -50,6 +50,6 @@ test("concurrent scope updates always leave one complete JSON document", async (
   const value = JSON.parse(await readFile(coordinatorScopePath(root), "utf8"));
   assert.match(value.goalId, /^goal_\d+$/);
   assert.equal(value.requestId, value.goalId.replace("goal_", "request_"));
-  const entries = await readdir(join(root, ".crewvane"));
+  const entries = await readdir(join(root, ".atte"));
   assert.equal(entries.some(name => name.includes(".tmp")), false);
 });

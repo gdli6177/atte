@@ -6,7 +6,7 @@
 说明。它解决的是“同一类工作每次都要重新讲一遍”的问题，不负责调度、保存目标状态
 或替代 Agent。
 
-Crewvane 有三类 Skill：
+Atte 有三类 Skill：
 
 | 类型 | 来源 | 作用 | 是否可被目标挂载 |
 | --- | --- | --- | --- |
@@ -14,16 +14,16 @@ Crewvane 有三类 Skill：
 | 工序 | 内置 | 标准交付、探索研究或发布检查的默认步骤 | 否，按目标类型自动解析 |
 | 本地方法 | 用户安装 | 保存特定团队或个人的流程、清单与可选脚本 | 是，每个目标最多 8 个 |
 
-内置名称使用保留前缀 `crewvane.`。第三方本地能力包必须使用独立命名空间，例如
+内置名称使用保留前缀 `atte.`。第三方本地能力包必须使用独立命名空间，例如
 `acme.release-review`。
 
 ## 用户流程
 
 设置页的“工作方法”提供两个入口：
 
-1. **让 Agent 创建**：复制一段说明给已安装 Crewvane Skills 的 Agent。Agent 通过
+1. **让 Agent 创建**：复制一段说明给已安装 Atte Skills 的 Agent。Agent 通过
    自然语言补齐触发场景、步骤、验收证据和适用角色，使用
-   `crewvane skill draft / validate` 生成并检查草稿，再在用户明确确认后安装。
+   `atte skill draft / validate` 生成并检查草稿，再在用户明确确认后安装。
 2. **从文件夹安装**：用户通过目录选择器选择一个本地能力包。应用先验证并展示名称、
    版本、角色、说明、参考文件、文件数量和脚本摘要，再允许安装。
 
@@ -47,27 +47,27 @@ acme.release-review/
 `manifest.json` 使用 `schemaVersion: 1`，包含：
 
 - `id`、`name`、`description`、`version`；
-- `minimumCrewvane`；
+- `minimumAtte`；
 - `kind: "process"`；
 - `roles: ["owner"]`、`["verifier"]` 或两者；
 - `entry`；
 - 可选 `references` 与 `scripts`。
 
 脚本声明必须包含稳定 `id`、位于 `scripts/` 的相对路径、SHA-256 和用户可读用途。
-完整示例见随应用安装的 `crewvane-local-pack-author/references/manifest.md`。
+完整示例见随应用安装的 `atte-local-pack-author/references/manifest.md`。
 
 ## 解析顺序
 
 负责人或复核者启动前，按固定顺序组合上下文：
 
-1. Crewvane Core 不可覆盖的边界；
+1. Atte Core 不可覆盖的边界；
 2. 当前角色 Skill；
 3. 当前目标类型的工序 Skill；
 4. 目标挂载的本地方法，按稳定 ID 排序；
 5. 本次目标或复核任务。
 
 管家通知包含控制面角色、Agent 接入和现场恢复 Skills，以及当前工作区本地方法的
-名称、状态和用途目录。管家只在目标确实匹配时通过 `crewvane skill attach` 挂载；
+名称、状态和用途目录。管家只在目标确实匹配时通过 `atte skill attach` 挂载；
 不会把每个本地方法的全文注入所有案卷。
 
 ## 上下文与性能边界
@@ -90,7 +90,7 @@ acme.release-review/
 - 安装可以不带任何脚本授权；这样的包仍可提供流程说明；
 - 用户必须逐项批准脚本，批准值绑定当前脚本 SHA-256；
 - 包升级、脚本变化或整个包摘要变化会使旧授权失效；
-- `crewvane skill run` 只允许运行当前目标已挂载、已授权且摘要匹配的脚本；
+- `atte skill run` 只允许运行当前目标已挂载、已授权且摘要匹配的脚本；
 - 受管 Agent 只能为其当前目标运行脚本；
 - 脚本环境只暴露必要的本地变量，不继承任意宿主变量；
 - stdout / stderr 会截断，执行 120 秒后终止；
@@ -101,7 +101,7 @@ acme.release-review/
 ## 状态边界
 
 Skill、Hook 与脚本只回答“Agent 被告知该怎么做”或“执行过程发生了什么”。目标
-完成、外部等待、需要人决定、交付复核和验收仍只能由 Crewvane 语义 CLI 写入。
+完成、外部等待、需要人决定、交付复核和验收仍只能由 Atte 语义 CLI 写入。
 
 特别是：
 
@@ -121,7 +121,7 @@ Skill、Hook 与脚本只回答“Agent 被告知该怎么做”或“执行过�
 
 1. 不开始新的 Agent 回合；
 2. 保存可操作的失败原因；
-3. 需要现成负责人时使用 `crewvane owner attach` 校验真实现场；
+3. 需要现成负责人时使用 `atte owner attach` 校验真实现场；
 4. 已可能送达的业务任务绝不自动重放；
 5. 确认现场、重新安装或移除绑定后再由用户或管家决定下一步。
 

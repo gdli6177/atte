@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
+import { prepareWorkspaceState, workspaceDataDirectory } from "../../../packages/core/src/index.js";
 
 export type CoordinatorPriority = "human" | "attention" | "normal" | "background";
 export type CoordinatorJobKind =
@@ -95,7 +96,7 @@ function nowIso() {
 }
 
 function atomicTextPath(root: string) {
-  return join(root, ".crewvane", "coordinator-inbox.json");
+  return join(workspaceDataDirectory(root), "coordinator-inbox.json");
 }
 
 function initialInbox(at = nowIso()): StoredCoordinatorInbox {
@@ -163,6 +164,8 @@ export class CoordinatorInbox {
   ) {}
 
   static async open(root: string) {
+    const { directory } = await prepareWorkspaceState(root);
+    await mkdir(directory, { recursive: true });
     const path = atomicTextPath(root);
     let state = initialInbox();
     try {

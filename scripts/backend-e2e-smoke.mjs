@@ -1,5 +1,5 @@
 // Packaged-app, real-model trial. The concierge must create the owners itself.
-// Only this isolated Crewvane installation and named Herdr session are owned.
+// Only this isolated Atte installation and named Herdr session are owned.
 import assert from "node:assert/strict";
 import { _electron as electron, expect } from "@playwright/test";
 import { mkdtemp, mkdir, readFile, writeFile, realpath, access } from "node:fs/promises";
@@ -11,7 +11,7 @@ import { completeAutonomySetup } from "./lib/autonomy-setup.mjs";
 import { cleanupBackendTrial } from "./lib/backend-trial-cleanup.mjs";
 import { attentionRequest } from "../packages/core/src/model.ts";
 
-const agent = process.env.CREWVANE_TRIAL_AGENT;
+const agent = process.env.ATTE_TRIAL_AGENT;
 assert(agent, "Choose an installed, authenticated real Agent command explicitly.");
 const trial = await realpath(await mkdtemp("/tmp/cv-backend-e2e-"));
 const profile = join(trial, "orca-profile");
@@ -19,20 +19,20 @@ const workspace = join(trial, "工作 区"), home = join(trial, "home"), userDat
 await Promise.all([mkdir(workspace), mkdir(home)]);
 await writeFile(join(workspace, "AGENTS.md"), `# 隔离产品验收
 只处理本隔离工作区，不访问其他用户文件；不得提交、发布或发送外部消息。
-管家必须使用 Crewvane CLI 创建独立负责人，不能代为创建工件或执行业务检查。
+管家必须使用 Atte CLI 创建独立负责人，不能代为创建工件或执行业务检查。
 每个实际执行回合都写回 progress，不结束整个目标，不请求不必要的用户确认。
 `);
 const session = `cv-backend-${randomUUID().slice(0, 8)}`;
-const executablePath = resolve(process.env.CREWVANE_APP_PATH ||
-  "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane");
-const env = { ...process.env, CREWVANE_TEST_WORKSPACE: workspace, CREWVANE_TEST_HOME: home,
-  CREWVANE_TEST_USER_DATA: userData, CREWVANE_HERDR_SESSION: session, ORCA_USER_DATA_PATH: profile,
+const executablePath = resolve(process.env.ATTE_APP_PATH ||
+  "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte");
+const env = { ...process.env, ATTE_TEST_WORKSPACE: workspace, ATTE_TEST_HOME: home,
+  ATTE_TEST_USER_DATA: userData, ATTE_HERDR_SESSION: session, ORCA_USER_DATA_PATH: profile,
   // ORCA_USER_DATA_PATH isolates Orca's profile. Orca still needs the real
   // macOS user HOME for LaunchServices and its local runtime handshake.
-  CREWVANE_ORCA_HOST_HOME: process.env.HOME };
-// The packaged app applies CREWVANE_TEST_HOME after startup, but this smoke
-// test also invokes the installed Crewvane CLI directly. Point both Crewvane's
-// embedded CLI and Herdr at the same isolated home; CREWVANE_TEST_HOME alone is
+  ATTE_ORCA_HOST_HOME: process.env.HOME };
+// The packaged app applies ATTE_TEST_HOME after startup, but this smoke
+// test also invokes the installed Atte CLI directly. Point both Atte's
+// embedded CLI and Herdr at the same isolated home; ATTE_TEST_HOME alone is
 // intentionally an application-only test hook.
 const cliEnv = {
   ...env,
@@ -65,7 +65,7 @@ for (const signal of ["SIGINT", "SIGTERM"])
       console.error(JSON.stringify({ cleanupWarning: String(error), evidence: trial }));
     }).finally(() => process.exit(signal === "SIGINT" ? 130 : 143));
   });
-const snapshot = () => page.evaluate(() => window.crewvane.command({ type: "snapshot" }));
+const snapshot = () => page.evaluate(() => window.atte.command({ type: "snapshot" }));
 async function evidence(label) {
   const state = await snapshot();
   await writeFile(join(trial, `${label}.json`), JSON.stringify(state, null, 2));
@@ -101,7 +101,7 @@ async function waitForCaseProgress(marker, phase, backend) {
 }
 async function switchTo(backend) {
   const before = await snapshot();
-  const result = await page.evaluate(backend => window.crewvane.switchBackend(backend), backend);
+  const result = await page.evaluate(backend => window.atte.switchBackend(backend), backend);
   assert.equal(result.journal?.phase, "ready", result.journal?.detail);
   assert.equal(result.status.control.selected, backend);
   const after = await evidence(`switched-${backend}`);
@@ -120,14 +120,14 @@ try {
   page = await app.firstWindow();
   page.on("pageerror", error => errors.push(String(error)));
   await completeAutonomySetup(page);
-  await page.evaluate(() => window.crewvane.saveSceneSettings({
+  await page.evaluate(() => window.atte.saveSceneSettings({
     openWith: "embedded", terminal: "auto",
   }));
-  await page.evaluate(command => window.crewvane.command({
+  await page.evaluate(command => window.atte.command({
     type: "agents.configure", preferences: { concierge: command, owner: command, worker: command },
   }), agent);
   for (const marker of ["ALPHA", "BETA"]) {
-    const goal = await page.evaluate(({ marker, workspace }) => window.crewvane.command({
+    const goal = await page.evaluate(({ marker, workspace }) => window.atte.command({
       type: "goal.intake",
       text: `隔离测试 ${marker}。由独立负责人处理。只操作 ${workspace}/${marker}.json。
 读取已有结果，不存在时写 {"marker":"${marker}","phases":[1]}；
@@ -147,7 +147,7 @@ next 写“本阶段已通过，停止并等待下一次明确的后端交接任
   assert.equal(new Set(state.goals.filter(item => ids.includes(item.id)).map(item => item.scene.bindingId)).size, 2);
   // The third goal proves that attention, its identity and its scene answer
   // survive both directions. It is delegated by the real concierge as well.
-  const consultation = await page.evaluate(() => window.crewvane.command({
+  const consultation = await page.evaluate(() => window.atte.command({
     type: "goal.intake",
     text: "隔离咨询：请独立负责人只写回一个决定问题“本轮采用选项 A 还是 B？”，不要实现、不要验收。收到答复后用 scene-reply 绑定当前 attention 保存人的原话，等待管家核对。",
   }));
@@ -163,12 +163,12 @@ next 写“本阶段已通过，停止并等待下一次明确的后端交接任
     state.goals.filter(item => ids.includes(item.id)).every(item => item.live?.state === "idle"),
     "initial owners and concierge idle");
   await switchTo("orca");
-  const restoredOrca = await page.evaluate(id => window.crewvane.openScene(id, true), consultation.id);
+  const restoredOrca = await page.evaluate(id => window.atte.openScene(id, true), consultation.id);
   assert.equal(restoredOrca.mode, "native", "Orca consultation opens its native UI.");
   const orcaConsultation = (await snapshot()).goals.find(goal => goal.id === consultation.id);
   assert.equal(attentionRequest(orcaConsultation)?.id, firstAttentionId);
   assert.equal(orcaConsultation.scene.backend, "orca");
-  await page.evaluate(id => window.crewvane.openScene(id, true), consultation.id);
+  await page.evaluate(id => window.atte.openScene(id, true), consultation.id);
   assert.equal((await snapshot()).goals.find(goal => goal.id === consultation.id).scene.bindingId,
     orcaConsultation.scene.bindingId, "Repeated recovery only focuses the existing consultation.");
   await Promise.all(["ALPHA", "BETA"].map(marker => waitForCaseProgress(marker, 2, "orca")));
@@ -180,7 +180,7 @@ next 写“本阶段已通过，停止并等待下一次明确的后端交接任
   assert(attentionRequest(handedBackAttention)?.id === firstAttentionId,
   "switching backends never regenerates or dismisses the pending decision");
   await Promise.all(["ALPHA", "BETA"].map(marker => waitForCaseProgress(marker, 3, "herdr")));
-  await page.evaluate(id => window.crewvane.openScene(id, true), consultation.id);
+  await page.evaluate(id => window.atte.openScene(id, true), consultation.id);
   await waitFor(state => state.goals.find(goal => goal.id === consultation.id)?.live?.state === "idle",
     "explicitly restored consultation is ready for a real scene answer", 120_000);
   state = await snapshot();
@@ -190,7 +190,7 @@ next 写“本阶段已通过，停止并等待下一次明确的后端交接任
   }
   const currentConsultation = state.goals.find(goal => goal.id === consultation.id);
   assert(currentConsultation?.scene);
-  const cli = join(userData, "bin/crewvane");
+  const cli = join(userData, "bin/atte");
   await promisify(execFile)(cli, [
     "owner", "send", consultation.id, "--root", workspace,
     "--text", `采用选项 A，其他保持不变。请按现场回复协议保存我这句话，关联当前待答复事项 ${firstAttentionId}，交给管家核对，不要重复提问或开始实现。`,
@@ -210,7 +210,7 @@ next 写“本阶段已通过，停止并等待下一次明确的后端交接任
   await page.getByRole("button", { name: "设置", exact: true }).click();
   await expect(page.getByRole("button", { name: "检查更新", exact: true })).toHaveCount(2);
   await evidence("settings-update-controls");
-  for (const id of ids) await page.evaluate(id => window.crewvane.command({
+  for (const id of ids) await page.evaluate(id => window.atte.command({
     type: "goal.complete", goalId: id, note: "用户确认隔离测试目标结束", actor: "你",
   }), id);
   await waitFor(state => state.goals.filter(item => ids.includes(item.id)).every(item => !item.scene), "only ended owners close");

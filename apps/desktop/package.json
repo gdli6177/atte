@@ -1,11 +1,12 @@
 {
-  "name": "@crewvane/desktop",
-  "version": "0.11.0",
+  "name": "@atte/desktop",
+  "version": "0.12.0",
+  "description": "Atte — 注意力中心",
   "private": true,
   "type": "module",
   "main": "dist/main.cjs",
   "scripts": {
-    "dev": "pnpm package && ./release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane",
+    "dev": "pnpm package && ./release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte",
     "build": "electron-rebuild -w node-pty && node build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",

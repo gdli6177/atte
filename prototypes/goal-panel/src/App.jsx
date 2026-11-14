@@ -154,10 +154,10 @@ function AppHeader({ theme, onToggleTheme, viewLabel }) {
     <header className="app-header">
       <div className="brand">
         <span className="brand-mark">
-          <img src="/assets/crewvane-mage.png" alt="" />
+          <img src="/assets/atte-mascot-baseline-512.png" alt="" />
         </span>
-        <strong>Crewvane</strong>
-        <small>协航</small>
+        <strong>Atte</strong>
+        <small>Atte</small>
       </div>
       <div className="breadcrumb">
         <span>我的工作台</span>
@@ -404,30 +404,16 @@ function HandoffModal({
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [replyOpen, setReplyOpen] = useState(goal.statusKey === "reply");
-  const [returnMode, setReturnMode] = useState(false);
 
   useEffect(() => {
     setHistoryOpen(false);
     setReplyOpen(goal.statusKey === "reply");
-    setReturnMode(false);
   }, [goal.id]);
 
   function sendReply(event) {
     event.preventDefault();
     const value = reply.trim();
     if (!value) return;
-
-    if (returnMode) {
-      onStatusChange(goal.id, "handedOff");
-      onReceipt(goal.id, {
-        title: "已退回给管家",
-        detail: "你的原话已送达。管家会带着修改意见交给负责人，结果回来后会重新进入注意力。",
-      });
-      setReturnMode(false);
-      setReplyOpen(false);
-      onReplyChange("");
-      return;
-    }
 
     onReceipt(goal.id, {
       title: "已交给管家",
@@ -444,11 +430,9 @@ function HandoffModal({
       detail: "管家会收尾这个目标。你无需再回来修改状态。",
     });
     setReplyOpen(false);
-    setReturnMode(false);
   }
 
-  function openReply(mode = false) {
-    setReturnMode(mode);
+  function openReply() {
     setReplyOpen(true);
   }
 
@@ -566,19 +550,16 @@ function HandoffModal({
                 id={goal.id}
                 value={reply}
                 placeholder={
-                  returnMode
-                    ? "说说哪里需要修改，管家会转交负责人"
-                    : goal.statusKey === "review"
-                      ? "有疑问？直接问管家"
+                  goal.statusKey === "review"
+                      ? "补充要求或提出问题，由管家判断下一步"
                       : "告诉管家你的想法，不必固定格式"
                 }
-                label={returnMode ? "退回原因" : "回复管家"}
-                submitLabel={returnMode ? "退回并交给管家" : "交给管家"}
+                label={goal.statusKey === "review" ? "给管家发消息" : "回复管家"}
+                submitLabel="交给管家"
                 onChange={onReplyChange}
                 onSubmit={sendReply}
                 onCancel={() => {
                   setReplyOpen(false);
-                  setReturnMode(false);
                   onReplyChange("");
                 }}
               />
@@ -589,16 +570,13 @@ function HandoffModal({
                   <strong>确认后由管家收尾，有问题也可以直接说明。</strong>
                 </div>
                 <div className="decision-buttons">
-                  <button className="secondary-button" type="button" onClick={() => openReply(true)}>
-                    退回修改
+                  <button className="secondary-button" type="button" onClick={() => openReply(false)}>
+                    给管家发消息
                   </button>
                   <button className="primary-button" type="button" onClick={acceptReview}>
                     <Check size={16} /> 验收通过
                   </button>
                 </div>
-                <button className="ask-link" type="button" onClick={() => openReply(false)}>
-                  有疑问，问管家 <ArrowRight size={13} />
-                </button>
               </div>
             ) : goal.status.tone === "waiting" ? (
               <div className="quiet-row">

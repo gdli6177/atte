@@ -62,13 +62,13 @@ export function renderBoard(state: WorkspaceState, selectedId?: string, message?
   const active = goals.filter(goal => goal.mode === "concierge" && goal.status === "active" && !attention.includes(goal)).length;
   const lines = [
     `${ESC}38;5;111m╭────────────────────────────────────────────────────────────╮${ESC}0m`,
-    `${ESC}38;5;111m│${ESC}0m  ${ESC}1mCREWVANE${ESC}0m  ${ESC}38;5;79m注意力控制台${ESC}0m  ${ESC}2m${state.backendBinding?.backend === "orca" ? "Orca" : "Herdr"}${ESC}0m                 ${ESC}38;5;111m│${ESC}0m`,
+    `${ESC}38;5;111m│${ESC}0m  ${ESC}1mAtte${ESC}0m  ${ESC}38;5;79m注意力控制台${ESC}0m  ${ESC}2m${state.backendBinding?.backend === "orca" ? "Orca" : "Herdr"}${ESC}0m                     ${ESC}38;5;111m│${ESC}0m`,
     `${ESC}38;5;111m╰────────────────────────────────────────────────────────────╯${ESC}0m`,
     `  ${ESC}38;5;214m${attention.length} 件需要你${ESC}0m   ${ESC}38;5;110m${waiting} 件在等${ESC}0m   ${ESC}2m${active} 件推进中 · ${deferred} 件暂存 · ${personal} 件我来做${ESC}0m`,
     "",
   ];
   if (!goals.length) {
-    lines.push(`${ESC}2m还没有目标。按 n 用一句话交给 Crewvane。${ESC}0m`);
+    lines.push(`${ESC}2m还没有目标。按 n 用一句话交给 Atte。${ESC}0m`);
   } else {
     for (const goal of goals) {
       const selected = goal.id === selectedId;
@@ -104,7 +104,7 @@ export function renderBoard(state: WorkspaceState, selectedId?: string, message?
   const contextual = [
     ...(selected?.status === "waiting" || selected?.status === "backlog" || selected?.mode === "manual"
       ? ["u 交给管家推进", "m 我来处理"] : []),
-    ...(selected?.status === "review" ? ["a 验收通过", "r 退回修改"] : []),
+    ...(selected?.status === "review" ? ["a 验收通过", "c 给管家发消息"] : []),
     ...(selected?.mode === "manual" && selected.status !== "backlog" && selected.status !== "review" ? ["a 标记完成"] : []),
   ];
   lines.push("", ...(message ? [`  ${ESC}38;5;79m${message}${ESC}0m`, ""] : []),
@@ -211,7 +211,7 @@ export async function runBoard(
     await act(async () => {
       const goal = await service.execute({ type: "goal.intake", text, handling }) as Goal;
       selectedId = goal.id;
-      return handling === "concierge" ? "已交给管家。Crewvane 打开时会自动派发，桌面未运行时请求会保留。"
+      return handling === "concierge" ? "已交给管家。Atte 打开时会自动派发，桌面未运行时请求会保留。"
         : handling === "later" ? "已暂存，不会启动 Agent。" : "已记录，由你安排，做完即可标记完成。";
     });
   };
@@ -219,7 +219,7 @@ export async function runBoard(
     const goal = selected();
     if (!goal) return;
     const decision = goal.attention?.kind === "decision";
-    const text = await askText(decision
+    const text = await askText(goal.status === "review" ? "给管家发消息： " : decision
       ? "你的决定（以“拒绝”开头会记入拒绝账本）： "
       : "补充意见： ");
     if (!text) return;
@@ -232,7 +232,10 @@ export async function runBoard(
         });
       }
       else
-        await service.execute({ type: "goal.message", goalId: goal.id, text, actor: "你" });
+        await service.execute({
+          type: "goal.message", goalId: goal.id, text, actor: "你",
+          ...(goal.status === "review" ? { routeToConcierge: true } : {}),
+        });
       return decision ? "决定已写入账本，正在交给管家。" : goal.mode === "concierge"
         ? "补充意见已保存，正在交给管家。" : "补充说明已记录，不会启动 Agent。";
     });
@@ -284,24 +287,12 @@ export async function runBoard(
       return "成果已验收通过。";
     });
   };
-  const rework = async () => {
-    const goal = selected();
-    if (!goal) return;
-    if (goal.status !== "review")
-      return setMessage("只有待验收事项可以退回修改。");
-    const note = await askText("退回原因与要补齐的内容： ");
-    if (!note) return;
-    await act(async () => {
-      await service.execute({ type: "goal.rework", goalId: goal.id, note });
-      return "已退回修改，问题已写入下一步。";
-    });
-  };
   const openScene = async () => {
     const goal = selected();
     if (!goal) return;
     if (goal.mode === "manual" && !goal.scene)
       return setMessage("这件事没有 Agent 现场；需要 Agent 执行时，请先交给管家。");
-    if (!options.focusScene) return setMessage("请从已安装的 Crewvane CLI 或桌面打开现场。");
+    if (!options.focusScene) return setMessage("请从已安装的 Atte CLI 或桌面打开现场。");
     await act(async () => {
       await options.focusScene!(goal.id);
       return "已切换到负责人现场。";
@@ -310,7 +301,7 @@ export async function runBoard(
   const focusConcierge = async () => {
     if (!state.concierge.scene)
       return setMessage("管家还没有启动，请先在桌面点击「找管家」。");
-    if (!options.focusScene) return setMessage("请从已安装的 Crewvane CLI 或桌面回到管家。");
+    if (!options.focusScene) return setMessage("请从已安装的 Atte CLI 或桌面回到管家。");
     await act(async () => {
       await options.focusScene!();
       return "已切换到全局管家。";
@@ -339,7 +330,6 @@ export async function runBoard(
     if (key.name === "u") { paused = true; void resume("concierge"); return; }
     if (key.name === "m") { paused = true; void resume("manual"); return; }
     if (key.name === "a") { void accept(); return; }
-    if (key.name === "r") { paused = true; void rework(); return; }
     if (key.name === "o") { void openScene(); return; }
     if (key.name === "g") { void focusConcierge(); return; }
     if (key.name === "return") {

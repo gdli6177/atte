@@ -1,6 +1,6 @@
 # Orca Session Adapter：G0 接口核实记录
 
-核实日期：2026-11-13。开发基线：Crewvane `v0.10.0`，`ddf9cc2`。
+核实日期：2026-11-13。开发基线：Atte `v0.10.0`，`ddf9cc2`。
 本文记录安装源码与隔离实测，不把上游功能名称当成已验证的产品保证。
 
 ## 被测环境
@@ -24,7 +24,7 @@ Orca 的安装检测同时核对 bundle 身份、严格代码签名、发布者�
 | 连接身份 | CLI envelope 中的 runtime ID；核对进程出生时间，防止 PID 复用 |
 | 普通目录工作区 | 精确 folder-match，中文/空格路径通过；不执行 git init 或创建额外 worktree |
 | 创建终端 | `terminal create` 执行私有短 launcher；收据绑定 installation、request、binding、attempt 与真实 locator |
-| 注入环境 | launcher 在交互登录 zsh 中 source，导出 Crewvane 身份；保留 alias、函数与原生 argv |
+| 注入环境 | launcher 在交互登录 zsh 中 source，导出 Atte 身份；保留 alias、函数与原生 argv |
 | 发送正文 | `terminal send` 的接受/开始观测分开保存；未确认结果不换请求重发 |
 | 生命周期 | 查询终端和程序的可验证状态；idle 不是业务完成，Agent Hooks 和 CLI 语义写回继续有效 |
 | 后台终端 | `orphaned=true` 仅表示 leaf 未挂载；`connected=true`、`writable=true` 且进程身份匹配时仍可发送，不能判为失联 |
@@ -36,14 +36,14 @@ Orca 的安装检测同时核对 bundle 身份、严格代码签名、发布者�
 适配器连接时还核对 `terminal.prompt-delivery.v1`、
 `terminal.create-idempotency.v2`、`workspace-selector.folder-match.v1`
 等实际能力。虽然上游声明创建幂等能力，当前所用公共 `terminal create` 命令
-没有显式 request ID 参数，因此 Crewvane 仍在副作用前持久保存意图，使用自己的
+没有显式 request ID 参数，因此 Atte 仍在副作用前持久保存意图，使用自己的
 launcher 收据发现现场，不把能力名称当作可安全重试的凭据。
 
 ## 可重跑证据
 
 ```sh
-CREWVANE_TEST_ORCA_PROFILE=/private/tmp/cv-orca-g0/profile pnpm test:orca
-CREWVANE_TEST_HERDR_BINARY=/absolute/path/to/verified/herdr \
+ATTE_TEST_ORCA_PROFILE=/private/tmp/cv-orca-g0/profile pnpm test:orca
+ATTE_TEST_HERDR_BINARY=/absolute/path/to/verified/herdr \
   pnpm exec tsx scripts/herdr-session-contract-smoke.mjs
 ```
 
@@ -71,4 +71,4 @@ Tab 聚焦及必要时的 `agent focus <paneId>`，不会使用不存在的 `pan
 - 第二台无开发依赖 Mac 的安装与首次系统授权；当前只能记录本机结果。
 - Orca 原生 Agent 会话 resume、远程 execution host 和完整终端历史迁移。
 - 任意新 Orca 版本；通过签名检查不等于通过本版接口合同。
-- 原生 Orca 的所有快捷键组合；Crewvane 只负责定位，其输入交互由 Orca 承载。
+- 原生 Orca 的所有快捷键组合；Atte 只负责定位，其输入交互由 Orca 承载。

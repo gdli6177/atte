@@ -15,7 +15,7 @@ import type { GoalSceneContext } from "./features/goals/goalPresentation.js";
 import "@xterm/xterm/css/xterm.css";
 
 type TerminalGeometry = { x: number; y: number; width: number; height: number };
-const geometryKey = "crewvane.terminal.geometry";
+const geometryKey = "atte.terminal.geometry";
 const minWidth = 480, minHeight = 260;
 function savedGeometry(): TerminalGeometry | undefined {
   try {
@@ -122,12 +122,15 @@ export function HerdrTerminal({ session, title, goal, theme, visible, onClose, o
     }
   }
   useEffect(() => {
+    const tokens = getComputedStyle(document.documentElement);
     const terminal = new Terminal({
-      cursorBlink: true, fontFamily: '"SFMono-Regular", Menlo, Consolas, monospace',
-      fontSize: 13, lineHeight: 1.25, scrollback: 3000,
+      cursorBlink: !matchMedia("(prefers-reduced-motion: reduce)").matches,
+      fontFamily: tokens.getPropertyValue("--font-mono").trim(),
+      fontSize: parseFloat(tokens.getPropertyValue("--terminal-font-size")),
+      lineHeight: parseFloat(tokens.getPropertyValue("--terminal-line-height")), scrollback: 3000,
       allowProposedApi: false, screenReaderMode: true,
       rightClickSelectsWord: true,
-      cols: 120, rows: 32, theme: terminalTheme(theme),
+      cols: 120, rows: 32, theme: terminalTheme(),
     });
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
@@ -204,7 +207,7 @@ export function HerdrTerminal({ session, title, goal, theme, visible, onClose, o
     };
     // Theme is updated in-place below so changing it never reconnects a session.
   }, [session, attempt]);
-  useEffect(() => { if (term.current) term.current.options.theme = terminalTheme(theme); }, [theme]);
+  useEffect(() => { if (term.current) term.current.options.theme = terminalTheme(); }, [theme]);
   useEffect(() => { if (visible) term.current?.focus(); else term.current?.blur(); }, [visible]);
   useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
   useEffect(() => {
@@ -357,8 +360,14 @@ export function HerdrTerminal({ session, title, goal, theme, visible, onClose, o
     </section>
   );
 }
-function terminalTheme(_theme: string) {
+function terminalTheme() {
   // Herdr and CLI agents render their own ANSI palette. Keep their canvas dark
   // in both app themes so hard-coded light text remains readable.
-  return { background: "#111420", foreground: "#dce1f0", cursor: "#b4a2ff", selectionBackground: "#383250" };
+  const tokens = getComputedStyle(document.documentElement);
+  return {
+    background: tokens.getPropertyValue("--terminal-bg").trim(),
+    foreground: tokens.getPropertyValue("--terminal-text").trim(),
+    cursor: tokens.getPropertyValue("--terminal-cursor").trim(),
+    selectionBackground: tokens.getPropertyValue("--terminal-selection").trim(),
+  };
 }

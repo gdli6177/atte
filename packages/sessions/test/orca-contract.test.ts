@@ -183,7 +183,7 @@ test("isolated Orca profiles keep the explicit host HOME for runtime launch and 
     environment: {
       HOME: "/tmp/isolated-home",
       ORCA_USER_DATA_PATH: "/tmp/isolated-profile",
-      CREWVANE_ORCA_HOST_HOME: "/Users/host-user",
+      ATTE_ORCA_HOST_HOME: "/Users/host-user",
     },
   }) as OrcaAdapter;
   assert.equal(adapter.options.environment?.HOME, "/Users/host-user");

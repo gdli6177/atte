@@ -1,18 +1,43 @@
 # 安装与 GitHub Releases 交付
 
-版本发布后，从 [GitHub Releases](https://github.com/gdli6177/crewvane/releases) 进入对应版本，在 **Assets** 下载。当前只支持 Apple Silicon Mac（arm64），不提供 Intel Mac、Windows 或 Linux 安装包。
+版本发布后，从 [GitHub Releases](https://github.com/gdli6177/atte/releases) 进入对应版本，在 **Assets** 下载。当前只支持 Apple Silicon Mac（arm64），不提供 Intel Mac、Windows 或 Linux 安装包。
 
 | 附件 | 使用方法 |
 | --- | --- |
-| `Crewvane-<version>-macOS-arm64.dmg` | 打开磁盘映像，将 Crewvane.app 拖入 Applications，然后从“应用程序”打开 |
-| `Crewvane-<version>-macOS-arm64.zip` | 解压后将 Crewvane.app 移入“应用程序” |
+| `Atte-<version>-macOS-arm64.dmg` | 打开磁盘映像，将 Atte.app 拖入 Applications，然后从“应用程序”打开 |
+| `Atte-<version>-macOS-arm64.zip` | 解压后将 Atte.app 移入“应用程序” |
 | `SHA256SUMS.txt` | 执行 `shasum -a 256 -c SHA256SUMS.txt` 核对安装附件 |
 
 GitHub 自动生成的 **Source code** 是源码，不是可安装应用。安装包自带 Electron、CLI runtime 和经 SHA-256 校验的 Herdr TUI CLI，无需安装 Node、pnpm 或 Homebrew。Agent CLI 仍由用户自行安装和登录。
 
 当前包没有 Apple Developer ID 签名与公证，首次打开可能出现“无法验证开发者”。核对发布来源与 SHA-256 后，可在“系统设置 → 隐私与安全性”选择“仍要打开”。如果出现“已损坏，无法打开”，不要清除隔离属性绕过；重新下载当前版本并联系维护者。`v0.3.0` 的签名不完整，不应继续使用。
 
-安装替换应用后，打开设置重新安装 Crewvane CLI，确保 `~/.local/bin/crewvane` 指向当前应用。工作区位于用户选择的目录，不会被覆盖。
+安装替换应用后，打开设置重新安装 Atte CLI，确保 `~/.local/bin/atte` 指向当前应用。工作区位于用户选择的目录，不会被覆盖。旧版目录与兼容行为见[升级说明](upgrade-atte.md)。
+
+## 0.12.0 安装与验收
+
+- 应用、桌面与安装包正式使用 Atte，定位为「注意力中心 · The attention layer」；应用、Dock、菜单栏、favicon 和打包图标使用 Six Vectors 新标识，原像素吉祥物保留为角色插画。
+- 验收卡、目标详情与终端控制台统一通过「给管家发消息」提交反馈，保留独立「验收通过」；发送反馈本身不会代替管家变更验收状态。
+- 设计 token 分为 primitive / semantic / component 三层，首页、详情和设置共用同一套原语，并收敛装饰、阴影与悬停动效。
+- 设置按“工作区与外观 / 执行现场 / Agent 与工作方法 / 授权与自主推进 / 通知”分组；原有设置功能保留，字段修改需要显式保存。
+- 内部标识统一为 `@atte/*`、CLI `atte`、`~/.atte`、工作区 `.atte` 和 Herdr 插件 `dev.atte`。
+
+### 破坏性变更与迁移
+
+- 不再提供 `crewvane` 命令别名。安装后在设置中重新安装 Atte CLI，旧外部脚本改用 `atte`。
+- `~/.crewvane`、旧工作区 `.crewvane` 与 `appData/Crewvane` 使用复制、文件清单和 SHA-256 校验后迁移；旧目录保留，失败时删除未完成的副本并继续使用旧目录。
+- 旧 Herdr 插件 `dev.crewvane` 不自动删除，也不再写入事件；新版只注册 `dev.atte`，旧插件条目可由用户手动清理。
+- 旧 Hook / Skill 需要在设置中重新安装，以更新命令、环境变量和协议标识；安装器保留第三方配置。Codex 首次使用受管 Hook 时，按提示在 `/hooks` 审核并信任 Atte 条目。
+
+### 验收步骤
+
+1. 从本页 Assets 下载 DMG 或 ZIP，使用 `SHA256SUMS.txt` 校验；安装后确认设置显示 `0.12.0`，并检查 Six Vectors 图标与「注意力中心 · The attention layer」。
+2. 在设置中重新安装 Atte CLI 和 Skills，检查 Agent Hooks；确认 `atte --version` 可用，旧 `crewvane` 不再作为命令提供。
+3. 打开仅有 `.crewvane` 的旧工作区，确认迁移后的 `.atte` 可用且旧目录完整保留；检查目标、消息、附件与验收记录。独立安装目录 `~/.crewvane` 同样保留。
+4. 检查设置五组导航、未保存字段提示和显式保存；在验收卡、目标详情或终端控制台发送一条反馈，确认仍由管家核对后才改变验收状态。
+5. 确认 Herdr 中使用 `dev.atte`；旧 `dev.crewvane` 条目不会自动删除，可在不再需要时手动移除。
+
+当前安装包没有 Apple Developer ID 签名与公证，首次打开可能提示“无法验证开发者”。核对 GitHub 来源与 SHA-256 后，再按 macOS 提示打开。完整迁移和回滚边界见[升级说明](upgrade-atte.md)。
 
 ## 0.11.0 安装与验收
 

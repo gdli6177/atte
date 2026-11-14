@@ -22,6 +22,7 @@ import type {
   SkillPackView,
   SkillRole,
 } from "./types.js";
+import { workspaceDataDirectory } from "./compatibility.js";
 
 const MAX_FILES = 100;
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -29,13 +30,14 @@ const MAX_SKILL_CHARACTERS = 12_000;
 const MAX_REFERENCE_FILE_CHARACTERS = 12_000;
 const MAX_RESOLVED_REFERENCE_CHARACTERS = 24_000;
 const MAX_TEXT_FIELD = 2_000;
-const INSTALL_METADATA = ".crewvane-install.json";
+const INSTALL_METADATA = ".atte-install.json";
+const LEGACY_INSTALL_METADATA = ".crewvane-install.json";
 
-const coreConstraints = `Crewvane Core 约束（不可被能力包覆盖）：
+const coreConstraints = `Atte Core 约束（不可被能力包覆盖）：
 - 只处理当前目标；目标之间不得串用上下文、成果或负责人现场。
-- 只有 Crewvane CLI 的显式语义命令能改变业务状态；终端空闲、Skill 回复和脚本输出都不能推断完成、验收、失败或等待外部。
+- 只有 Atte CLI 的显式语义命令能改变业务状态；终端空闲、Skill 回复和脚本输出都不能推断完成、验收、失败或等待外部。
 - waiting 只用于具名外部第三方；需要人决定、确认、补充信息或操作时使用注意力。
-- 实际交付必须有真实证据；完成、验收、发布和权限边界继续遵守 Crewvane 当前协议。
+- 实际交付必须有真实证据；完成、验收、发布和权限边界继续遵守 Atte 当前协议。
 - 工具参数、工具输出、凭据和无关工作区内容不得写入目标记录。`;
 
 const builtinDefinitions: Array<{
@@ -47,38 +49,38 @@ const builtinDefinitions: Array<{
   content: string;
 }> = [
   {
-    id: "crewvane.concierge",
+    id: "atte.concierge",
     name: "全局管家",
     description: "当前唯一案卷的协调、分发、核对和向人交接。",
     kind: "role",
     roles: ["concierge"],
-    content: `你是 Crewvane 的控制面管家。用户只需要一个入口，每次通知只处理一个明确案卷。
+    content: `你是 Atte 的控制面管家。用户只需要一个入口，每次通知只处理一个明确案卷。
 - 只负责分发、协调、核对和交接；任何实际执行都交给独立负责人。
-- 首次派发优先使用 crewvane owner launch；已有负责人复用原现场。
+- 首次派发优先使用 atte owner launch；已有负责人复用原现场。
 - owner launch 已自动发送首次任务；receipt 为 accepted 或 started 后，不再用 owner send 重复或追加同一任务。owner send 用于之后收到的真实新要求。
 - 确认负责人启动后，记录一次协调结果即结束。dispatch 与 backendHandoff 的传输状态由应用核对，不轮询等待其变化，不因 pending 重复派发。
 - 用户直接发来的新事项先用 direct --new 保存；已有目标的新补充先用 direct --goal 保存。
-- 阅读 crewvane skill list --json。目标确实匹配某个本地方法时，用 crewvane skill attach GOAL_ID PACK_ID 挂载；说明型方法可由你直接挂载，运行脚本仍需单独授权。
+- 阅读 atte skill list --json。目标确实匹配某个本地方法时，用 atte skill attach GOAL_ID PACK_ID 挂载；说明型方法可由你直接挂载，运行脚本仍需单独授权。
 - 只在明确事实发生后使用 progress、wait、decide、review 等语义命令。普通回复、idle、done 和脚本成功都不是业务完成。
 - 结束、批准或验收必须保留用户明确原话，并遵守自主目标和人工验收规则。
 - 同一工作区只处理一个案卷；处理完立即结束回合，不等待负责人整项工程完成。`,
   },
   {
-    id: "crewvane.owner",
+    id: "atte.owner",
     name: "目标负责人",
     description: "在独立现场完成当前目标、计划执行、验证和结构化回写。",
     kind: "role",
     roles: ["owner"],
-    content: `你是当前 Crewvane 目标的唯一独立负责人。
+    content: `你是当前 Atte 目标的唯一独立负责人。
 - 先制定可执行计划，再开始修改；只使用当前目标和项目规则相关的上下文。
-- 用户在本现场的新要求先通过 crewvane direct 保存，再继续工作。
+- 用户在本现场的新要求先通过 atte direct 保存，再继续工作。
 - 实际运行检查后才提交成果；不得把打算、推测或终端空闲当作完成。
 - 已识别的咨询答案和阶段进展使用 goal progress 写回完整内容。
 - 只有等待具名外部第三方时用 goal wait；等待用户处理、决定或确认时用 goal decide。
 - 每回合结束前给出结构化结果、证据和下一步。`,
   },
   {
-    id: "crewvane.verifier",
+    id: "atte.verifier",
     name: "独立复核者",
     description: "独立检查真实交付、候选版本与完成条件，不负责实现。",
     kind: "role",
@@ -87,10 +89,10 @@ const builtinDefinitions: Array<{
 - 独立读取委托摘要、候选版本和证据，并运行必要的真实检查。
 - 每项必选条件必须引用可核对证据，失败就明确失败。
 - 不复用负责人现场，不采信只有文字声明而没有证据的结论。
-- 通过或失败都通过 crewvane goal verify 写回，然后结束。`,
+- 通过或失败都通过 atte goal verify 写回，然后结束。`,
   },
   {
-    id: "crewvane.process.delivery",
+    id: "atte.process.delivery",
     name: "标准交付",
     description: "默认交付流程：先理解和计划，再执行、验证并提交证据。",
     kind: "process",
@@ -103,7 +105,7 @@ const builtinDefinitions: Array<{
 5. 只提交实际观察到的证据；未验证部分明确列为限制。`,
   },
   {
-    id: "crewvane.process.discovery",
+    id: "atte.process.discovery",
     name: "探索研究",
     description: "默认探索流程：先证据后结论，区分事实、推断与建议。",
     kind: "process",
@@ -116,7 +118,7 @@ const builtinDefinitions: Array<{
 5. 不把研究结论当成产品方向或外部动作授权。`,
   },
   {
-    id: "crewvane.process.release",
+    id: "atte.process.release",
     name: "发布检查",
     description: "发布目标默认流程：候选版本、环境、批准、执行和真实结果绑定。",
     kind: "process",
@@ -129,7 +131,7 @@ const builtinDefinitions: Array<{
 5. 保留失败结果、恢复动作和仍未确认的风险。`,
   },
   {
-    id: "crewvane.agent-setup",
+    id: "atte.agent-setup",
     name: "Agent 接入",
     description: "发现本机 Agent CLI、启动命令和官方 Hook / Extension 能力。",
     kind: "setup",
@@ -137,14 +139,14 @@ const builtinDefinitions: Array<{
     content: `Agent 接入流程：只检测本机实际存在的 CLI；启动命令原样保留可执行文件、参数和模型；不借用某个 Agent 的专属沙箱参数。优先使用官方 Hook / Extension，无法确认时回退当前会话后端与巡检。`,
   },
   {
-    id: "crewvane.herdr-recovery",
+    id: "atte.herdr-recovery",
     name: "工作现场恢复",
     description: "启动未确认时核对当前后端的原请求与身份，避免重复派发。",
     kind: "setup",
     roles: ["concierge"],
     content: `当 owner launch 无法确认环境注入或投递时：
 1. 读取当前目标的 scene、sceneLaunch 与 backendHandoff，核对当前 backend、epoch 与原请求；不重复发送业务任务。
-2. 使用 crewvane owner launch 核对原启动意图；它只重发现原请求，不自动重复创建。已有负责人用 owner send，不手工调用后端来绕过身份或送达检查。
+2. 使用 atte owner launch 核对原启动意图；它只重发现原请求，不自动重复创建。已有负责人用 owner send，不手工调用后端来绕过身份或送达检查。
 3. Herdr 的旧现场只有经过真实进程核实才能 owner attach；Orca 没有此手工认领入口。不要把屏幕标题或输出当成握手。
 4. 无法核实就保留未确认状态并说明具体恢复操作，不手工编辑 state.json。`,
   },
@@ -279,11 +281,11 @@ export function parseSkillManifest(
   if (raw.schemaVersion !== 1)
     throw new SkillRegistryError("仅支持 schemaVersion: 1");
   const id = validPackId(raw.id);
-  if (id.startsWith("crewvane."))
-    throw new SkillRegistryError("crewvane. 前缀保留给内置能力包");
-  const minimumCrewvane = validVersion(raw.minimumCrewvane);
-  if (!versionAtLeast(currentVersion, minimumCrewvane))
-    throw new SkillRegistryError(`该能力包需要 Crewvane ${minimumCrewvane} 或更高版本`);
+  if (id.startsWith("atte."))
+    throw new SkillRegistryError("atte. 前缀保留给内置能力包");
+  const minimumAtte = validVersion(raw.minimumAtte ?? raw.minimumCrewvane);
+  if (!versionAtLeast(currentVersion, minimumAtte))
+    throw new SkillRegistryError(`该能力包需要 Atte ${minimumAtte} 或更高版本`);
   if (raw.kind !== "process")
     throw new SkillRegistryError("本地能力包类型只能是 process");
   const references = raw.references === undefined
@@ -299,7 +301,7 @@ export function parseSkillManifest(
     name: cleanText(raw.name, "能力包名称", 120),
     description: cleanText(raw.description, "能力包用途", 600),
     version: validVersion(raw.version),
-    minimumCrewvane,
+    minimumAtte,
     kind: "process",
     roles: localRoles(raw.roles),
     entry: safeRelativePath(raw.entry ?? "SKILL.md", "入口文件"),
@@ -323,7 +325,7 @@ async function collectFiles(root: string) {
       } else if (info.isFile()) {
         // Install metadata belongs to this workspace and must not change the
         // method's content digest when the same source is reinstalled.
-        if (relativePath === INSTALL_METADATA) continue;
+        if ([INSTALL_METADATA, LEGACY_INSTALL_METADATA].includes(relativePath)) continue;
         if (files.length >= MAX_FILES)
           throw new SkillRegistryError(`能力包最多包含 ${MAX_FILES} 个文件`);
         totalBytes += info.size;
@@ -453,6 +455,17 @@ function validateStoredMetadata(value: unknown): StoredInstallMetadata {
   return raw as StoredInstallMetadata;
 }
 
+async function readInstalledMetadata(directory: string): Promise<StoredInstallMetadata> {
+  let content: string;
+  try {
+    content = await readFile(join(directory, INSTALL_METADATA), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    content = await readFile(join(directory, LEGACY_INSTALL_METADATA), "utf8");
+  }
+  return validateStoredMetadata(JSON.parse(content));
+}
+
 export class SkillRegistry {
   constructor(
     readonly root: string,
@@ -460,7 +473,7 @@ export class SkillRegistry {
   ) {}
 
   get installedRoot() {
-    return join(this.root, ".crewvane", "skills");
+    return join(workspaceDataDirectory(this.root), "skills");
   }
 
   builtins() {
@@ -482,7 +495,7 @@ export class SkillRegistry {
       const directory = join(this.installedRoot, entry.name);
       try {
         const loaded = await loadLocalPack(directory, this.currentVersion),
-          metadata = validateStoredMetadata(JSON.parse(await readFile(join(directory, INSTALL_METADATA), "utf8"))),
+          metadata = await readInstalledMetadata(directory),
           approvals = metadata.approvals;
         const scripts = (loaded.manifest.scripts ?? []).map(script => {
           const approvedDigest = approvals[script.id];
@@ -585,7 +598,7 @@ export class SkillRegistry {
         recursive: true,
         errorOnExist: true,
         force: false,
-        filter: path => basename(path) !== INSTALL_METADATA,
+        filter: path => ![INSTALL_METADATA, LEGACY_INSTALL_METADATA].includes(basename(path)),
       });
       await writeFile(join(staging, INSTALL_METADATA), `${JSON.stringify({
         schemaVersion: 1,
@@ -619,7 +632,7 @@ export class SkillRegistry {
     const directory = join(this.installedRoot, validPackId(packId)),
       loaded = await loadLocalPack(directory, this.currentVersion),
       metadataPath = join(directory, INSTALL_METADATA),
-      metadata = validateStoredMetadata(JSON.parse(await readFile(metadataPath, "utf8")));
+      metadata = await readInstalledMetadata(directory);
     for (const id of scriptIds) {
       const script = (loaded.manifest.scripts ?? []).find(item => item.id === id);
       if (!script) throw new SkillRegistryError(`能力包没有声明脚本 ${id}`);
@@ -634,7 +647,7 @@ export class SkillRegistry {
   async disable(packId: string, disabled = true) {
     const directory = join(this.installedRoot, validPackId(packId)),
       metadataPath = join(directory, INSTALL_METADATA),
-      metadata = validateStoredMetadata(JSON.parse(await readFile(metadataPath, "utf8")));
+      metadata = await readInstalledMetadata(directory);
     if (disabled) metadata.disabledAt = new Date().toISOString();
     else delete metadata.disabledAt;
     const temporary = `${metadataPath}.${process.pid}-${randomUUID()}.tmp`;
@@ -656,7 +669,7 @@ export class SkillRegistry {
   async binding(packId: string): Promise<GoalSkillBinding & { view: SkillPackView }> {
     const view = await this.show(packId);
     if (view.source !== "local")
-      throw new SkillRegistryError("内置能力包由 Crewvane 自动解析，不需要挂载");
+      throw new SkillRegistryError("内置能力包由 Atte 自动解析，不需要挂载");
     if (view.status === "disabled" || view.status === "missing")
       throw new SkillRegistryError(`能力包当前不可用：${view.status}`);
     return {
@@ -677,10 +690,10 @@ export class SkillRegistry {
         ? builtinDefinitions.find(definition => definition.id === rolePack.id)
         : undefined,
       processId = goal.kind === "discovery"
-        ? "crewvane.process.discovery"
+        ? "atte.process.discovery"
         : goal.kind === "release"
-          ? "crewvane.process.release"
-          : "crewvane.process.delivery",
+          ? "atte.process.release"
+          : "atte.process.delivery",
       processPack = builtins.find(pack => pack.id === processId),
       processDefinition = processPack?.roles.includes(role)
         ? builtinDefinitions.find(definition => definition.id === processPack.id)
@@ -760,4 +773,4 @@ export class SkillRegistry {
   }
 }
 
-export const crewvaneCoreConstraints = coreConstraints;
+export const atteCoreConstraints = coreConstraints;

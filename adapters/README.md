@@ -1,11 +1,11 @@
 # Adapters
 
 > **Legacy (0.2-era):** these adapter notes describe the retired manual-contract
-> captain workflow. Crewvane 0.6 does not orchestrate workers through this
-> interface; see `docs/crewvane.md` and `skills/crewvane/` for the current flow.
+> captain workflow. Atte 0.6 does not orchestrate workers through this
+> interface; see `docs/atte.md` and `skills/atte/` for the current flow.
 > The files are kept for historical reference.
 
-crewvane does not orchestrate workers. It describes three calls a
+Atte does not orchestrate workers. It describes three calls a
 captain may make, and leaves the transport to a thin note. Swapping Herdr for
 Orca, Multica, or a plain extra agent session must not change the contract
 card, the inbox event, or the notify allowlist.
@@ -31,9 +31,9 @@ card, the inbox event, or the notify allowlist.
 6. Subscribe each slice's `thread_refs` (PR, issue, chat). Deliver follow-up
    events on those threads to the owning worker. Send the captain only new
    or unowned events, and anything that crosses slices.
-7. Run `crewvane watchdog` on a schedule: cron, the orchestrator's
+7. Run `atte watchdog` on a schedule: cron, the orchestrator's
    scheduler, or the owner's assistant routine. Append `worker_progress`
-   heartbeats to `.crewvane/events.jsonl` when the worker makes real
+   heartbeats to `.atte/events.jsonl` when the worker makes real
    progress. The watchdog is not the captain.
 
 ## Not this kit
@@ -41,7 +41,7 @@ card, the inbox event, or the notify allowlist.
 Persistent cloud runtimes, splitting compute from state, and device daemons
 belong to the orchestrator. An adapter maps `spawn`, `status`, `collect`,
 thread delivery, and a watchdog schedule onto that product. It does not
-reimplement them inside crewvane.
+reimplement them inside Atte.
 
 ## No orchestrator
 

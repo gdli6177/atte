@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 const now = Date.now();
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-cache-maintenance-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-cache-maintenance-"));
   fixtures.push(root);
   const paths: CacheMaintenancePaths = {
     userDataRoot: join(root, "userData"),
@@ -26,7 +26,7 @@ async function fixture() {
   await Promise.all([
     mkdir(join(paths.cacheRoot, "Cache", "nested"), { recursive: true }),
     mkdir(join(paths.userDataRoot, "runtime"), { recursive: true }),
-    mkdir(join(paths.workspaceRoot, ".crewvane"), { recursive: true }),
+    mkdir(join(paths.workspaceRoot, ".atte"), { recursive: true }),
     mkdir(paths.logsRoot, { recursive: true }),
   ]);
   return { root, paths };
@@ -58,8 +58,8 @@ test("automatic cleanup removes only stale cache, old logs and old atomic temp f
     freshLog = join(paths.logsRoot!, "fresh.log"),
     oldTemp = join(paths.userDataRoot, "runtime", "herdr.download"),
     liveRuntime = join(paths.userDataRoot, "runtime", "herdr"),
-    oldScopeTemp = join(paths.workspaceRoot!, ".crewvane", "coordinator-scope.json.1.tmp"),
-    goalState = join(paths.workspaceRoot!, ".crewvane", "state.json");
+    oldScopeTemp = join(paths.workspaceRoot!, ".atte", "coordinator-scope.json.1.tmp"),
+    goalState = join(paths.workspaceRoot!, ".atte", "state.json");
   for (const path of [staleCache, freshCache, oldLog, freshLog, oldTemp, liveRuntime, oldScopeTemp, goalState])
     await writeFile(path, path);
   await Promise.all([

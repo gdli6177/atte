@@ -1,18 +1,18 @@
-# Crewvane 自主目标规格
+# Atte 自主目标规格
 
 日期：2026-11-12
-状态：已定稿，作为 Crewvane 0.9 的实现与验收基线。
-适用范围：Crewvane 0.9 及后续版本。
+状态：已定稿，作为 Atte 0.9 的实现与验收基线。
+适用范围：Atte 0.9 及后续版本。
 
-Crewvane 0.8 已具备持久管家、协调收件箱、Agent Runtime Hooks、场景优先和
+Atte 0.8 已具备持久管家、协调收件箱、Agent Runtime Hooks、场景优先和
 项目上线策略；本文在这些能力上增加自主目标闭环。新的续跑、自动验收和发布
 权限只有在 v3 迁移、命令门禁和桌面验收都成立后才授予；不满足时继续沿用旧边界。
 
 ## 1. 结论
 
-Crewvane 的核心承诺从“把所有事整理成清晰的下一步”推进为：
+Atte 的核心承诺从“把所有事整理成清晰的下一步”推进为：
 
-> 人交代目标和边界，Crewvane 持续推进、验证和恢复；只有需要改变委托边界、
+> 人交代目标和边界，Atte 持续推进、验证和恢复；只有需要改变委托边界、
 > 批准生产发布，或核对发布后的真实结果时，才回来找人。
 
 “自动验收”“自动合并”“自动发布”是三个独立权限，不能互相推导：
@@ -33,7 +33,7 @@ Crewvane 的核心承诺从“把所有事整理成清晰的下一步”推进�
 | 完成条件 | Agent 可补全验证方法；结果取舍必须有人或项目规则依据 |
 | 边界变更 | 技术选择自主；结果或外部影响变化必须申请 |
 | 重试收敛 | 没有新证据就停止自动尝试并整理交接 |
-| 续跑 | 由 Crewvane 的持久事件驱动，不靠 Agent 长期驻留 |
+| 续跑 | 由 Atte 的持久事件驱动，不靠 Agent 长期驻留 |
 
 这里的“委托”指人允许系统在明确边界内完成日常验收，而不是把责任转移给
 模型。任何时候，人都可以查看证据、暂停授权、改为人工验收、要求重新复核或
@@ -89,12 +89,12 @@ Crewvane 的核心承诺从“把所有事整理成清晰的下一步”推进�
 - 不读取凭据、登录状态或外部手册，不把密钥写入工作区状态。
 - 不提供无限重试、常驻 Agent 内循环或通用 cron 调度器。
 - 不把“人保留最终裁决权”解释为每个目标都要经过同步人工确认。
-- 不把 Crewvane 的应用层校验宣称为操作系统沙箱。
+- 不把 Atte 的应用层校验宣称为操作系统沙箱。
 
 ### 3.1 信任边界
 
 本规格的权限约束面向遵守协议的 Agent、Bot 和适配器，属于应用层治理，不是
-密码学认证或操作系统隔离。与 Crewvane 共用本机账户、且能直接修改状态文件或
+密码学认证或操作系统隔离。与 Atte 共用本机账户、且能直接修改状态文件或
 调用生产凭据的恶意程序，仍可绕过 CLI。
 
 因此：
@@ -138,13 +138,13 @@ Crewvane 的核心承诺从“把所有事整理成清晰的下一步”推进�
 改变目标结果、完成条件或外部影响范围的申请；提交申请不等于获得批准。
 
 **续跑 / Continuation**：
-Crewvane 在 Agent 会话之外持久保存、到期后唤醒下一个短回合的触发记录。
+Atte 在 Agent 会话之外持久保存、到期后唤醒下一个短回合的触发记录。
 
 **尝试预算 / Attempt budget**：
 人允许系统自主恢复目标的有限资源；预算只约束自动恢复，不限制目标本身的正常阶段。
 
 **租约 / Lease**：
-一次续跑被某个 Crewvane 进程临时领取的有效期；租约过期后可由新进程安全接手。
+一次续跑被某个 Atte 进程临时领取的有效期；租约过期后可由新进程安全接手。
 
 ### 4.2 目标种类
 
@@ -309,13 +309,13 @@ interface AcceptanceCriterion {
       │                    ├─ boundary：请求改变边界
       │                    └─ delivery：提交成果与证据
       │
-      └──── Crewvane 持久续跑 ◄──── 到期 / 复核失败 / 决定完成
+      └──── Atte 持久续跑 ◄──── 到期 / 复核失败 / 决定完成
                                    │
                                    ├─ 自动复核通过 ─► 自动验收
                                    └─ 无新证据/超预算 ─► 整理交接
 ```
 
-续跑属于 Crewvane 控制面，不属于某个 Agent 的长期进程。管家继续使用现有案卷隔离：
+续跑属于 Atte 控制面，不属于某个 Agent 的长期进程。管家继续使用现有案卷隔离：
 一次通知只带一个目标，处理、分发或写回后结束当前回合。
 
 ### 7.2 触发来源
@@ -328,7 +328,7 @@ interface AcceptanceCriterion {
 - 等待对象解除，或 `remindAt` 到期。
 - 人批准边界变更、发布审批或给出其他决定。
 - 可信集成报告外部依赖完成。
-- Crewvane 启动时发现已到期的持久续跑。
+- Atte 启动时发现已到期的持久续跑。
 
 以下事实不产生续跑：
 
@@ -563,10 +563,10 @@ interface Verification {
 独立复核属于应用层协议。人和桌面必须能看到复核人、站点、条件和证据；不能把
 “另一个同名 Agent”自动视为独立性已得到密码学证明。
 
-由 Crewvane 启动的复核进程只获得当前目标范围内的精简 `status`、`goal show` 和
+由 Atte 启动的复核进程只获得当前目标范围内的精简 `status`、`goal show` 和
 `goal verify`。它不能更新其他目标、提交交付、调用验收或发布命令，也不能用
 `--reviewer` 冒用另一身份；复核署名来自启动时登记且不能被普通参数覆盖的
-`CREWVANE_AGENT_NAME`。该限制用于避免协议误用，不冒充操作系统身份认证。
+`ATTE_AGENT_NAME`。该限制用于避免协议误用，不冒充操作系统身份认证。
 
 ### 10.3 审查轮次
 
@@ -676,7 +676,7 @@ interface ReleaseTarget {
 - 批准必须绑定环境、候选修订和可选摘要。
 - 候选变化、重新构建或新提交会使批准失效。
 - 长期项目策略、历史批准或交付自动验收都不能代替该次批准。
-- 发布执行器报告真实结果；Crewvane 不伪造执行，也不自行回滚。
+- 发布执行器报告真实结果；Atte 不伪造执行，也不自行回滚。
 - 发布失败进入 `intervention`，附带环境、候选、失败证据和可选恢复方案。
 - 执行器报告成功后，目标进入最终人工确认；只有人核对环境、候选和真实结果后才
   记为完成。发布批准是执行许可，不替代对实际结果的最后验收。
@@ -748,26 +748,26 @@ type ReleaseOnMerge = "never" | "production" | "unknown";
 Agent 协议：
 
 ```text
-crewvane goal brief ID --file PATH [--expected-revision N]
-crewvane goal checkpoint ID --summary TEXT --next TEXT [--due-at ISO]
-crewvane goal verify ID --delivery ID --outcome passed|failed
+atte goal brief ID --file PATH [--expected-revision N]
+atte goal checkpoint ID --summary TEXT --next TEXT [--due-at ISO]
+atte goal verify ID --delivery ID --outcome passed|failed
   --summary TEXT --criterion ID::passed|failed::EVIDENCE_ID [--criteria-file PATH]
-crewvane goal boundary ID --file PATH
+atte goal boundary ID --file PATH
 ```
 
 人用协议：
 
 ```text
-crewvane goal autonomy pause ID
-crewvane goal autonomy resume ID
-crewvane goal autonomy acceptance ID
+atte goal autonomy pause ID
+atte goal autonomy resume ID
+atte goal autonomy acceptance ID
   --acceptance inherit|human-review|auto-with-verification
-crewvane goal reopen ID --note TEXT
-crewvane release create --from GOAL_ID --environment production
+atte goal reopen ID --note TEXT
+atte release create --from GOAL_ID --environment production
   --revision REV [--digest SHA256] [--version VERSION]
-crewvane release approve ID --note TEXT
-crewvane release reject ID --note TEXT
-crewvane release result ID --outcome succeeded|failed --evidence-file PATH
+atte release approve ID --note TEXT
+atte release reject ID --note TEXT
+atte release result ID --outcome succeeded|failed --evidence-file PATH
 ```
 
 兼容命令：
@@ -811,7 +811,7 @@ CLI 进程本身不能可靠证明调用者是人。实现必须：
 最小权限约束：负责人不能冒用其他复核人，复核者只能读取当前目标并写复核结果。
 这些约束是明确的协议边界，不是操作系统沙箱或密码学身份证明。
 
-本地 Bot 首期只通过独立的 `crewvane bot` 子协议接入，不继承人的 CLI 能力。
+本地 Bot 首期只通过独立的 `atte bot` 子协议接入，不继承人的 CLI 能力。
 即使 Bot 与桌面登录同一操作系统账户，它也只能执行绑定中列出的操作。
 
 ### 14.3 状态版本
@@ -865,7 +865,7 @@ interface GoalAutonomy {
 
 从 2 迁移到 3：
 
-1. 写入前备份原状态为 `.crewvane/state.v2.backup.json`。
+1. 写入前备份原状态为 `.atte/state.v2.backup.json`。
 2. 现有目标默认 `kind = "delivery"`，不自动开启自主推进。
 3. 工作区默认验收方式为 `human-review`。
 4. `releaseOnMerge = "unknown"`。
@@ -894,8 +894,8 @@ autonomy.report {
 
 ### 15.1 原则
 
-- Crewvane 是目标状态的唯一事实源，Bot 不维护第二份任务数据库。
-- Bot 的长期记忆和聊天上下文归 Bot；目标、边界、证据、续跑和验收归 Crewvane。
+- Atte 是目标状态的唯一事实源，Bot 不维护第二份任务数据库。
+- Bot 的长期记忆和聊天上下文归 Bot；目标、边界、证据、续跑和验收归 Atte。
 - Bot 可以发起、执行和查询受权范围内的目标，但不能代替人批准发布或决定边界。
 - Bot 的自主执行仍受完成条件、独立复核、尝试预算和注意力规则约束。
 
@@ -938,7 +938,7 @@ interface BotBinding {
 
 ```json
 {
-  "schema": "crewvane.bot.v1",
+  "schema": "atte.bot.v1",
   "requestId": "stable-idempotency-key",
   "operation": "goal.submit",
   "botId": "bot_...",
@@ -958,14 +958,14 @@ delivery.submit
 ```
 
 所有操作按 `(botId, requestId)` 幂等，只允许绑定项目内的目标。Bot 接收的事件使用
-现有 `crewvane.notification.v1` 或显式连接器，不通过读取工作区文件推断状态。
+现有 `atte.notification.v1` 或显式连接器，不通过读取工作区文件推断状态。
 `delivery.submit` 映射到同一 core 交付事实，不允许 Bot 自行标记验收。
 
 ### 15.4 Bot 与验收
 
 - Bot 可作为独立执行者提交交付，但不能复核自己的交付。
 - 后续阶段可把经过独立安全评审的 Bot 绑定为其他目标的复核适配器；首期不开放该能力。
-- 自动验收始终由 Crewvane core 依据门禁作出，Bot 返回的“通过”只是复核事实。
+- 自动验收始终由 Atte core 依据门禁作出，Bot 返回的“通过”只是复核事实。
 - 生产发布批准不通过 Bot 协议暴露。
 
 ### 15.5 分阶段

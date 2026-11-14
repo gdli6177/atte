@@ -10,7 +10,7 @@ import { HerdrClient } from "../electron/herdr.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-handoff-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-handoff-"));
   roots.push(root);
   const service = new WorkspaceService(root);
   const item = await service.execute({ type: "goal.create", input: {
@@ -46,8 +46,8 @@ test("offline handoff is saved and restart retries the actual follow-up as activ
   assert.equal(goal.status, "active");
   assert.match(calls[0]![3]!, /核查审批进展/);
   assert.match(calls[0]![3]!, /具名外部第三方/);
-  assert.match(calls[0]![3]!, /\[CREWVANE_CASE_BEGIN\]/);
-  assert.match(calls[0]![3]!, /\[CREWVANE_CASE_END\]/);
+  assert.match(calls[0]![3]!, /\[ATTE_CASE_BEGIN\]/);
+  assert.match(calls[0]![3]!, /\[ATTE_CASE_END\]/);
 });
 
 test("a newer feedback request is not acknowledged by an older in-flight follow-up", async () => {

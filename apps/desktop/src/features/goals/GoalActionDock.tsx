@@ -9,7 +9,7 @@ import {
   SquareTerminal,
   UserRound,
 } from "lucide-react";
-import type { CrewvaneCommand, Goal } from "../../../../../packages/core/src/types.js";
+import type { AtteCommand, Goal } from "../../../../../packages/core/src/types.js";
 import {
   GoalReplyComposer,
   type GoalReplyMode,
@@ -45,7 +45,7 @@ export function GoalActionDock({
     ? goal.autonomy.boundaryChange
     : undefined;
 
-  async function act(command: CrewvaneCommand, receipt?: string) {
+  async function act(command: AtteCommand, receipt?: string) {
     try {
       const attentionId = attentionRequest(goal)?.id;
       await service.command(attentionId ? { ...command, attentionId } : command);
@@ -78,9 +78,11 @@ export function GoalActionDock({
         service={service}
         routeToConcierge={
           replyMode === "message" &&
-          goal.status === "waiting" &&
+          (goal.status === "waiting" || goal.status === "review") &&
           goal.mode !== "concierge"
         }
+        heading={goal.status === "review" ? "给管家发消息" : undefined}
+        note={goal.status === "review" ? "补充要求或提出问题；发送后保留待验收状态，由管家判断下一步。" : undefined}
         onClose={() => setReplyMode(null)}
         onComplete={(receipt) => {
           setReplyMode(null);
@@ -90,7 +92,7 @@ export function GoalActionDock({
     );
   }
 
-  if (view.sceneSync?.quote && !manualDecision) {
+  if (view.sceneSync?.quote && !manualDecision && goal.status !== "review") {
     return (
       <div className="goal-quiet-row">
         <span><Bot size={18} /></span>
@@ -279,7 +281,7 @@ export function GoalActionDock({
           </div>
           <div className="goal-action-buttons">
             <Button variant="secondary" onClick={() => setReplyMode("message")}>
-              问管家
+              给管家发消息
             </Button>
           </div>
         </div>
@@ -289,14 +291,11 @@ export function GoalActionDock({
       <div className="goal-decision-row">
         <div className="goal-action-copy">
           <span>明确验收</span>
-          <strong>通过后目标结束；需要修改就退回并说明。</strong>
+          <strong>核对成果后验收；补充要求可以直接给管家发消息。</strong>
         </div>
         <div className="goal-action-buttons">
           <Button variant="secondary" onClick={() => setReplyMode("message")}>
-            问管家
-          </Button>
-          <Button variant="secondary" onClick={() => setReplyMode("return")}>
-            退回修改
+            给管家发消息
           </Button>
           <Button
             variant="primary"

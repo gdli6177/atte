@@ -1,15 +1,16 @@
 node_modules/
-.crewvane/*.jsonl
-.crewvane/proposals/
-.crewvane/contracts/
-.crewvane/packets/
-.crewvane/e2e/
-.crewvane/limits.json
+.atte/*.jsonl
+.atte/proposals/
+.atte/contracts/
+.atte/packets/
+.atte/e2e/
+.atte/limits.json
 playwright/.auth/
 *.storage-state.json
 *.log
 .DS_Store
 
+.atte/
 .crewvane/
 apps/desktop/dist/
 apps/desktop/release/

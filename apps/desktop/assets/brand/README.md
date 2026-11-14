@@ -1,19 +1,45 @@
-# Crewvane 品牌标识
+# Atte 品牌资产
 
-界面中的品牌角色是 **Crewvane 像素魔法师**。它是用户的全局管家：不必盯着每一个会话，魔法师会把分散的项目与个人事项整理成清晰的下一步。macOS 应用图标保留同一角色的兜帽、双眼与流带识别点，但去掉像素、星环和全身细节，避免在 Dock 中缩成模糊头像。
+定稿标识为 **Six Vectors / 六向**。完整规范见
+[Six Vectors 品牌使用规范](../../../../docs/brand/six-vectors.md)。
 
-- `crewvane-mage-source.png`：使用内置图像生成创建的原始像素魔法师，透明背景。
-- `crewvane-mage.png`：供 React 界面使用的 512px 版本，使用 nearest-neighbor 缩放。
-- `crewvane-macos-source.png`：内置 ImageGen 基于魔法师角色生成的 macOS 应用图标原稿。深靛蓝圆角底板上保留偏斜兜帽、暖白双眼与单一薄荷流带；透明留白位于圆角底板外。
-- `crewvane-icon.png`：1024px macOS 专用图标。不要用全身角色图直接铺满方形底板，Dock 中会显得过大且难以辨认。
-- `crewvane-icon.icns`：从应用图标生成的 macOS 图标包。
+## 分工
 
-界面品牌采用像素游戏气质，但不让界面成为难用的复古控制台。任务正文使用系统字体；像素角色、点阵和少量光点负责个性。macOS 图标是同一角色的现代简化版本，保持单主体、低细节和纯色识别，缩小到 16–32px 仍能辨认。深靛蓝、暖白与薄荷绿是识别色，状态色保持独立可读。
+- **Six Vectors 是品牌标识**：用于应用图标、Dock、菜单栏托盘、favicon、侧栏、
+  关于页、README 与字标。不要再把像素角色当作 Logo。
+- **像素吉祥物是角色插画**：只用于首页、首启和管家卡片等应用内叙事场景。
+  角色不是品牌标识，也不进入应用图标或菜单栏。
 
-不得将界面中的魔法师拉伸、加上文字或替换为其他概念。macOS 图标不得加入文字、星形、星环、全身角色或微小装饰；后续迭代保持兜帽、双眼与单一流带这三个识别点。
+## 源文件
 
-在 macOS 上运行 `node apps/desktop/scripts/build-icons.mjs`，从专用原稿生成 PNG 和含 16–1024px 尺寸的 ICNS。打包器使用 ICNS，开发与正式应用的 Dock 使用同源 PNG。
+下列文件来自董事长定稿包，按原几何与配色保存；`atte-` 前缀遵循仓库现有命名：
 
-菜单栏也使用 `crewvane-icon.png`，在运行时生成 18pt 和 Retina 36px 表示，保持彩色原图，不再使用独立的单色占位符 `crewvane-trayTemplate.png`。
+- `atte-mark*.svg`：主标识、单色、反白和 16–32px 光学版。
+- `atte-mark-{16,32}[-reversed]-source.png`：定稿包原生光栅化的光学版 PNG。
+- `atte-app-icon.svg`、`atte-app-icon-source.png`：深墨圆角应用图标源文件。
+- `atte-wordmark*.svg`：横向、竖向和反白锁定字标，字形已转路径。
+- `atte-mascot-baseline-512.png`：原像素吉祥物完整副本，继续作为角色插画。
+- `crewvane-*`：历史原稿与导出，保留用于追溯，不作为当前品牌挂点。
 
-macOS 图标原稿提示词要点：以像素魔法师为身份参考，保留偏斜尖帽轮廓、深色脸腔、两只暖白长眼和一条薄荷流带；简化为单主体几何徽记。深靛蓝圆角底板，克制而高级的哑光质感，透明外边距，无文字、星形、星环、全身角色或像素网格。使用内置 ImageGen 生成，随后仅做格式与尺寸导出。
+## 生成物
+
+`scripts/build-icons.mjs` 是仓库现有图标生成入口，构建时自动执行：
+
+- `atte-app-icon-{32,64,128,256,512,1024}.png`：从 1024 源图等比例导出。
+- `atte-app-icon.icns`：含 16–1024px 表示的应用图标包。
+- `atte-favicon-{16,32}.png`：定稿包的光学版，供浏览器 favicon。
+- `atte-tray-{16,32}.png` 与 `atte-tray-reversed-{16,32}.png`：浅色和深色
+  菜单栏使用的光学版，主进程随系统外观切换。
+- `atte-assets.json`：记录 `final-six-vectors`、四个规范色、来源与每个输出的
+  SHA-256。
+
+重新生成：
+
+```sh
+pnpm --dir apps/desktop exec node scripts/build-icons.mjs
+```
+
+应用图标只使用 `#171A1E`（墨）、`#F3F1EA`（暖白）、`#F5A524`（琥珀）与
+`#14181B`（图标底）。不要给标识增加渐变、阴影、描边或其他颜色。
+
+`src/ui/BrandMark.tsx` 负责标识的深浅切换；`variant="mascot"` 只用于角色插画。

@@ -1,5 +1,5 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, Notification, session, shell, Tray } from "electron";
-import { watch, type FSWatcher } from "node:fs";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, Tray } from "electron";
+import { existsSync, watch, type FSWatcher } from "node:fs";
 import { access, chmod, lstat, mkdir, readFile, readlink, realpath, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -16,7 +16,7 @@ import {
   validateGoalAttachments,
   validatedScene,
   WorkspaceService,
-  type CrewvaneCommand,
+  type AtteCommand,
   type Goal,
   type GoalStatus,
   type HerdrReference,
@@ -24,6 +24,10 @@ import {
   type WatchdogReason,
   type WatchdogRequest,
   type WorkspaceState,
+  environmentValue,
+  migrateApplicationHome,
+  prepareWorkspaceState,
+  workspaceDataDirectory,
 } from "../../../packages/core/src/index.js";
 import {
   ConciergeBlockedError,
@@ -46,6 +50,7 @@ import {
   detectOrcaApplication,
   localProcesses,
   localAdapter,
+  workspaceSessionName,
   type SwitchAuthority,
 } from "../../../packages/sessions/src/index.js";
 import { HerdrPlugin } from "./herdr-plugin.js";
@@ -56,7 +61,7 @@ import { CoordinatorInbox, type CoordinatorInboxItem, type CoordinatorInboxStatu
 import { CoordinatorDispatcher, type CoordinatorExecutionResult } from "./coordinator-dispatcher.js";
 import { writeCoordinatorScope } from "./coordinator-scope.js";
 import { WebhookNotifier, type WebhookSaveInput } from "./webhook-notifications.js";
-import { CrewvaneSkillInstaller } from "./skill-installer.js";
+import { AtteSkillInstaller } from "./skill-installer.js";
 import { launchOwner, type HerdrCommandRunner } from "../../../cli/src/owner-launch.js";
 import { clearManagedCaches, inspectManagedCaches } from "./cache-maintenance.js";
 import {
@@ -82,6 +87,7 @@ import {
 } from "./backend-handoff-proof.js";
 import { prepareBackendHandoffCase } from "./backend-handoff-case.js";
 import { SessionCommandHost } from "./session-command-host.js";
+import { legacyCliPaths, removeOwnedLegacyCli } from "./legacy-cli.js";
 const exec = promisify(execFile);
 let window: BrowserWindow, tray: Tray, root: string | undefined, service: WorkspaceService | undefined, syncing = false, quitting = false;
 let stateWatcher: FSWatcher | undefined, stateRefreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -93,14 +99,24 @@ let lastSnapshotSignature: string | undefined;
 let automaticCacheCleanupStarted = false;
 let cacheMaintenanceQueue: Promise<unknown> = Promise.resolve();
 const here = __dirname;
+function trayIcon() {
+  const variant = nativeTheme.shouldUseDarkColors ? "atte-tray-reversed" : "atte-tray",
+    image = nativeImage.createFromPath(join(here, "assets", `${variant}-16.png`));
+  image.addRepresentation({
+    scaleFactor: 2,
+    buffer: nativeImage.createFromPath(join(here, "assets", `${variant}-32.png`)).toPNG(),
+  });
+  image.setTemplateImage(false);
+  return image;
+}
 // Native window chrome needs a startup color before renderer CSS is available.
 // Keep this synchronized with the dark `--bg` design token and DESIGN.md.
-const WINDOW_BACKGROUND = "#111520";
+const WINDOW_BACKGROUND = "#0d1214";
 const terminals = new TerminalHost((event) => {
-  if (window && !window.isDestroyed()) window.webContents.send("crewvane:event", event);
+  if (window && !window.isDestroyed()) window.webContents.send("atte:event", event);
 }, process.env);
 const rendererURL = pathToFileURL(join(here, "renderer/index.html")).href;
-let tools: Executables, herdrInstallation: HerdrInstallation, herdrPlugin: HerdrPlugin, webhookNotifier: WebhookNotifier, skillInstaller: CrewvaneSkillInstaller, agentHookManager: AgentHookManager, agentRuntimeBroker: AgentRuntimeBroker, externalTerminals: ExternalTerminalManager;
+let tools: Executables, herdrInstallation: HerdrInstallation, herdrPlugin: HerdrPlugin, webhookNotifier: WebhookNotifier, skillInstaller: AtteSkillInstaller, agentHookManager: AgentHookManager, agentRuntimeBroker: AgentRuntimeBroker, externalTerminals: ExternalTerminalManager;
 let coordinatorInbox: CoordinatorInbox | undefined, coordinatorDispatcher: CoordinatorDispatcher | undefined;
 let herdrHostBridge: HerdrHostBridge | undefined;
 let autonomyScheduler: AutonomyScheduler | undefined;
@@ -140,6 +156,7 @@ async function backendAdapter(backend: "herdr" | "orca", workspace: string) {
     directory: join(app.getPath("userData"), "session-control"),
     herdrExecutable: herdr?.executable,
     environment: process.env,
+    state: await new WorkspaceService(workspace).read(),
   });
 }
 function sessionRuntime(workspace = root) {
@@ -259,7 +276,11 @@ type SceneOpenResult =
   | { mode: "external"; lease: ExternalSceneLease }
   | { mode: "embedded" }
   | { mode: "native"; app: "Orca" };
-function sessionName(path = root) { return process.env.CREWVANE_HERDR_SESSION ?? `crewvane-${createHash("sha256").update(path ?? "").digest("hex").slice(0, 10)}`; }
+const workspaceSessions = new Map<string, string>();
+function sessionName(path = root) {
+  return environmentValue(process.env, "HERDR_SESSION")?.trim() ||
+    workspaceSessions.get(path ?? "") || workspaceSessionName(path ?? "");
+}
 function sender(event: Electron.IpcMainInvokeEvent) { if (event.sender !== window.webContents || event.senderFrame?.url !== rendererURL) throw new Error("不受信任的界面请求"); }
 function activeService() { if (!service) throw new Error("请先打开工作区"); return service; }
 async function snapshot() { return activeService().read(); }
@@ -300,7 +321,7 @@ function broadcastSnapshot(state: WorkspaceState, workspace: string) {
   const signature = JSON.stringify(state);
   if (signature === lastSnapshotSignature) return;
   lastSnapshotSignature = signature;
-  window.webContents.send("crewvane:event", { type: "snapshot", state, workspace });
+  window.webContents.send("atte:event", { type: "snapshot", state, workspace });
 }
 async function validatedAttachment(goalId: string, attachmentId: string) {
   if (typeof goalId !== "string" || typeof attachmentId !== "string")
@@ -314,7 +335,7 @@ async function validatedAttachment(goalId: string, attachmentId: string) {
 }
 function broadcastHerdrStatus(status: HerdrStatus) {
   if (!window || window.isDestroyed()) return;
-  window.webContents.send("crewvane:event", {
+  window.webContents.send("atte:event", {
     type: "herdr-status",
     status: {
       ...status,
@@ -329,7 +350,7 @@ function broadcastAgentRuntimeStatus(
 ) {
   void Promise.resolve(statuses).then(status => {
     if (window && !window.isDestroyed())
-      window.webContents.send("crewvane:event", {
+      window.webContents.send("atte:event", {
         type: "agent-runtime-status",
         status,
       });
@@ -438,9 +459,9 @@ async function prepareHerdrCompanionsNow(workspace = root) {
     await installCli(workspace);
     await installDetectedAgentHooks();
   } catch (error) {
-    if (window && !window.isDestroyed()) window.webContents.send("crewvane:event", {
+    if (window && !window.isDestroyed()) window.webContents.send("atte:event", {
       type: "diagnostic",
-      message: `Crewvane CLI 或 Agent Hook 准备暂未完成：${error instanceof Error ? error.message : String(error)}`,
+      message: `Atte CLI 或 Agent Hook 准备暂未完成：${error instanceof Error ? error.message : String(error)}`,
     });
   }
   const control = await sessionControl.status();
@@ -460,9 +481,9 @@ async function installHerdr() {
     await installCli();
     await installDetectedAgentHooks();
   } catch (error) {
-    if (window && !window.isDestroyed()) window.webContents.send("crewvane:event", {
+    if (window && !window.isDestroyed()) window.webContents.send("atte:event", {
       type: "diagnostic",
-      message: `Crewvane CLI 或 Agent Hook 准备暂未完成：${error instanceof Error ? error.message : String(error)}`,
+      message: `Atte CLI 或 Agent Hook 准备暂未完成：${error instanceof Error ? error.message : String(error)}`,
     });
   }
   const status = await herdrInstallation.ensure(true);
@@ -477,7 +498,7 @@ async function checkHerdrUpdate() {
   return status;
 }
 async function cliStatus() {
-  const bundled = join(here, "cli/crewvane.cjs"), path = join(app.getPath("home"), ".local/bin/crewvane"), directory = join(app.getPath("userData"), "bin");
+  const bundled = join(here, "cli/atte.cjs"), path = join(app.getPath("home"), ".local/bin/atte"), directory = join(app.getPath("userData"), "bin");
   return { bundled: Boolean(await access(bundled).then(() => true).catch(() => false)), installed: Boolean(await lstat(path).then(() => true).catch(() => false)), path, directory };
 }
 function skillsStatus() {
@@ -520,7 +541,7 @@ async function installMethodPack(path: string, approveScripts: string[]) {
     installed = await registry.install(path, { approveScripts });
   selectedSkillDirectories.delete(path);
   if (window && !window.isDestroyed())
-    window.webContents.send("crewvane:event", {
+    window.webContents.send("atte:event", {
       type: "method-packs-status",
       packs: await registry.list(),
     });
@@ -543,7 +564,7 @@ async function mutateMethodPack(
   else throw new Error("无效的能力包操作");
   const packs = await registry.list();
   if (window && !window.isDestroyed())
-    window.webContents.send("crewvane:event", {
+    window.webContents.send("atte:event", {
       type: "method-packs-status",
       packs,
     });
@@ -563,31 +584,34 @@ async function installCliNow(workspace = root) {
     const existing = await readFile(status.path, "utf8").catch(() => "");
     const linked = await realpath(status.path).catch(() => "");
     const target = await readlink(status.path).catch(() => "");
-    if (!existing.startsWith("#!/bin/sh\n# Crewvane embedded CLI\n") &&
-      linked !== join(status.directory, "crewvane") && target !== join(status.directory, "crewvane"))
-      throw new Error(`${status.path} 已存在，且不是 Crewvane 安装的 CLI。请手动处理后重试。`);
+    if (!existing.startsWith("#!/bin/sh\n# Atte embedded CLI\n") &&
+      linked !== join(status.directory, "atte") && target !== join(status.directory, "atte"))
+      throw new Error(`${status.path} 已存在，且不是 Atte 安装的 CLI。请手动处理后重试。`);
   }
   const cliRuntime = app.isPackaged ? join(process.resourcesPath, "cli-node") : process.execPath;
-  const cliBundle = app.isPackaged ? join(process.resourcesPath, "app.asar.unpacked/dist/cli/crewvane.cjs") : join(here, "cli/crewvane.cjs");
-  const launcher = join(status.directory, "crewvane");
+  const cliBundle = app.isPackaged ? join(process.resourcesPath, "app.asar.unpacked/dist/cli/atte.cjs") : join(here, "cli/atte.cjs");
+  const launcher = join(status.directory, "atte");
   const defaultRoot = workspace ? quoteShell(workspace) : '""';
   const controlDirectory = join(app.getPath("userData"), "session-control");
-  await writeFile(launcher, `#!/bin/sh\n# Crewvane embedded CLI\n[ -n "\${CREWVANE_WORKSPACE:-}" ] || CREWVANE_WORKSPACE=${defaultRoot}\nexport CREWVANE_WORKSPACE\nCREWVANE_CONTROL_DIRECTORY=${quoteShell(controlDirectory)}\nCREWVANE_CLI_DIRECTORY=${quoteShell(status.directory)}\nexport CREWVANE_CONTROL_DIRECTORY CREWVANE_CLI_DIRECTORY\nELECTRON_RUN_AS_NODE=1 exec ${quoteShell(cliRuntime)} ${quoteShell(cliBundle)} "$@"\n`, { mode: 0o700 });
+  await writeFile(launcher, `#!/bin/sh\n# Atte embedded CLI\n[ -n "\${ATTE_WORKSPACE:-}\${CREWVANE_WORKSPACE:-}" ] || ATTE_WORKSPACE=${defaultRoot}\nexport ATTE_WORKSPACE CREWVANE_WORKSPACE=\${ATTE_WORKSPACE:-\${CREWVANE_WORKSPACE:-}}\nATTE_CONTROL_DIRECTORY=${quoteShell(controlDirectory)}\nATTE_CLI_DIRECTORY=${quoteShell(status.directory)}\nexport ATTE_CONTROL_DIRECTORY ATTE_CLI_DIRECTORY CREWVANE_CONTROL_DIRECTORY=\${ATTE_CONTROL_DIRECTORY} CREWVANE_CLI_DIRECTORY=\${ATTE_CLI_DIRECTORY}\nELECTRON_RUN_AS_NODE=1 exec ${quoteShell(cliRuntime)} ${quoteShell(cliBundle)} "$@"\n`, { mode: 0o700 });
   await chmod(launcher, 0o700);
   if (status.installed) await unlink(status.path).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error;
   });
   await symlink(launcher, status.path);
+  await removeOwnedLegacyCli(legacyCliPaths(
+    app.getPath("home"), app.getPath("appData"), app.getPath("userData"),
+  ));
   // On first launch there may be no workspace yet. Do not run status from
   // Finder's "/" working directory, which would look like a request to create
-  // "/.crewvane-lock". A real workspace queues a second preparation pass and
+  // "/.atte-lock". A real workspace queues a second preparation pass and
   // then performs the full CLI check.
   const checked = workspace
     ? await exec(status.path, ["status", "--root", workspace], { timeout: 15_000 })
     : undefined;
   const installed = await cliStatus();
   if (window && !window.isDestroyed()) {
-    window.webContents.send("crewvane:event", { type: "cli-status", status: installed });
+    window.webContents.send("atte:event", { type: "cli-status", status: installed });
   }
   return { ...installed, output: checked?.stdout.trim() ?? "" };
 }
@@ -596,7 +620,7 @@ function client(path: string, workspace = root) {
   if (!workspace) throw new Error("请先选择工作区");
   return new HerdrClient(herdrRunner(path, session), session, workspace, async () => {
     await terminals.attach(path, session, workspace!);
-    if (root === workspace) window.webContents.send("crewvane:event", { type: "terminal-available", session, title: "全局管家" });
+    if (root === workspace) window.webContents.send("atte:event", { type: "terminal-available", session, title: "全局管家" });
   });
 }
 function externalClient(path: string, workspace = root) {
@@ -641,7 +665,7 @@ async function restartEndedGoal(target: WorkspaceService, goalId: string, note: 
   const restarted = await target.execute({ type: "goal.restart", goalId, note }) as Goal;
   void agentRuntimeBroker?.refresh(goalId).catch(() => {});
   void dispatchGoal(target, goalId).catch(error => {
-    if (root === target.root && !window.isDestroyed()) window.webContents.send("crewvane:event", {
+    if (root === target.root && !window.isDestroyed()) window.webContents.send("atte:event", {
       type: "diagnostic",
       message: `目标已重新打开，负责人恢复暂未完成：${error instanceof Error ? error.message : String(error)}`,
     });
@@ -665,7 +689,7 @@ const BACKEND_HANDOFF_IDLE_SETTLE_MS = 30_000;
 const BACKEND_HANDOFF_PROOF_TIMEOUT_MS = 240_000;
 function broadcastCoordinatorStatus(status: CoordinatorInboxStatus) {
   if (window && !window.isDestroyed())
-    window.webContents.send("crewvane:event", { type: "coordinator-status", status });
+    window.webContents.send("atte:event", { type: "coordinator-status", status });
 }
 function coordinatorPriority(kind: CoordinatorInboxItem["kind"], reason?: string) {
   if (kind === "feedback" || kind === "restart" || kind === "scene_reply") return "human" as const;
@@ -715,7 +739,7 @@ async function dispatchAutonomyCandidate(
     ? "verification" as const
     : "continuation" as const;
   const note = candidate.trigger === "verification"
-    ? "独立复核到期。请安排未提交该交付、且不复用负责人现场的独立复核者，逐项核对完成条件、候选版本和真实证据；复核通过后调用 crewvane goal verify。不得由负责人自检代替复核。"
+    ? "独立复核到期。请安排未提交该交付、且不复用负责人现场的独立复核者，逐项核对完成条件、候选版本和真实证据；复核通过后调用 atte goal verify。不得由负责人自检代替复核。"
     : candidate.trigger === "checkpoint"
       ? "负责人已给出下一动作。请确认原负责人继续一个短回合，并在结束前写回 checkpoint、wait、boundary 或 delivery。"
       : candidate.trigger === "decision-resolved"
@@ -917,7 +941,7 @@ async function drainCoordinatorQueue(target: WorkspaceService) {
   if (root !== target.root) return;
   await resetCoordinatorContextIfNeeded(target).catch(error => {
     if (root === target.root && !window.isDestroyed()) {
-      window.webContents.send("crewvane:event", {
+      window.webContents.send("atte:event", {
         type: "diagnostic",
         message: `管家上下文轮换暂未完成：${error instanceof Error ? error.message : String(error)}`,
       });
@@ -984,9 +1008,9 @@ function restartOwnerName(goal: Goal) {
 }
 function restartOwnerTask(goal: Goal) {
   return [
-    `目标「${goal.title}」已由用户从 Crewvane 重新启动。`,
+    `目标「${goal.title}」已由用户从 Atte 重新启动。`,
     `目标 ID：${goal.id}`,
-    "这是续接原目标，不是新任务。先运行 crewvane goal show " + goal.id +
+    "这是续接原目标，不是新任务。先运行 atte goal show " + goal.id +
       " --json 核对当前记录、上次成果和原会话上下文；不要重复已经完成的工作。",
     "用户的新消息会由管家在下一条通知中交给你。现在只恢复状态并等待管家转交，不要自行扩大范围或直接结束目标。",
   ].join("\n\n");
@@ -1036,7 +1060,7 @@ async function doPrepareConcierge(target: WorkspaceService) {
     const reported = (error instanceof Error ? error.message : String(error))
       .split(/\r?\n/).find(line => line.trim())?.trim() ?? "";
     const detail = reported.slice(0, 800) ||
-      "管家初始化尚未确认；请打开原现场核对，Crewvane 不会重复创建或重发。";
+      "管家初始化尚未确认；请打开原现场核对，Atte 不会重复创建或重发。";
     await target.execute({ type: "concierge.status", status: "error", reference: (await target.read()).concierge, detail });
     throw new Error(`管家尚未准备好：${detail}`);
   }
@@ -1052,7 +1076,7 @@ async function openHerdr(reference?: HerdrReference, goalId?: string) {
     await target.execute({ type: "scene.visit", goalId });
   }
   await terminals.attach(status.executable, session, target.root);
-  if (root === target.root) window.webContents.send("crewvane:event", {
+  if (root === target.root) window.webContents.send("atte:event", {
     type: "terminal-open", session, title: reference?.agent === "concierge" ? "全局管家" : "工作现场", goalId,
   });
 }
@@ -1091,7 +1115,7 @@ async function openEmbeddedScene(target: WorkspaceService, goalId?: string) {
     });
     await client(executable, target.root).ensureWorkspace();
     await terminals.attach(executable, sessionName(target.root), target.root);
-    if (root === target.root) window.webContents.send("crewvane:event", {
+    if (root === target.root) window.webContents.send("atte:event", {
       type: "terminal-open", session: sessionName(target.root), title: "工作现场", goalId,
     });
     return;
@@ -1101,7 +1125,7 @@ async function openEmbeddedScene(target: WorkspaceService, goalId?: string) {
   await sessionRuntime(target.root).focus(scene);
   if (goalId) await target.execute({ type: "scene.visit", goalId });
   await terminals.attach(await herdrInstallationStatusBinary(), sessionName(target.root), target.root);
-  if (root === target.root) window.webContents.send("crewvane:event", {
+  if (root === target.root) window.webContents.send("atte:event", {
     type: "terminal-open", session: sessionName(target.root),
     title: goalId ? "工作现场" : "全局管家", goalId,
   });
@@ -1157,7 +1181,7 @@ async function openPreferredScene(
   return { mode: "embedded" };
 }
 async function herdrInstallationStatusBinary() {
-  const executable = (await herdrInstallation.status()).executable ?? process.env.CREWVANE_HERDR_BINARY;
+  const executable = (await herdrInstallation.status()).executable ?? environmentValue(process.env, "HERDR_BINARY");
   if (!executable) throw new Error("Herdr 当前不可用。");
   return executable;
 }
@@ -1218,7 +1242,7 @@ function backendSwitchHooks() {
       const target = new WorkspaceService(input.workspace);
       const channel: SessionRecoveryChannel = new SessionRecoveryChannel(sessionControl.directory, async (request): Promise<unknown> => {
         const state = await target.read(), context = request.context, binding = state.backendBinding;
-        const scope = JSON.parse(await readFile(join(input.workspace, ".crewvane/coordinator-scope.json"), "utf8"));
+        const scope = JSON.parse(await readFile(join(workspaceDataDirectory(input.workspace), "coordinator-scope.json"), "utf8"));
         if (!binding || binding.status !== "resuming" || binding.operationId !== input.operationId ||
           context.role !== "concierge" || context.installationId !== binding.installationId ||
           context.backend !== binding.backend || context.epoch !== binding.epoch ||
@@ -1428,7 +1452,7 @@ function backendSwitchHooks() {
     },
     onProgress: (journal: unknown) => {
       if (window && !window.isDestroyed())
-        window.webContents.send("crewvane:event", { type: "backend-switch", journal });
+        window.webContents.send("atte:event", { type: "backend-switch", journal });
     },
   };
 }
@@ -1461,7 +1485,7 @@ async function finishBackendTransition(
 async function publishBackendControlStatus() {
   const status = await backendControlStatus();
   if (window && !window.isDestroyed())
-    window.webContents.send("crewvane:event", { type: "backend-control", status });
+    window.webContents.send("atte:event", { type: "backend-control", status });
   return status;
 }
 async function switchSessionBackend(backend: "herdr" | "orca") {
@@ -1539,8 +1563,8 @@ async function requestNeutralSceneReply(workspace: string, goal: Goal) {
     `scene-reconcile-${goal.sceneVisit.id}`,
     [
       `用户已查看当前现场。如果「${question}」已在现场由用户明确答复，`,
-      `立即把这个明确事实与用户原话通过 crewvane goal scene-reply ${goal.id} 写回；`,
-      "不要只回复“已回答”。如果尚未处理，继续当前工作或保持原状态；后续仍需按 Crewvane 语义命令写回。",
+      `立即把这个明确事实与用户原话通过 atte goal scene-reply ${goal.id} 写回；`,
+      "不要只回复“已回答”。如果尚未处理，继续当前工作或保持原状态；后续仍需按 Atte 语义命令写回。",
     ].join(""),
   );
   return receipt.status !== "rejected";
@@ -1588,7 +1612,7 @@ async function reconcileConcierge(target: WorkspaceService, executable: string) 
 function watchWorkspaceState(target: WorkspaceService) {
   stateWatcher?.close();
   if (stateRefreshTimer) clearTimeout(stateRefreshTimer);
-  stateWatcher = watch(join(target.root, ".crewvane"), { persistent: false }, (_event, filename) => {
+  stateWatcher = watch(workspaceDataDirectory(target.root), { persistent: false }, (_event, filename) => {
     const name = filename?.toString();
     if (name && name !== "state.json" && name !== "events.jsonl") return;
     if (stateRefreshTimer) clearTimeout(stateRefreshTimer);
@@ -1601,7 +1625,7 @@ function watchWorkspaceState(target: WorkspaceService) {
         deliverGoalStatusChanges(target, state, target.root);
         broadcastSnapshot(state, target.root);
       } catch (error) {
-        if (!window.isDestroyed()) window.webContents.send("crewvane:event", {
+        if (!window.isDestroyed()) window.webContents.send("atte:event", {
           type: "diagnostic",
           message: `工作区更新暂未同步：${error instanceof Error ? error.message : String(error)}`,
         });
@@ -1636,8 +1660,8 @@ async function deliverAttentionNotifications(target: WorkspaceService, state: Aw
     const kind = attentionKind(goal)!;
     if (!goal.attention?.notifiedAt && Notification.isSupported()) {
       try {
-        const notification = new Notification({ title: kind === "review" ? "有一份成果等你验收" : kind === "follow_up" ? "到了该跟进的时候" : "Crewvane · 需要你处理", body: `${goal.title}\n${goal.attention?.summary ?? goal.next}`.slice(0, 220) });
-        notification.on("click", () => { window.show(); window.webContents.send("crewvane:event", { type: "open-goal", goalId: goal.id }); });
+        const notification = new Notification({ title: kind === "review" ? "有一份成果等你验收" : kind === "follow_up" ? "到了该跟进的时候" : "Atte · 需要你处理", body: `${goal.title}\n${goal.attention?.summary ?? goal.next}`.slice(0, 220) });
+        notification.on("click", () => { window.show(); window.webContents.send("atte:event", { type: "open-goal", goalId: goal.id }); });
         notification.show();
         await target.execute({ type: "notification.sent", goalId: goal.id, kind,
           attentionId: attentionRequest(goal)?.id, at: new Date().toISOString() });
@@ -1651,6 +1675,7 @@ async function deliverAttentionNotifications(target: WorkspaceService, state: Aw
 async function openWorkspace(path: string) {
   const canonical = await realpath(path); if (!(await stat(canonical)).isDirectory()) throw new Error("工作区必须是目录");
   const opened = new WorkspaceService(canonical), initialState = await opened.read();
+  workspaceSessions.set(canonical, workspaceSessionName(canonical, process.env, initialState));
   const backendControl = await sessionControl.registerWorkspace(canonical);
   await ensureSessionCommandHost(canonical);
   await herdrHostBridge?.stop().catch(() => {});
@@ -1705,33 +1730,33 @@ async function openWorkspace(path: string) {
   broadcastCoordinatorStatus(await inbox.status());
   watchWorkspaceState(opened);
   await agentRuntimeBroker.start().catch(error => {
-    if (!window.isDestroyed()) window.webContents.send("crewvane:event", {
+    if (!window.isDestroyed()) window.webContents.send("atte:event", {
       type: "diagnostic",
       message: `Agent Hook 本地网关暂未启动：${error instanceof Error ? error.message : String(error)}`,
     });
   });
   void opened.execute({ type: "attachments.cleanup", retentionDays: 30 }).catch(error => {
-    if (!window.isDestroyed()) window.webContents.send("crewvane:event", {
+    if (!window.isDestroyed()) window.webContents.send("atte:event", {
       type: "diagnostic",
       message: `附件清理暂未完成：${error instanceof Error ? error.message : String(error)}`,
     });
   });
   void runAutomaticCacheCleanup().catch(error => {
-    if (!window.isDestroyed()) window.webContents.send("crewvane:event", {
+    if (!window.isDestroyed()) window.webContents.send("atte:event", {
       type: "diagnostic",
       message: `缓存自动清理暂未完成：${error instanceof Error ? error.message : String(error)}`,
     });
   });
   await mkdir(app.getPath("userData"), { recursive: true }); await writeFile(join(app.getPath("userData"), "workspaces.json"), JSON.stringify({ selected: root }), { mode: 0o600 });
-  window.webContents.send("crewvane:event", { type: "refresh", workspace: root });
-  if (process.env.CREWVANE_TEST_SKIP_HERDR_SETUP !== "1")
+  window.webContents.send("atte:event", { type: "refresh", workspace: root });
+  if (environmentValue(process.env, "TEST_SKIP_HERDR_SETUP") !== "1")
     void prepareHerdrCompanions(canonical).catch(error => {
-      if (!window.isDestroyed()) window.webContents.send("crewvane:event", {
+      if (!window.isDestroyed()) window.webContents.send("atte:event", {
         type: "diagnostic", message: error instanceof Error ? error.message : String(error),
       });
     });
   void coordinatorDispatcher?.drain().catch(error => {
-    if (!window.isDestroyed()) window.webContents.send("crewvane:event", {
+    if (!window.isDestroyed()) window.webContents.send("atte:event", {
       type: "diagnostic",
       message: `管家收件箱恢复暂未完成：${error instanceof Error ? error.message : String(error)}`,
     });
@@ -1823,27 +1848,54 @@ async function synchronize() {
     await deliverAttentionNotifications(target, state, workspace);
     broadcastSnapshot(state, workspace);
   } catch (error) {
-    if (root === workspace && !window.isDestroyed()) window.webContents.send("crewvane:event", { type: "diagnostic", message: `后台同步暂未成功：${error instanceof Error ? error.message : String(error)}` });
+    if (root === workspace && !window.isDestroyed()) window.webContents.send("atte:event", { type: "diagnostic", message: `后台同步暂未成功：${error instanceof Error ? error.message : String(error)}` });
   } finally { syncing = false; }
 }
-const singleInstance = process.env.CREWVANE_TEST_USER_DATA ? true : app.requestSingleInstanceLock();
-if (!singleInstance) app.quit();
+const testUserData = environmentValue(process.env, "TEST_USER_DATA");
+if (testUserData) {
+  app.setPath("userData", testUserData);
+} else {
+  const applicationData = app.getPath("appData");
+  app.setPath("userData", existsSync(join(applicationData, "Atte"))
+    ? join(applicationData, "Atte")
+    : existsSync(join(applicationData, "Crewvane"))
+      ? join(applicationData, "Crewvane")
+      : join(applicationData, "Atte"));
+}
+const applicationDataReady = (async () => {
+  if (testUserData) return true;
+  const applicationData = await migrateApplicationHome(app.getPath("appData"), "Atte", "Crewvane")
+    .catch(error => ({
+      directory: join(app.getPath("appData"), "Crewvane"), migrated: false,
+      fallback: true, detail: `Atte 应用配置迁移未完成，已继续使用 Crewvane：${String(error)}`,
+    }));
+  if (applicationData.fallback && applicationData.detail) console.warn(applicationData.detail);
+  app.setPath("userData", applicationData.directory);
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
+    return false;
+  }
+  return true;
+})();
 app.on("second-instance", () => { window?.show(); window?.focus(); });
 app.whenReady().then(async () => {
-  if (process.env.CREWVANE_TEST_USER_DATA) app.setPath("userData", process.env.CREWVANE_TEST_USER_DATA);
-  if (process.env.CREWVANE_TEST_HOME) app.setPath("home", process.env.CREWVANE_TEST_HOME);
-  if (process.env.CREWVANE_TEST_HOME) {
+  if (!await applicationDataReady) return;
+  const testHome = environmentValue(process.env, "TEST_HOME");
+  if (testHome) app.setPath("home", testHome);
+  if (testHome) {
     // Every Herdr child must address the same session, including the PTY and
     // CLI diagnostics. Changing Electron's home alone leaves HOME unchanged.
     process.env.HOME = app.getPath("home");
     process.env.XDG_CONFIG_HOME = join(app.getPath("home"), ".config");
     process.env.XDG_STATE_HOME = join(app.getPath("home"), ".local/state");
   }
+  const applicationHome = await migrateApplicationHome(app.getPath("home"));
+  if (applicationHome.fallback && applicationHome.detail) console.warn(applicationHome.detail);
   terminals.setEnvironment(process.env);
   webhookNotifier = new WebhookNotifier(app.getPath("userData"), app.getVersion());
   const managedBin = join(app.getPath("userData"), "runtime");
   tools = new Executables(app.getPath("home"), managedBin, process.env,
-    !!process.env.CREWVANE_TEST_HOME && process.env.CREWVANE_TEST_ISOLATE_TOOLS === "1");
+    !!testHome && environmentValue(process.env, "TEST_ISOLATE_TOOLS") === "1");
   agentHookManager = new AgentHookManager({
     home: app.getPath("home"),
     userData: app.getPath("userData"),
@@ -1869,7 +1921,7 @@ app.whenReady().then(async () => {
     service: () => service,
     dispatch: dispatchAutonomyCandidate,
     onError: error => {
-      if (window && !window.isDestroyed()) window.webContents.send("crewvane:event", {
+      if (window && !window.isDestroyed()) window.webContents.send("atte:event", {
         type: "diagnostic",
         message: `自主续跑调度暂未完成：${error instanceof Error ? error.message : String(error)}`,
       });
@@ -1891,13 +1943,13 @@ app.whenReady().then(async () => {
     join(app.getPath("userData"), "runtime", "orca-installer"),
     status => {
       if (window && !window.isDestroyed())
-        window.webContents.send("crewvane:event", { type: "orca-installation", status });
+        window.webContents.send("atte:event", { type: "orca-installation", status });
     },
   );
   if (backendControl.orcaAppPath)
     await orcaInstallation.refresh(backendControl.orcaAppPath);
-  if (process.env.CREWVANE_TEST_ISOLATE_TOOLS === "1") herdrInstallation.disableBundledForTest();
-  const integrationEnvironment = process.env.CREWVANE_TEST_HOME ? {
+  if (environmentValue(process.env, "TEST_ISOLATE_TOOLS") === "1") herdrInstallation.disableBundledForTest();
+  const integrationEnvironment = testHome ? {
     ...process.env,
     HOME: app.getPath("home"),
     XDG_CONFIG_HOME: join(app.getPath("home"), ".config"),
@@ -1913,32 +1965,37 @@ app.whenReady().then(async () => {
     app.getVersion(),
     integrationEnvironment,
   );
-  skillInstaller = new CrewvaneSkillInstaller(
+  skillInstaller = new AtteSkillInstaller(
     app.isPackaged
-      ? join(process.resourcesPath, "crewvane-skills")
+      ? join(process.resourcesPath, "atte-skills")
       : join(here, "../../skills"),
     app.getPath("home"),
     app.getVersion(),
-    ["crewvane", "crewvane-local-pack-author"],
+    ["atte", "atte-local-pack-author"],
   );
-  app.setName("Crewvane");
+  app.setName("Atte");
+  app.setAboutPanelOptions({
+    applicationName: "Atte",
+    applicationVersion: app.getVersion(),
+    copyright: "注意力中心 · The attention layer",
+  });
   // BrowserWindow.icon is ignored by the macOS Dock in development.
   // Packaged builds embed the same artwork as their CFBundleIconFile.
-  app.dock?.setIcon(nativeImage.createFromPath(join(here, "assets/crewvane-icon.png")));
+  app.dock?.setIcon(nativeImage.createFromPath(join(here, "assets/atte-app-icon.png")));
   process.env.PATH = (await tools.paths()).join(":");
-  const width = Number(process.env.CREWVANE_TEST_WINDOW_WIDTH), height = Number(process.env.CREWVANE_TEST_WINDOW_HEIGHT);
-  window = new BrowserWindow({ width: Number.isFinite(width) && width >= 900 ? width : 1440, height: Number.isFinite(height) && height >= 700 ? height : 960, minWidth: 900, minHeight: 700, title: "Crewvane · 协航", titleBarStyle: "hiddenInset", backgroundColor: WINDOW_BACKGROUND, icon: join(here, "assets/crewvane-icon.png"), webPreferences: { preload: join(here, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const width = Number(environmentValue(process.env, "TEST_WINDOW_WIDTH")), height = Number(environmentValue(process.env, "TEST_WINDOW_HEIGHT"));
+  window = new BrowserWindow({ width: Number.isFinite(width) && width >= 900 ? width : 1440, height: Number.isFinite(height) && height >= 700 ? height : 960, minWidth: 900, minHeight: 700, title: "Atte", titleBarStyle: "hiddenInset", backgroundColor: WINDOW_BACKGROUND, icon: join(here, "assets/atte-app-icon.png"), webPreferences: { preload: join(here, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" })); window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   window.on("close", (event) => { if (!quitting) { event.preventDefault(); window.hide(); } });
-  ipcMain.handle("crewvane:environment", (event) => { sender(event); return { workspace: root, version: app.getVersion() }; });
-  ipcMain.handle("crewvane:import-attachments", async (event, inputs: { name: string; bytes: ArrayBuffer }[]) => {
+  ipcMain.handle("atte:environment", (event) => { sender(event); return { workspace: root, version: app.getVersion() }; });
+  ipcMain.handle("atte:import-attachments", async (event, inputs: { name: string; bytes: ArrayBuffer }[]) => {
     sender(event);
     const target = activeService();
     if (!Array.isArray(inputs) || inputs.length > 8) throw new Error("附件列表无效");
     return importAttachmentBytes(target.root, inputs.map(input => ({ name: input?.name, bytes: input?.bytes })));
   });
-  ipcMain.handle("crewvane:attachment-preview", async (event, goalId: string, attachmentId: string) => {
+  ipcMain.handle("atte:attachment-preview", async (event, goalId: string, attachmentId: string) => {
     sender(event);
     const { attachment, path } = await validatedAttachment(goalId, attachmentId),
       image = nativeImage.createFromPath(path);
@@ -1950,15 +2007,15 @@ app.whenReady().then(async () => {
       quality: "best",
     }).toDataURL();
   });
-  ipcMain.handle("crewvane:open-attachment", async (event, goalId: string, attachmentId: string) => {
+  ipcMain.handle("atte:open-attachment", async (event, goalId: string, attachmentId: string) => {
     sender(event);
     const { path } = await validatedAttachment(goalId, attachmentId),
       error = await shell.openPath(path);
     if (error) throw new Error(error);
   });
-  ipcMain.handle("crewvane:workspace", async (event) => { sender(event); const picked = await dialog.showOpenDialog(window, { title: "选择 Crewvane 工作区", properties: ["openDirectory", "createDirectory"] }); if (picked.canceled || !picked.filePaths[0]) return null; await openWorkspace(picked.filePaths[0]); return root; });
-  ipcMain.handle("crewvane:project", async (event) => { sender(event); const picked = await dialog.showOpenDialog(window, { title: "选择项目目录", properties: ["openDirectory"] }); const path = picked.filePaths[0]; if (!path) return null; const real = await realpath(path); selections.add(real); return real; });
-  ipcMain.handle("crewvane:command", async (event, command: CrewvaneCommand) => {
+  ipcMain.handle("atte:workspace", async (event) => { sender(event); const picked = await dialog.showOpenDialog(window, { title: "选择 Atte 工作区", properties: ["openDirectory", "createDirectory"] }); if (picked.canceled || !picked.filePaths[0]) return null; await openWorkspace(picked.filePaths[0]); return root; });
+  ipcMain.handle("atte:project", async (event) => { sender(event); const picked = await dialog.showOpenDialog(window, { title: "选择项目目录", properties: ["openDirectory"] }); const path = picked.filePaths[0]; if (!path) return null; const real = await realpath(path); selections.add(real); return real; });
+  ipcMain.handle("atte:command", async (event, command: AtteCommand) => {
     sender(event); if (!command || JSON.stringify(command).length > 256_000) throw new Error("无效的命令");
     if (command.type === "project.add" && command.path && !selections.has(command.path)) throw new Error("请通过文件选择器选择项目目录");
     if (command.type === "agents.configure") {
@@ -1988,13 +2045,13 @@ app.whenReady().then(async () => {
       (command.type === "goal.progress" && command.actor === "你" && (result as import("../../../packages/core/src/index.js").Goal).mode === "concierge")) {
       const item = result as import("../../../packages/core/src/index.js").Goal;
       if (item.dispatch?.status === "pending") void dispatchGoal(target, item.id).catch((error) => {
-        if (root === target.root) window.webContents.send("crewvane:event", { type: "diagnostic", message: String(error) });
+        if (root === target.root) window.webContents.send("atte:event", { type: "diagnostic", message: String(error) });
       });
     }
     if (["goal.accept", "goal.complete", "goal.drop"].includes(command.type)) {
       const item = result as import("../../../packages/core/src/index.js").Goal;
       await closeEndedGoalSession(target, item.id).catch((error) => {
-        if (root === target.root) window.webContents.send("crewvane:event", {
+        if (root === target.root) window.webContents.send("atte:event", {
           type: "diagnostic",
           message: `目标已结束，负责人现场暂未关闭，将自动重试：${error instanceof Error ? error.message : String(error)}`,
         });
@@ -2016,7 +2073,7 @@ app.whenReady().then(async () => {
           });
         }
         void dispatchGoal(target, item.id).catch(error => {
-          if (root === target.root) window.webContents.send("crewvane:event", {
+          if (root === target.root) window.webContents.send("atte:event", {
             type: "diagnostic",
             message: error instanceof Error ? error.message : String(error),
           });
@@ -2030,13 +2087,13 @@ app.whenReady().then(async () => {
     }
     return result;
   });
-  ipcMain.handle("crewvane:herdr-status", (event) => { sender(event); return herdrStatus(); });
-  ipcMain.handle("crewvane:cache-status", (event) => {
+  ipcMain.handle("atte:herdr-status", (event) => { sender(event); return herdrStatus(); });
+  ipcMain.handle("atte:cache-status", (event) => {
     sender(event);
     activeService();
     return queueCacheMaintenance(() => inspectManagedCaches(cacheMaintenancePaths()));
   });
-  ipcMain.handle("crewvane:cache-clean", (event) => {
+  ipcMain.handle("atte:cache-clean", (event) => {
     sender(event);
     activeService();
     return queueCacheMaintenance(() => clearManagedCaches(cacheMaintenancePaths(), {
@@ -2044,51 +2101,51 @@ app.whenReady().then(async () => {
       clearBrowserRuntime: () => session.defaultSession.clearCache(),
     }));
   });
-  ipcMain.handle("crewvane:agent-choices", (event) => { sender(event); return agentChoices(); });
-  ipcMain.handle("crewvane:webhook-settings", (event) => { sender(event); return webhookNotifier.status(); });
-  ipcMain.handle("crewvane:webhook-save", (event, input: WebhookSaveInput) => {
+  ipcMain.handle("atte:agent-choices", (event) => { sender(event); return agentChoices(); });
+  ipcMain.handle("atte:webhook-settings", (event) => { sender(event); return webhookNotifier.status(); });
+  ipcMain.handle("atte:webhook-save", (event, input: WebhookSaveInput) => {
     sender(event);
     return webhookNotifier.save(input);
   });
-  ipcMain.handle("crewvane:webhook-test", async (event) => {
+  ipcMain.handle("atte:webhook-test", async (event) => {
     sender(event);
     return webhookNotifier.test((await activeService().read()).name);
   });
-  ipcMain.handle("crewvane:install-herdr", (event) => { sender(event); return installHerdr(); });
-  ipcMain.handle("crewvane:check-herdr-update", (event) => {
+  ipcMain.handle("atte:install-herdr", (event) => { sender(event); return installHerdr(); });
+  ipcMain.handle("atte:check-herdr-update", (event) => {
     sender(event);
     return checkHerdrUpdate();
   });
-  ipcMain.handle("crewvane:orca-status", event => {
+  ipcMain.handle("atte:orca-status", event => {
     sender(event);
     return orcaInstallation.status();
   });
-  ipcMain.handle("crewvane:backend-status", event => {
+  ipcMain.handle("atte:backend-status", event => {
     sender(event);
     return backendControlStatus();
   });
-  ipcMain.handle("crewvane:backend-switch", (event, backend: unknown) => {
+  ipcMain.handle("atte:backend-switch", (event, backend: unknown) => {
     sender(event);
     if (backend !== "herdr" && backend !== "orca") throw new Error("无效的会话后端。");
     return switchSessionBackend(backend);
   });
-  ipcMain.handle("crewvane:backend-retry", event => {
+  ipcMain.handle("atte:backend-retry", event => {
     sender(event);
     return retrySessionBackendSwitch();
   });
-  ipcMain.handle("crewvane:backend-cancel", event => {
+  ipcMain.handle("atte:backend-cancel", event => {
     sender(event);
     backendSwitchAbort?.abort();
   });
-  ipcMain.handle("crewvane:backend-restore", async event => {
+  ipcMain.handle("atte:backend-restore", async event => {
     sender(event);
     return finishBackendTransition(await sessionControl.restoreOriginal(backendSwitchHooks()));
   });
-  ipcMain.handle("crewvane:orca-action", (event, action: unknown) => {
+  ipcMain.handle("atte:orca-action", (event, action: unknown) => {
     sender(event);
     return orcaInstallAction(action);
   });
-  ipcMain.handle("crewvane:orca-select-application", async event => {
+  ipcMain.handle("atte:orca-select-application", async event => {
     sender(event);
     const picked = await dialog.showOpenDialog(window, {
       title: "选择已有 Orca 应用",
@@ -2103,26 +2160,26 @@ app.whenReady().then(async () => {
     await sessionControl.setOrcaPath(path);
     return orcaInstallation.refresh(path);
   });
-  ipcMain.handle("crewvane:cli-status", (event) => { sender(event); return cliStatus(); });
-  ipcMain.handle("crewvane:install-cli", (event) => { sender(event); return installCli(); });
-  ipcMain.handle("crewvane:skills-status", (event) => { sender(event); return skillsStatus(); });
-  ipcMain.handle("crewvane:install-skills", (event) => { sender(event); return installSkills(); });
-  ipcMain.handle("crewvane:method-packs-status", (event) => {
+  ipcMain.handle("atte:cli-status", (event) => { sender(event); return cliStatus(); });
+  ipcMain.handle("atte:install-cli", (event) => { sender(event); return installCli(); });
+  ipcMain.handle("atte:skills-status", (event) => { sender(event); return skillsStatus(); });
+  ipcMain.handle("atte:install-skills", (event) => { sender(event); return installSkills(); });
+  ipcMain.handle("atte:method-packs-status", (event) => {
     sender(event);
     return methodPacksStatus();
   });
-  ipcMain.handle("crewvane:method-pack-preview", (event) => {
+  ipcMain.handle("atte:method-pack-preview", (event) => {
     sender(event);
     return previewMethodPack();
   });
-  ipcMain.handle("crewvane:method-pack-install", (event, path: unknown, scripts: unknown) => {
+  ipcMain.handle("atte:method-pack-install", (event, path: unknown, scripts: unknown) => {
     sender(event);
     return installMethodPack(
       path as string,
       scripts as string[],
     );
   });
-  ipcMain.handle("crewvane:method-pack-action", (
+  ipcMain.handle("atte:method-pack-action", (
     event,
     packId: unknown,
     action: unknown,
@@ -2135,23 +2192,23 @@ app.whenReady().then(async () => {
       (scriptIds as string[] | undefined) ?? [],
     );
   });
-  ipcMain.handle("crewvane:agent-runtime-status", (event) => {
+  ipcMain.handle("atte:agent-runtime-status", (event) => {
     sender(event);
     return agentRuntimeStatus();
   });
-  ipcMain.handle("crewvane:agent-runtime-action", async (event, id: unknown, action: unknown) => {
+  ipcMain.handle("atte:agent-runtime-action", async (event, id: unknown, action: unknown) => {
     sender(event);
     if (typeof id !== "string" || typeof action !== "string")
       throw new Error("Agent 接入参数无效");
     return configureAgentRuntime(id, action);
   });
-  ipcMain.handle("crewvane:clipboard-read", (event) => { sender(event); return clipboard.readText(); });
-  ipcMain.handle("crewvane:clipboard-write", async (event, value: unknown) => {
+  ipcMain.handle("atte:clipboard-read", (event) => { sender(event); return clipboard.readText(); });
+  ipcMain.handle("atte:clipboard-write", async (event, value: unknown) => {
     sender(event);
     if (typeof value !== "string" || value.length > 2_000_000) throw new Error("剪贴板文本无效");
     await clipboard.writeText(value);
   });
-  ipcMain.handle("crewvane:clipboard-content", async (event) => {
+  ipcMain.handle("atte:clipboard-content", async (event) => {
     sender(event);
     const items = await clipboard.read();
     if (items.some(item => item.types.some(type => type.startsWith("image/"))))
@@ -2159,84 +2216,82 @@ app.whenReady().then(async () => {
     const text = await clipboard.readText();
     return text ? { kind: "text" as const, text } : { kind: "empty" as const };
   });
-  ipcMain.handle("crewvane:scene-settings", (event) => {
+  ipcMain.handle("atte:scene-settings", (event) => {
     sender(event);
     return externalTerminals.status();
   });
-  ipcMain.handle("crewvane:scene-settings-save", (event, input: SceneSettings) => {
+  ipcMain.handle("atte:scene-settings-save", (event, input: SceneSettings) => {
     sender(event);
     activeService();
     return externalTerminals.save(input);
   });
-  ipcMain.handle("crewvane:scene-settings-test", async (event) => {
+  ipcMain.handle("atte:scene-settings-test", async (event) => {
     sender(event);
     activeService();
     return openExternalScene();
   });
-  ipcMain.handle("crewvane:prepare-concierge", (event) => {
+  ipcMain.handle("atte:prepare-concierge", (event) => {
     sender(event);
     sessionPoller.reset();
     return prepareConcierge();
   });
-  ipcMain.handle("crewvane:coordinator-status", async event => {
+  ipcMain.handle("atte:coordinator-status", async event => {
     sender(event);
     return (await ensureCoordinatorInbox()).inbox.status();
   });
-  ipcMain.handle("crewvane:dispatch-goal", (event, goalId: string) => { sender(event); return dispatchGoal(activeService(), goalId); });
-  ipcMain.handle("crewvane:restart-goal", (event, goalId: string, note: string) => {
+  ipcMain.handle("atte:dispatch-goal", (event, goalId: string) => { sender(event); return dispatchGoal(activeService(), goalId); });
+  ipcMain.handle("atte:restart-goal", (event, goalId: string, note: string) => {
     sender(event);
     if (typeof goalId !== "string" || typeof note !== "string")
       throw new Error("重启参数无效");
     return restartEndedGoal(activeService(), goalId, note);
   });
-  ipcMain.handle("crewvane:open-terminal", async event => { sender(event); await openHerdr(); });
-  ipcMain.handle("crewvane:open-herdr", async (event, goalId?: string) => {
+  ipcMain.handle("atte:open-terminal", async event => { sender(event); await openHerdr(); });
+  ipcMain.handle("atte:open-herdr", async (event, goalId?: string) => {
     sender(event);
     await openEmbeddedScene(activeService(), goalId);
   });
-  ipcMain.handle("crewvane:open-scene", async (event, goalId?: string, recover?: boolean) => {
+  ipcMain.handle("atte:open-scene", async (event, goalId?: string, recover?: boolean) => {
     sender(event);
     if (recover !== undefined && typeof recover !== "boolean") throw new Error("无效的恢复参数。");
     return openPreferredScene(activeService(), goalId, recover);
   });
-  ipcMain.handle("crewvane:open-scene-external", async (event, goalId?: string) => {
+  ipcMain.handle("atte:open-scene-external", async (event, goalId?: string) => {
     sender(event);
     return openExternalSceneForGoal(activeService(), goalId);
   });
-  ipcMain.handle("crewvane:terminal-snapshot", (event) => { sender(event); activeService(); return terminals.snapshot(sessionName()); });
-  ipcMain.handle("crewvane:terminal-write", (event, session: string, data: string) => {
+  ipcMain.handle("atte:terminal-snapshot", (event) => { sender(event); activeService(); return terminals.snapshot(sessionName()); });
+  ipcMain.handle("atte:terminal-write", (event, session: string, data: string) => {
     sender(event); activeService(); if (session !== sessionName()) throw new Error("终端不属于当前工作区"); terminals.write(session, data);
   });
-  ipcMain.handle("crewvane:terminal-resize", (event, session: string, cols: number, rows: number) => {
+  ipcMain.handle("atte:terminal-resize", (event, session: string, cols: number, rows: number) => {
     sender(event); activeService(); if (session !== sessionName()) throw new Error("终端不属于当前工作区"); terminals.resize(session, cols, rows);
   });
-  ipcMain.handle("crewvane:open-url", async (event, url: string) => { sender(event); if (typeof url !== "string" || !url.startsWith("https://")) throw new Error("只允许打开 HTTPS 链接"); await shell.openExternal(url); });
-  ipcMain.handle("crewvane:open-recovery-backup", async (event) => {
+  ipcMain.handle("atte:open-url", async (event, url: string) => { sender(event); if (typeof url !== "string" || !url.startsWith("https://")) throw new Error("只允许打开 HTTPS 链接"); await shell.openExternal(url); });
+  ipcMain.handle("atte:open-recovery-backup", async (event) => {
     sender(event);
     const target = activeService(), recovery = (await target.read()).recovery;
     if (!recovery) throw new Error("当前工作区没有待查看的旧版备份");
     const owner = await realpath(target.root),
       archived = await realpath(recovery.archivedPath).catch(() => "");
-    if (!archived || dirname(archived) !== owner || !basename(archived).startsWith(".crewvane.backup-"))
+    if (!archived || dirname(archived) !== owner || !basename(archived).startsWith(".atte.backup-"))
       throw new Error("旧版备份路径已失效或不属于当前工作区");
     const failure = await shell.openPath(archived);
     if (failure) throw new Error(`无法打开旧版备份：${failure}`);
   });
-  ipcMain.handle("crewvane:show-cli", async (event) => { sender(event); shell.showItemInFolder((await cliStatus()).path); });
-  // Use the approved application artwork, with a Retina representation.
-  const traySource = nativeImage.createFromPath(join(here, "assets/crewvane-icon.png"));
-  const trayIcon = traySource.resize({ width: 18, height: 18, quality: "best" });
-  trayIcon.addRepresentation({ scaleFactor: 2, buffer: traySource.resize({ width: 36, height: 36, quality: "best" }).toPNG() });
-  trayIcon.setTemplateImage(false);
-  tray = new Tray(trayIcon); tray.setToolTip("Crewvane · 协航"); tray.setContextMenu(Menu.buildFromTemplate([{ label: "打开 Crewvane", click: () => { window.show(); window.focus(); } }, { type: "separator" }, { label: "退出", click: () => app.quit() }])); tray.on("click", () => { window.show(); window.focus(); });
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "Crewvane", submenu: [{ role: "about" }, { type: "separator" }, { role: "hide" }, { role: "quit" }] }, { role: "editMenu" }, { role: "viewMenu" }]));
+  ipcMain.handle("atte:show-cli", async (event) => { sender(event); shell.showItemInFolder((await cliStatus()).path); });
+  tray = new Tray(trayIcon()); tray.setToolTip("Atte"); tray.setContextMenu(Menu.buildFromTemplate([{ label: "打开 Atte", click: () => { window.show(); window.focus(); } }, { type: "separator" }, { label: "退出", click: () => app.quit() }])); tray.on("click", () => { window.show(); window.focus(); });
+  nativeTheme.on("updated", () => {
+    if (tray && !tray.isDestroyed()) tray.setImage(trayIcon());
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "Atte", submenu: [{ role: "about" }, { type: "separator" }, { role: "hide" }, { role: "quit" }] }, { role: "editMenu" }, { role: "viewMenu" }]));
   await window.loadURL(rendererURL);
-  if (process.env.CREWVANE_TEST_SKIP_HERDR_SETUP !== "1")
+  if (environmentValue(process.env, "TEST_SKIP_HERDR_SETUP") !== "1")
     void prepareHerdrCompanions().catch(() => { /* persistent readiness error is shown by the renderer */ });
-  const saved = await readFile(join(app.getPath("userData"), "workspaces.json"), "utf8").then(JSON.parse).catch(() => null), workspace = process.env.CREWVANE_TEST_WORKSPACE ?? saved?.selected;
-  if (workspace) await openWorkspace(workspace).catch((error) => window.webContents.send("crewvane:event", { type: "diagnostic", message: String(error) }));
-  if (process.env.CREWVANE_TEST_PREPARE_CONCIERGE === "1") {
-    void prepareConcierge().catch((error) => window.webContents.send("crewvane:event", { type: "diagnostic", message: String(error) }));
+  const saved = await readFile(join(app.getPath("userData"), "workspaces.json"), "utf8").then(JSON.parse).catch(() => null), workspace = environmentValue(process.env, "TEST_WORKSPACE") ?? saved?.selected;
+  if (workspace) await openWorkspace(workspace).catch((error) => window.webContents.send("atte:event", { type: "diagnostic", message: String(error) }));
+  if (environmentValue(process.env, "TEST_PREPARE_CONCIERGE") === "1") {
+    void prepareConcierge().catch((error) => window.webContents.send("atte:event", { type: "diagnostic", message: String(error) }));
   }
   setInterval(() => void synchronize(), 10_000); void synchronize();
 });

@@ -14,7 +14,7 @@ afterEach(async () => {
   await Promise.all(fixtures.splice(0).map(path => rm(path, { recursive: true, force: true })));
 });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-event-log-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-event-log-"));
   fixtures.push(root);
   return root;
 }
@@ -33,12 +33,12 @@ test("workspace changes append a state digest instead of another full snapshot",
   assert.match(String(events[0]?.state_sha256), /^[a-f0-9]{64}$/);
   assert.equal(typeof events[0]?.state_bytes, "number");
   assert.equal(events[0]?.state, undefined);
-  assert.ok((await stat(join(root, ".crewvane/events.jsonl"))).size < 2_000);
+  assert.ok((await stat(join(root, ".atte/events.jsonl"))).size < 2_000);
 });
 
 test("an oversized legacy event log is compacted from complete tail records", async () => {
   const root = await fixture(),
-    directory = join(root, ".crewvane"),
+    directory = join(root, ".atte"),
     path = join(directory, "events.jsonl");
   await mkdir(directory, { recursive: true });
   const records = Array.from({ length: 4 }, (_, index) => ({

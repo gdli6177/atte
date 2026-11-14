@@ -577,7 +577,7 @@ export class ExternalTerminalManager {
         commandError.stderr ? String(commandError.stderr).trim() : "",
       ].filter(Boolean).join(" ");
       throw new Error(
-        `无法在 ${terminalLabels[terminal]} 打开工作现场。请允许 Crewvane 控制该终端，或在设置中改用内嵌轻现场。${detail ? ` ${detail}` : ""}`,
+        `无法在 ${terminalLabels[terminal]} 打开工作现场。请允许 Atte 控制该终端，或在设置中改用内嵌轻现场。${detail ? ` ${detail}` : ""}`,
       );
     }
     await this.writePreferences({

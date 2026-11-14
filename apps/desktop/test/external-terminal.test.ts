@@ -16,7 +16,7 @@ async function fixture(options: {
   processAlive?: boolean;
   ttyProcessAlive?: boolean;
 } = {}) {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-scene-")),
+  const root = await mkdtemp(join(tmpdir(), "atte-scene-")),
     calls: Array<{ command: string; args: string[] }> = [],
     installed = new Set(options.installed ?? ["iterm2", "terminal", "ghostty"]);
   const manager = new ExternalTerminalManager({
@@ -107,11 +107,11 @@ test("scene settings persist explicitly and protect an unknown file", async () =
 test("opening an external scene writes a private launcher and reuses its TTY", async () => {
   const { root, calls, manager } = await fixture();
   const workspace = "/tmp/workspace with 'quote' $(not-a-command)",
-    session = "crewvane-test-1234",
+    session = "atte-test-1234",
     input = {
       workspaceRoot: workspace,
       session,
-      herdrExecutable: "/Applications/Crewvane.app/Contents/Resources/herdr",
+      herdrExecutable: "/Applications/Atte.app/Contents/Resources/herdr",
     };
   try {
     const opened = await manager.open(input);
@@ -152,7 +152,7 @@ test("opening an external scene writes a private launcher and reuses its TTY", a
 test("an alive external scene process activates its existing window before TTY matching", async () => {
   const { root, calls, manager } = await fixture({ focus: false });
   const workspace = "/tmp/workspace-process-reuse",
-    session = "crewvane-process-reuse",
+    session = "atte-process-reuse",
     hash = (value: string) =>
       createHash("sha256").update(value).digest("hex").slice(0, 16);
   try {
@@ -198,7 +198,7 @@ test("a closed external scene skips the slow AppleScript probe and opens cleanly
       ttyProcessAlive: false,
     });
     const workspace = `/tmp/closed-${modern ? "modern" : "legacy"}`,
-      session = `crewvane-closed-${modern ? "modern" : "legacy"}`,
+      session = `atte-closed-${modern ? "modern" : "legacy"}`,
       hash = (value: string) =>
         createHash("sha256").update(value).digest("hex").slice(0, 16);
     try {
@@ -239,7 +239,7 @@ test("a closed external scene skips the slow AppleScript probe and opens cleanly
 
 test("a stale lease is replaced when the terminal window cannot be focused", async () => {
   const { root, calls, manager } = await fixture({ focus: false });
-  const workspace = "/tmp/workspace", session = "crewvane-stale";
+  const workspace = "/tmp/workspace", session = "atte-stale";
   try {
     const hash = (value: string) =>
       createHash("sha256").update(value).digest("hex").slice(0, 16);
@@ -276,7 +276,7 @@ test("iTerm2 uses its native automation path when explicitly selected", async ()
     await manager.save({ openWith: "external", terminal: "iterm2" });
     const opened = await manager.open({
       workspaceRoot: "/tmp/iterm-workspace",
-      session: "crewvane-iterm",
+      session: "atte-iterm",
       herdrExecutable: "/tmp/herdr",
     });
     assert.equal(opened.terminal, "iterm2");
@@ -289,7 +289,7 @@ test("iTerm2 uses its native automation path when explicitly selected", async ()
 
 test("a denied focus automation activates the terminal without opening a duplicate", async () => {
   const { root, calls, manager } = await fixture({ failFocus: true });
-  const workspace = "/tmp/workspace-focus", session = "crewvane-focus",
+  const workspace = "/tmp/workspace-focus", session = "atte-focus",
     hash = (value: string) =>
       createHash("sha256").update(value).digest("hex").slice(0, 16);
   try {
@@ -330,7 +330,7 @@ test("Ghostty receives the launcher as one -e command even when its path contain
     await manager.save({ openWith: "external", terminal: "ghostty" });
     await manager.open({
       workspaceRoot: "/tmp/ghostty-workspace",
-      session: "crewvane-ghostty",
+      session: "atte-ghostty",
       herdrExecutable: "/tmp/herdr",
     });
     const opened = calls.find(call => call.command === "open");
@@ -363,7 +363,7 @@ test("a missing selected terminal produces an actionable fallback message", asyn
     await manager.save({ openWith: "external", terminal: "iterm2" });
     await assert.rejects(manager.open({
       workspaceRoot: "/tmp/workspace",
-      session: "crewvane-missing",
+      session: "atte-missing",
       herdrExecutable: "/tmp/herdr",
     }), /改用内嵌轻现场/);
   } finally {

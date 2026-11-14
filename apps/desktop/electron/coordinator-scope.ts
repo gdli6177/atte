@@ -1,7 +1,7 @@
 import { rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import type { SceneReply } from "../../../packages/core/src/index.js";
+import { workspaceDataDirectory, type SceneReply } from "../../../packages/core/src/index.js";
 
 export interface CoordinatorScope {
   goalId: string;
@@ -12,7 +12,7 @@ export interface CoordinatorScope {
 }
 
 export function coordinatorScopePath(root: string) {
-  return join(root, ".crewvane", "coordinator-scope.json");
+  return join(workspaceDataDirectory(root), "coordinator-scope.json");
 }
 
 export async function writeCoordinatorScope(

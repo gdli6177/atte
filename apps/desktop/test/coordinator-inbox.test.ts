@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-coordinator-inbox-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-coordinator-inbox-"));
   roots.push(root);
   return { root, inbox: await CoordinatorInbox.open(root) };
 }
@@ -32,7 +32,7 @@ test("persists priority order and keeps the inbox private", async () => {
   });
   assert.equal((await inbox.claimNext())?.requestId, "request_human");
   assert.equal((await inbox.claimNext())?.requestId, undefined);
-  assert.equal((await stat(join(root, ".crewvane", "coordinator-inbox.json"))).mode & 0o777, 0o600);
+  assert.equal((await stat(join(root, ".atte", "coordinator-inbox.json"))).mode & 0o777, 0o600);
 });
 
 test("coalesces an older queued notification for the same goal", async () => {
@@ -116,7 +116,7 @@ test("retains a bounded inbox and requests context rotation at the budget", asyn
   const status = await inbox.status();
   assert.equal(status.contextCases, 45);
   assert.equal(status.contextResetDue, true);
-  const stored = JSON.parse(await readFile(join(root, ".crewvane", "coordinator-inbox.json"), "utf8"));
+  const stored = JSON.parse(await readFile(join(root, ".atte", "coordinator-inbox.json"), "utf8"));
   assert.ok(stored.items.length <= 240);
   const reset = await inbox.markContextReset();
   assert.equal(reset.contextCases, 0);
@@ -138,7 +138,7 @@ test("deduplicates active requests and allows watchdog retry after its cooldown"
   assert.equal((await inbox.enqueue(input)).id, first.id);
   const claimed = await inbox.claimNext();
   await inbox.finish(claimed!.id, "failed", "offline");
-  const path = join(root, ".crewvane", "coordinator-inbox.json");
+  const path = join(root, ".atte", "coordinator-inbox.json");
   const stored = JSON.parse(await readFile(path, "utf8"));
   const failed = stored.items.find((item: { id: string }) => item.id === first.id);
   failed.finishedAt = new Date(Date.now() - 61_000).toISOString();

@@ -64,7 +64,7 @@ test("one concierge is reused; configured command and native argv stay unchanged
   assert.doesNotMatch(launcher, /exec cursor-2|command cursor-2/);
   assert.equal(f.sent.length, 1);
   assert.ok(f.sent[0]!.text.length < 2_000, "Identity initialization stays a short native turn.");
-  assert.doesNotMatch(f.sent[0]!.text, /\[CREWVANE_CASE_BEGIN\]/);
+  assert.doesNotMatch(f.sent[0]!.text, /\[ATTE_CASE_BEGIN\]/);
 });
 
 test("rechecking an initialized concierge restores readiness without erasing presence or sending identity again", async t => {
@@ -117,7 +117,7 @@ test("rediscovering a created concierge initializes its identity once before any
   const scene = await f.runtime.prepareConcierge();
   assert.equal(f.created.length, 1);
   assert.equal(f.sent.length, 1);
-  assert.match(f.sent[0]!.text, /这是 Crewvane 身份初始化/);
+  assert.match(f.sent[0]!.text, /这是 Atte 身份初始化/);
   const restartedRuntime = new SessionRuntime(f.runtime.options);
   await restartedRuntime.prepareConcierge();
   assert.equal(f.sent.length, 1);
@@ -171,8 +171,8 @@ test("a scoped concierge launches a separate owner and cannot launch for another
   assert.equal((await f.service.read()).goals[0]?.owner, "owner-test");
   await assert.rejects(managed.launchOwner({ goalId: "other", name: "owner-other" }), /不能启动|当前案卷/);
   const launcher = await readFile(f.created[1]!.launcherPath, "utf8");
-  assert.match(launcher, /CREWVANE_GOAL_ID/);
-  assert.doesNotMatch(launcher, /export CREWVANE_COORDINATOR=/);
+  assert.match(launcher, /ATTE_GOAL_ID/);
+  assert.doesNotMatch(launcher, /export ATTE_COORDINATOR=/);
 });
 
 test("idempotent sends reuse the same receipt and reject changed payload or unregistered scenes", async t => {

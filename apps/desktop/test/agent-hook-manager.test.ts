@@ -23,10 +23,10 @@ afterEach(async () => {
 });
 
 async function fixture(commands: string[]) {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-agent-hooks-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-agent-hooks-"));
   roots.push(root);
   const home = join(root, "home"), userData = join(root, "userData");
-  const cli = join(home, ".local", "bin", "crewvane");
+  const cli = join(home, ".local", "bin", "atte");
   await mkdir(dirname(cli), { recursive: true });
   await writeFile(cli, "#!/bin/sh\n", { mode: 0o700 });
   const manager = new AgentHookManager({
@@ -135,9 +135,9 @@ test("all supported detected Agents install once, preserve user hooks, and expos
       1,
     );
   }
-  const ompPath = join(home, ".omp", "agent", "extensions", "crewvane.js");
+  const ompPath = join(home, ".omp", "agent", "extensions", "atte.js");
   const omp = await readFile(ompPath, "utf8");
-  assert.match(omp, /Crewvane managed OMP extension/);
+  assert.match(omp, /Atte managed OMP extension/);
   assert.match(omp, /pi\.on\("turn_start"/);
   assert.doesNotMatch(omp, /tool_execution_start/);
   assert.equal((await stat(ompPath)).mode & 0o777, 0o600);
@@ -160,7 +160,7 @@ test("all supported detected Agents install once, preserve user hooks, and expos
     "installed",
     "a routine re-check must not forget that Codex trusted the managed Hook",
   );
-  assert.equal(CLI.endsWith("crewvane"), true);
+  assert.equal(CLI.endsWith("atte"), true);
 });
 
 test("every JSON adapter preserves pre-existing hooks and uninstall restores them exactly", async () => {
@@ -268,11 +268,11 @@ test("every JSON adapter preserves pre-existing hooks and uninstall restores the
   assert.deepEqual(await json(qoderPath), originals.qoder);
   assert.equal(await readFile(join(ompDirectory, "user-extension.js"), "utf8"),
     "// unrelated OMP extension\n");
-  assert.equal(await stat(join(ompDirectory, "crewvane.js")).then(() => true).catch(() => false),
+  assert.equal(await stat(join(ompDirectory, "atte.js")).then(() => true).catch(() => false),
     false);
 });
 
-test("disable and uninstall remove only Crewvane entries and stay suppressed across auto-install", async () => {
+test("disable and uninstall remove only Atte entries and stay suppressed across auto-install", async () => {
   const { home, manager } = await fixture(["cursor-agent"]);
   const path = join(home, ".cursor", "hooks.json");
   await mkdir(dirname(path), { recursive: true });
@@ -411,8 +411,8 @@ test("configuration symlinks and unrelated OMP marker comments are never replace
   await symlink(target, path);
   await assert.rejects(manager.install("cursor"), /真实文件/);
   assert.equal(await readFile(target, "utf8"), body);
-  const ompPath = join(home, ".omp", "agent", "extensions", "crewvane.js");
-  const extension = "// user extension\n// mentions Crewvane managed OMP extension\n";
+  const ompPath = join(home, ".omp", "agent", "extensions", "atte.js");
+  const extension = "// user extension\n// mentions Atte managed OMP extension\n";
   await mkdir(dirname(ompPath), { recursive: true });
   await writeFile(ompPath, extension);
   await assert.rejects(manager.install("omp"), /同名文件/);
@@ -449,7 +449,7 @@ test("malformed JSON and a future Cursor schema are protected and reported as in
 
 test("OMP never overwrites an unrelated same-name extension", async () => {
   const { home, manager } = await fixture(["omp"]);
-  const path = join(home, ".omp", "agent", "extensions", "crewvane.js");
+  const path = join(home, ".omp", "agent", "extensions", "atte.js");
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, "// user extension\n");
   await manager.autoInstallDetected();
@@ -513,7 +513,7 @@ test("concurrent automatic install, manual install and observation preserve hook
 test("the installed OMP extension uses official logical-turn events and excludes tool content", async () => {
   const { root, home, manager } = await fixture(["omp"]);
   await manager.install("omp");
-  const extension = join(home, ".omp/agent/extensions/crewvane.js");
+  const extension = join(home, ".omp/agent/extensions/atte.js");
   const capture = join(root, "events.jsonl"), cli = join(root, "capture-hook");
   await writeFile(cli, `#!${process.execPath}
 const fs = require("node:fs");
@@ -547,8 +547,8 @@ while (Date.now() < deadline) {
 }
 `], {
     env: {
-      ...process.env, CREWVANE_CLI_BIN: cli, CREWVANE_GOAL_ID: "goal-fixture",
-      CREWVANE_ATTEMPT_ID: "attempt-fixture", CREWVANE_HOOK_TOKEN: "fixture",
+      ...process.env, ATTE_CLI_BIN: cli, ATTE_GOAL_ID: "goal-fixture",
+      ATTE_ATTEMPT_ID: "attempt-fixture", ATTE_HOOK_TOKEN: "fixture",
     },
     timeout: 12_000,
   });

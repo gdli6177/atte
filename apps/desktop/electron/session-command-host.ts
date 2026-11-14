@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  WorkspaceService, validatedScene, type ManagedSessionContext,
+  WorkspaceService, validatedScene, workspaceDataDirectory, type ManagedSessionContext,
 } from "../../../packages/core/src/index.js";
 import {
   SessionRecoveryChannel, SessionError, publishSessionHost, unpublishSessionHost,
@@ -33,7 +33,7 @@ export class SessionCommandHost {
       throw new SessionError("backend_switch_in_progress", "正在交接现场，普通 Host 请求未执行。");
     const state = await new WorkspaceService(this.options.workspace).read();
     const context = request.context, binding = state.backendBinding;
-    const scope = JSON.parse(await readFile(join(this.options.workspace, ".crewvane", "coordinator-scope.json"), "utf8"));
+    const scope = JSON.parse(await readFile(join(workspaceDataDirectory(this.options.workspace), "coordinator-scope.json"), "utf8"));
     if (!binding || binding.status !== "active" || context.role !== "concierge" ||
       context.installationId !== binding.installationId || context.backend !== binding.backend ||
       context.epoch !== binding.epoch || context.scopeGeneration !== binding.scopeGeneration ||

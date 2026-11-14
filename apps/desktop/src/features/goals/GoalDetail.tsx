@@ -333,7 +333,7 @@ export function GoalDetail({
                       {runtime
                         ? "等待负责人提交近期回复或结构化进展。"
                         : goal.live
-                          ? `${backendLabel} 状态保持可用；目标完成、等待外部和找人决定仍以 Crewvane 结构化为准。`
+                          ? `${backendLabel} 状态保持可用；目标完成、等待外部和找人决定仍以 Atte 结构化为准。`
                           : "Hook 不可用时由当前会话后端与巡检完整兜底，不会阻止目标继续执行。"}
                     </p>
                   )}
@@ -448,7 +448,7 @@ export function GoalDetail({
                       ) : (
                         <p>
                           还没有可用的本地工作方法。可在设置安装，或让 Agent 使用
-                          「crewvane-local-pack-author」创建。
+                          「atte-local-pack-author」创建。
                         </p>
                       )}
                     </div>

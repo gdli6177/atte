@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" color="#F3F1EA" role="img" aria-labelledby="atte-mark-mono-reversed-title atte-mark-mono-reversed-desc">
+  <title id="atte-mark-mono-reversed-title">atte mark mono reversed</title>
+  <desc id="atte-mark-mono-reversed-desc">Single color Six Vectors. The 128 unit central square is a transparent hole made with an evenodd compound path.</desc>
+  <metadata>{&quot;brand&quot;:&quot;Atte&quot;,&quot;direction&quot;:&quot;04 Six Vectors&quot;,&quot;parameters&quot;:{&quot;canvas&quot;:1024,&quot;center&quot;:512,&quot;armWidth&quot;:160,&quot;capOverhang&quot;:24,&quot;capChamfer&quot;:40,&quot;shoulderChamfer&quot;:24,&quot;capFlatLength&quot;:48,&quot;outerRadius&quot;:368,&quot;innerRadius&quot;:112,&quot;hubRadius&quot;:160,&quot;coreSize&quot;:128,&quot;smallArmWidth&quot;:176,&quot;smallOuterRadius&quot;:416}}</metadata>
+  <defs>
+    <path id="atte-mark-mono-reversed-arm" d="M432 400 L432 256 L408 232 L408 184 L448 144 L576 144 L616 184 L616 232 L592 256 L592 400 Z"/>
+  </defs>
+  <g fill="currentColor">
+    <use href="#atte-mark-mono-reversed-arm" transform="rotate(0 512 512)"/>
+    <use href="#atte-mark-mono-reversed-arm" transform="rotate(60 512 512)"/>
+    <use href="#atte-mark-mono-reversed-arm" transform="rotate(120 512 512)"/>
+    <use href="#atte-mark-mono-reversed-arm" transform="rotate(180 512 512)"/>
+    <use href="#atte-mark-mono-reversed-arm" transform="rotate(240 512 512)"/>
+    <use href="#atte-mark-mono-reversed-arm" transform="rotate(300 512 512)"/>
+    <path d="M512 352 L650.56406 432 L650.56406 592 L512 672 L373.43594 592 L373.43594 432 Z M448 448 H576 V576 H448 Z" fill-rule="evenodd"/>
+  </g>
+
+</svg>

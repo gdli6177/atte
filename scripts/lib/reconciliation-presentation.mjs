@@ -7,7 +7,7 @@ import { join } from "node:path";
 export async function verifyReconciliationPresentation(page, screenshotDirectory, label) {
   const title = `已回报状态验收 ${label}`;
   const goalId = await page.evaluate(async title => {
-    const command = input => window.crewvane.command(input);
+    const command = input => window.atte.command(input);
     const goal = await command({ type: "goal.direct", text: title });
     const at = new Date().toISOString();
     await command({
@@ -49,10 +49,10 @@ export async function verifyReconciliationPresentation(page, screenshotDirectory
   // Register a reference only after checking the full detail: active goals with
   // a real reference open their scene directly, and use the same status facts.
   const requests = await page.evaluate(async goalId => {
-    await window.crewvane.command({ type: "session.set", goalId,
+    await window.atte.command({ type: "session.set", goalId,
       reference: { session: "cv-reconciliation-fixture", paneId: "w1:p42",
         agent: "owner-reconciliation" } });
-    return window.crewvane.command({ type: "watchdog.inspect", at: new Date().toISOString() });
+    return window.atte.command({ type: "watchdog.inspect", at: new Date().toISOString() });
   }, goalId);
   assert.ok(!requests.some(request => request.goalId === goalId),
     "a written turn must not create a reconciliation request");
@@ -63,7 +63,7 @@ export async function verifyReconciliationPresentation(page, screenshotDirectory
   });
   // A genuine human request still enters attention, regardless of idle and the
   // previous written receipt. Do not guess it from natural-language next steps.
-  await page.evaluate(goalId => window.crewvane.command({
+  await page.evaluate(goalId => window.atte.command({
     type: "goal.decide", goalId, question: "请提供实际调用示例，以便继续验证。",
     actor: "owner-reconciliation",
   }), goalId);

@@ -1,4 +1,4 @@
-# Crewvane 0.5 桌面设计验收
+# Atte 0.5 桌面设计验收
 
 状态：通过。当前产品边界见 [开发说明](docs/product/attention-center-development.md)，token 与组件规则见 [DESIGN.md](DESIGN.md)，原始审计与逐项整改结果见 [UI 审计](docs/design/ui-audit.md)。
 
@@ -23,7 +23,7 @@
 
 ```sh
 pnpm desktop:dist
-CREWVANE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop
+ATTE_KEEP_TEST_ARTIFACTS=1 pnpm test:desktop
 ```
 
 脚本会打印临时证据目录，其中 `ui-audit/` 保留 30 张回归截图，其他截图覆盖深浅主题、回复图片、失败重试和窄窗口目标详情。

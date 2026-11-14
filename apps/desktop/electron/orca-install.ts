@@ -128,7 +128,7 @@ export class OrcaInstallation {
     this.publish({ phase: "checking", detail: "正在检查 Orca 官方发布…" });
     try {
       const response = await this.dependencies.fetch("https://api.github.com/repos/stablyai/orca/releases/latest", {
-        headers: { Accept: "application/vnd.github+json", "User-Agent": "Crewvane" },
+        headers: { Accept: "application/vnd.github+json", "User-Agent": "Atte" },
         signal: AbortSignal.timeout(10_000),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -187,7 +187,7 @@ export class OrcaInstallation {
       this.publish({ phase: "downloading", receivedBytes: 0, totalBytes: this.dependencies.release.bytes,
         detail: `正在下载官方 Orca ${this.dependencies.release.version}…` });
       const response = await this.dependencies.fetch(this.dependencies.release.url, {
-        headers: { "User-Agent": "Crewvane" }, signal,
+        headers: { "User-Agent": "Atte" }, signal,
       });
       if (!response.ok || !response.body) throw new Error(`下载安装包失败（HTTP ${response.status}）`);
       const declared = response.headers.get("content-length");

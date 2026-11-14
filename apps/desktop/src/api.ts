@@ -1,4 +1,4 @@
-import type { CrewvaneCommand, GoalAttachment, SkillPackManifest, SkillPackView } from "../../../packages/core/src/index.js";
+import type { AtteCommand, GoalAttachment, SkillPackManifest, SkillPackView } from "../../../packages/core/src/index.js";
 import type { HerdrStatus } from "../electron/herdr-install.js";
 import type { OrcaInstallationStatus } from "../electron/orca-install.js";
 import type { HerdrPluginStatus } from "../electron/herdr-plugin.js";
@@ -29,7 +29,7 @@ export interface BackendControlStatus {
   impact: { goals: number; scenes: number };
 }
 export interface DesktopApi {
-  command(command: CrewvaneCommand): Promise<any>;
+  command(command: AtteCommand): Promise<any>;
   importAttachments(inputs: { name: string; bytes: ArrayBuffer }[]): Promise<GoalAttachment[]>;
   attachmentPreview(goalId: string, attachmentId: string): Promise<string>;
   openAttachment(goalId: string, attachmentId: string): Promise<void>;
@@ -103,5 +103,5 @@ export interface DesktopApi {
   openTerminal(): Promise<void>;
   subscribe(listener: (event: any) => void): () => void;
 }
-declare global { interface Window { crewvane: DesktopApi } }
-export const api = window.crewvane;
+declare global { interface Window { atte: DesktopApi } }
+export const api = window.atte;

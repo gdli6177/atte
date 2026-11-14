@@ -15,7 +15,7 @@ function percentile(values, ratio) {
 }
 
 async function run() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-coordinator-benchmark-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-coordinator-benchmark-"));
   try {
     const inbox = await CoordinatorInbox.open(root);
     const enqueueMsSamples = [];
@@ -57,7 +57,7 @@ async function run() {
     const drainMs = performance.now() - drainStarted;
     const status = await inbox.status();
     const stored = JSON.parse(await readFile(
-      join(root, ".crewvane", "coordinator-inbox.json"),
+      join(root, ".atte", "coordinator-inbox.json"),
       "utf8",
     ));
     const coalesced = stored.items.filter(item => item.status === "coalesced").length;

@@ -53,7 +53,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v4
         with:
-          name: crewvane-macOS-arm64
+          name: atte-macOS-arm64
           path: apps/desktop/release/installers/*
           if-no-files-found: error
 
@@ -66,7 +66,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: crewvane-macOS-arm64
+          name: atte-macOS-arm64
           path: installers
       - name: Attach verified installers to a release draft
         env:
@@ -77,38 +77,40 @@ jobs:
         run: |
           set -euo pipefail
           cat > notes.md <<'NOTES'
-          Crewvane｜协航 0.11.0 · macOS Apple Silicon
+          Atte 0.12.0 · macOS Apple Silicon
 
           ## 本版更新
 
-          - 设置可排他选择 Herdr 或 Orca；不会两套后端同时派发。回到 Orca 现场使用原生工作界面。
-          - 提供 Orca 安装、选择已有应用、检查更新与重新检测；本版验证 Orca 1.4.258。
-          - 双向切换保留目标、消息、注意力与验收，停止旧现场后按案卷恢复；不搬终端全文。
-          - 注意力与 Agent 现场双向同步：问题、人的现场原话与管家解除事项使用同一 ID；旧回执不能清掉新问题。
-          - 修复 OMP 长案卷输入可能停在未提交草稿的问题：完整正文使用私有文件传递，已结束且过保留期的正文自动清理。
-          - 统一保护 Codex、Claude Code、Cursor、Qoder 与 OMP 的已有 Hooks / Extensions；安装和升级合并配置，停用和卸载只移除 Crewvane 条目，保留 OpenViking 等第三方能力。
-          - 交接等待真实现场或结构化协调证据；未知结果保持恢复状态，不把输入被接受当作处理完成，也不自动重发任务。
-          - 修复 Orca 后台终端误报不可达，以及复用已初始化管家后一直显示“正在准备”的问题。
-          - 管家上一回合结束后才切换下一案卷；正常启动与投递复用桌面受控通道，避免受限 Agent 的进程查询权限阻塞负责人启动。
-          - 代码负责传输、身份、幂等、状态与恢复；Skills 负责协调与执行方法。Crewvane CLI 仍是唯一业务语义写入口。
-          - 保留注意力、协调收件箱、Agent Hooks、Webhook、自主目标、外部终端和内嵌轻现场原有行为。
+          - 正式更名为 Atte，统一应用、桌面与安装包展示；定位为「注意力中心 · The attention layer」。
+          - 应用、Dock、菜单栏、favicon 与打包图标启用 Six Vectors 新标识；原像素吉祥物保留为角色插画。
+          - 验收卡、目标详情与终端控制台统一为一个「给管家发消息」反馈入口，保留独立「验收通过」。
+          - 设计 token 按 primitive / semantic / component 分层，首页、详情与设置共用原语；收敛装饰、阴影和悬停动效。
+          - 设置按工作区与外观、执行现场、Agent 与工作方法、授权与自主推进、通知重排；字段修改需显式保存。
+          - 内部标识全量改名：npm 包使用 @atte/*，CLI 使用 atte，用户安装目录使用 ~/.atte，工作区使用 .atte，插件 ID 使用 dev.atte。
+
+          ## 破坏性变更与迁移
+
+          - 不再提供 crewvane 命令别名。安装后在设置中重新安装 Atte CLI；旧外部脚本需要改用 atte。
+          - ~/.crewvane、旧工作区与应用数据采用复制、SHA-256 校验后迁移；旧目录完整保留，迁移失败时继续使用旧目录。
+          - 旧 Herdr 插件 dev.crewvane 不自动删除，也不再使用；新版只注册 dev.atte，旧插件条目可手动清理。
+          - 旧 Hook / Skill 需要在设置中重新安装，以更新命令、环境变量和协议标识；重新安装不会删除第三方配置。
 
           ## 安装
 
-          仅支持 Apple Silicon Mac（arm64）。从 Assets 下载 .dmg，将 Crewvane.app 拖入 Applications；也可下载 .zip 解压安装。
+          仅支持 Apple Silicon Mac（arm64）。从 Assets 下载 .dmg，将 Atte.app 拖入 Applications；也可下载 .zip 解压安装。
           SHA256SUMS.txt 可用于校验下载文件。GitHub 自动生成的 Source code 是源码，不是安装包。
-          安装或替换应用后，请在设置中重新安装 Crewvane CLI，并检查“Agent 接入”和“工作方法”。
-          如旧版已安装 Crewvane Skill，请在设置中重新安装 Skill，以同时获得主协议和本地能力包创建器。
-          Codex 首次使用受管 Hook 时，请按 Codex 提示在 /hooks 中审核并信任 Crewvane 条目。
-          有效 v3 工作区会先备份到 .crewvane/state.v3.backup.json 后迁移到 v4；有效 v2 同样先备份再迁移。
+          安装或替换应用后，请在设置中重新安装 Atte CLI，并检查“Agent 接入”和“工作方法”。
+          旧版 Hook / Skill 请重新安装，以同时获得 Atte 主协议和本地能力包创建器。
+          Codex 首次使用受管 Hook 时，请按 Codex 提示在 /hooks 中审核并信任 Atte 条目。
           当前安装包没有 Apple Developer ID 签名与公证，macOS 可能提示无法验证开发者。
           核对发布来源后，可在系统设置 > 隐私与安全性中按提示选择仍要打开。
-          使用说明：https://github.com/gdli6177/crewvane/blob/main/docs/crewvane.md
+          使用说明：https://github.com/gdli6177/atte/blob/main/docs/atte.md
+          升级与回滚说明：https://github.com/gdli6177/atte/blob/main/docs/upgrade-atte.md
           NOTES
           if gh release view "$RELEASE_TAG" --json isDraft > existing.json; then
             test "$(jq -r .isDraft existing.json)" = true || { echo 'Published release is immutable to this workflow'; exit 1; }
             gh release upload "$RELEASE_TAG" installers/* --clobber
           else
             gh release create "$RELEASE_TAG" installers/* --draft --prerelease --verify-tag \
-              --title "Crewvane $RELEASE_TAG" --notes-file notes.md
+              --title "Atte $RELEASE_TAG" --notes-file notes.md
           fi

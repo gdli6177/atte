@@ -21,7 +21,7 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-owner-attach-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-owner-attach-"));
   fixtures.push(root);
   const service = new WorkspaceService(root),
     goal = await service.execute({
@@ -38,7 +38,7 @@ async function fixture() {
     recovery: {
       id: "recovery_test_123",
       attemptId: "attempt_test_123",
-      session: "crewvane-test",
+      session: "atte-test",
       createdAt: new Date().toISOString(),
       status: "pending",
       tabId: "w1:t2",
@@ -83,7 +83,7 @@ function runner(options: { agent?: boolean } = {}) {
 const input: OwnerAttachInput = {
   goalId: "",
   name: "owner-a",
-  session: "crewvane-test",
+  session: "atte-test",
   workspaceId: "w1",
   tabId: "w1:t2",
   paneId: "w1:p2",
@@ -100,12 +100,12 @@ test("binds a verified existing Agent scene and consumes the matching recovery I
     }, {
       environment: {
         HERDR_ENV: "1",
-        HERDR_SESSION: "crewvane-test",
+        HERDR_SESSION: "atte-test",
       },
       run: mock.run,
     });
   assert.deepEqual(result.reference, {
-    session: "crewvane-test",
+    session: "atte-test",
     workspaceId: "w1",
     tabId: "w1:t2",
     paneId: "w1:p2",
@@ -132,7 +132,7 @@ test("binds an unmanaged custom CLI only when its foreground process is real", a
   }, {
     environment: {
       HERDR_ENV: "1",
-      HERDR_SESSION: "crewvane-test",
+      HERDR_SESSION: "atte-test",
     },
     run: mock.run,
   });
@@ -173,7 +173,7 @@ test("binds an exec-launched custom CLI when it replaced the pane shell", async 
   }, {
     environment: {
       HERDR_ENV: "1",
-      HERDR_SESSION: "crewvane-test",
+      HERDR_SESSION: "atte-test",
     },
     run: mock.run,
   });
@@ -208,7 +208,7 @@ test("does not bind an idle pane shell as an owner process", async () => {
   }, {
     environment: {
       HERDR_ENV: "1",
-      HERDR_SESSION: "crewvane-test",
+      HERDR_SESSION: "atte-test",
     },
     run,
   }), /没有可核实的 Agent 或前台进程/);
@@ -224,7 +224,7 @@ test("rejects stale recovery IDs, Session drift and occupied scenes", async () =
   }, {
     environment: {
       HERDR_ENV: "1",
-      HERDR_SESSION: "crewvane-test",
+      HERDR_SESSION: "atte-test",
     },
     run: mock.run,
   }), /恢复 ID/);
@@ -245,7 +245,7 @@ test("rejects stale recovery IDs, Session drift and occupied scenes", async () =
   }, {
     environment: {
       HERDR_ENV: "1",
-      HERDR_SESSION: "crewvane-test",
+      HERDR_SESSION: "atte-test",
     },
     run: mock.run,
   }), /新的负责人启动记录取代/);
@@ -272,7 +272,7 @@ test("rejects stale recovery IDs, Session drift and occupied scenes", async () =
     type: "session.set",
     goalId: goal.id,
     reference: {
-      session: "crewvane-test",
+      session: "atte-test",
       workspaceId: "w1",
       tabId: "w1:t9",
       paneId: "w1:p9",
@@ -286,7 +286,7 @@ test("rejects stale recovery IDs, Session drift and occupied scenes", async () =
   }, {
     environment: {
       HERDR_ENV: "1",
-      HERDR_SESSION: "crewvane-test",
+      HERDR_SESSION: "atte-test",
     },
     run: mock.run,
   }), /其他负责人现场/);

@@ -7,12 +7,11 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import { goalKind, goalRevision } from "../../../../../packages/core/src/model.js";
 import {
-  goalKind,
-  goalRevision,
   resolveAcceptance,
   workspaceAutonomy,
-} from "../../../../../packages/core/src/index.js";
+} from "../../../../../packages/core/src/autonomy.js";
 import type {
   AcceptanceMode,
   Goal,

@@ -50,7 +50,7 @@ export class HerdrInstallation {
       } catch { /* try other installation locations */ }
     };
     let best: { executable: string; version: string } | undefined;
-    // Crewvane owns a dedicated Herdr session. Prefer its private runtime over
+    // Atte owns a dedicated Herdr session. Prefer its private runtime over
     // a Homebrew/mise binary so the app and every child CLI address the same
     // server even when the user's shell has a different Herdr installation.
     for (const executable of privateCandidates) {
@@ -142,7 +142,7 @@ export class HerdrInstallation {
       signal: AbortSignal.timeout(30_000),
       headers: {
         Accept: "application/vnd.github+json",
-        "User-Agent": "Crewvane",
+        "User-Agent": "Atte",
         "X-GitHub-Api-Version": "2022-11-28",
         ...(this.githubToken ? { Authorization: `Bearer ${this.githubToken}` } : {}),
       },
@@ -198,7 +198,7 @@ export class HerdrInstallation {
         signal: AbortSignal.timeout(120_000),
         headers: {
           Accept: "application/octet-stream",
-          "User-Agent": "Crewvane",
+          "User-Agent": "Atte",
           "X-GitHub-Api-Version": "2022-11-28",
           ...(this.githubToken ? { Authorization: `Bearer ${this.githubToken}` } : {}),
         },

@@ -17,7 +17,7 @@ function goal(patch: Partial<Goal> = {}): Goal {
 test("real live intervention opens the owner scene directly", () => {
   assert.equal(goalEntryDestination(goal({
     attention: { kind: "intervention", summary: "需要输入登录信息", since: at, source: "live" },
-    herdr: { session: "crewvane", agent: "owner", tabId: "w:t", paneId: "w:p" },
+    herdr: { session: "atte", agent: "owner", tabId: "w:t", paneId: "w:p" },
   })), "scene");
 });
 
@@ -30,7 +30,7 @@ test("a historical human wait without an owner scene still has an actionable car
 test("decision and review retain compact action cards", () => {
   assert.equal(goalEntryDestination(goal({
     attention: { kind: "decision", summary: "选择哪个方案？", since: at },
-    herdr: { session: "crewvane", agent: "owner" },
+    herdr: { session: "atte", agent: "owner" },
   })), "attention");
   assert.equal(goalEntryDestination(goal({
     status: "review",
@@ -47,16 +47,16 @@ test("due follow-up stays actionable without entering the terminal", () => {
 
 test("ordinary active goals use a registered scene, not an invented one", () => {
   assert.equal(goalEntryDestination(goal({
-    herdr: { session: "crewvane", agent: "owner" },
+    herdr: { session: "atte", agent: "owner" },
   })), "scene");
-  assert.equal(goalEntryDestination(goal({ herdr: { session: "crewvane" } })), "details");
+  assert.equal(goalEntryDestination(goal({ herdr: { session: "atte" } })), "details");
   assert.equal(goalEntryDestination(goal({ status: "waiting" })), "details");
 });
 
 test("dispatch failures remain retry cards and ended goals retain their history", () => {
   assert.equal(goalEntryDestination(goal({
     attention: { kind: "intervention", summary: "尚未派发", since: at, source: "dispatch" },
-    herdr: { session: "crewvane", agent: "owner" },
+    herdr: { session: "atte", agent: "owner" },
     dispatch: { status: "failed", at },
   })), "attention");
   assert.equal(goalEntryDestination(goal({ status: "completed" })), "details");

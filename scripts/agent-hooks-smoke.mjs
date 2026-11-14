@@ -18,9 +18,9 @@ const trial = await realpath(await mkdtemp("/tmp/cv-hooks-"));
 const home = join(trial, "home"), workspace = join(trial, "workspace");
 const userData = join(trial, "userData"), codexHome = join(home, ".codex");
 const session = `cv-hooks-${Date.now().toString(36)}`;
-const appPath = resolve(process.env.CREWVANE_APP_PATH ||
-  "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane");
-const codex = process.env.CREWVANE_TRIAL_CODEX ||
+const appPath = resolve(process.env.ATTE_APP_PATH ||
+  "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte");
+const codex = process.env.ATTE_TRIAL_CODEX ||
   (await exec("which", ["codex"])).stdout.trim();
 for (const directory of [workspace, codexHome, join(home, ".local/bin")])
   await mkdir(directory, { recursive: true });
@@ -66,8 +66,8 @@ await service.execute({
 const environment = {
   ...process.env, HOME: home, CODEX_HOME: codexHome,
   XDG_CONFIG_HOME: join(home, ".config"), XDG_STATE_HOME: join(home, ".local/state"),
-  CREWVANE_TEST_HOME: home, CREWVANE_TEST_USER_DATA: userData,
-  CREWVANE_TEST_WORKSPACE: workspace, CREWVANE_HERDR_SESSION: session,
+  ATTE_TEST_HOME: home, ATTE_TEST_USER_DATA: userData,
+  ATTE_TEST_WORKSPACE: workspace, ATTE_HERDR_SESSION: session,
   PATH: `${join(home, ".local/bin")}:${process.env.PATH || "/usr/bin:/bin"}`,
 };
 let app, page, herdrBinary, goalId;
@@ -78,12 +78,12 @@ async function launchApp() {
   page = await app.firstWindow();
   page.on("pageerror", error => errors.push(String(error)));
   await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
-  await page.evaluate(() => window.crewvane.saveSceneSettings({
+  await page.evaluate(() => window.atte.saveSceneSettings({
     openWith: "embedded", terminal: "auto",
   }));
   await expect.poll(async () => (await page.evaluate(() =>
-    window.crewvane.herdrStatus())).installed, { timeout: 90_000 }).toBe(true);
-  herdrBinary = (await page.evaluate(() => window.crewvane.herdrStatus())).executable;
+    window.atte.herdrStatus())).installed, { timeout: 90_000 }).toBe(true);
+  herdrBinary = (await page.evaluate(() => window.atte.herdrStatus())).executable;
 }
 async function herdr(args, timeout = 30_000) {
   const { stdout } = await exec(herdrBinary, ["--session", session, ...args],
@@ -93,9 +93,9 @@ async function herdr(args, timeout = 30_000) {
 async function goal() { return (await service.read()).goals.find(item => item.id === goalId); }
 try {
   await launchApp();
-  await page.evaluate(() => window.crewvane.installCli());
-  await page.evaluate(() => window.crewvane.configureAgentRuntime("codex", "install"));
-  const status = (await page.evaluate(() => window.crewvane.agentRuntimeStatus()))
+  await page.evaluate(() => window.atte.installCli());
+  await page.evaluate(() => window.atte.configureAgentRuntime("codex", "install"));
+  const status = (await page.evaluate(() => window.atte.agentRuntimeStatus()))
     .find(item => item.id === "codex");
   assert.equal(status.status, "waiting-trust");
   await page.getByRole("button", { name: "设置", exact: true }).click();
@@ -104,26 +104,26 @@ try {
   await page.getByRole("button", { name: "浅色模式", exact: true }).click();
   await page.screenshot({ path: join(trial, "agent-access-light.png"), animations: "disabled" });
   await page.getByRole("button", { name: "深色模式", exact: true }).click();
-  await page.evaluate(() => window.crewvane.prepareConcierge());
+  await page.evaluate(() => window.atte.prepareConcierge());
   const created = await service.execute({
     type: "goal.create",
     input: { title: "真实 Codex Hook 验收", projectId: "personal", mode: "concierge",
       description: "故障注入：先遗漏一次回执，再由自动提醒补交真实结果。" },
   });
   goalId = created.id;
-  const cli = join(home, ".local/bin/crewvane");
+  const cli = join(home, ".local/bin/atte");
   const taskPath = join(workspace, "hook-trial-task.txt");
   await writeFile(taskPath, [
     "这是隔离的 Hook 故障注入验收。本次故意模拟 Agent 忘记写回。",
     "这一回合只输出 CV_HOOK_FIRST_STOP，不运行任何工具，也不执行后文现场回写协议。",
-    "等收到以 [CREWVANE_RECEIPT: 开头的系统提醒后，再运行真实命令补交结果：",
+    "等收到以 [ATTE_RECEIPT: 开头的系统提醒后，再运行真实命令补交结果：",
     `${cli} goal progress ${goalId} --root ${workspace} --summary "真实 Codex 已收到一次回执提醒，并成功写回结构化结果" --next "等待验收"`,
     "这条系统提醒不是用户新任务，不要用 direct 把它存成人的原话。",
   ].join("\n"));
   const launch = JSON.parse((await exec(cli, [
     "owner", "launch", goalId, "--name", "owner-hooks", "--task-file", taskPath, "--json",
   ], { env: { ...environment, HERDR_ENV: "1", HERDR_SESSION: session,
-    CREWVANE_WORKSPACE: workspace, CREWVANE_HERDR_BINARY: herdrBinary },
+    ATTE_WORKSPACE: workspace, ATTE_HERDR_BINARY: herdrBinary },
   timeout: 190_000, maxBuffer: 1_000_000 })).stdout);
   assert.ok(launch.scene?.locator?.paneId || launch.result?.scene?.locator?.paneId);
   trace("owner-launched");
@@ -142,10 +142,10 @@ try {
   const attempt = (await goal()).agentRuntime.attempt.attemptId;
   const ownerPane = (await goal()).scene.locator.paneId;
   assert(ownerPane);
-  const adapterStatus = (await page.evaluate(() => window.crewvane.agentRuntimeStatus()))
+  const adapterStatus = (await page.evaluate(() => window.atte.agentRuntimeStatus()))
     .find(item => item.id === "codex");
   assert.equal(adapterStatus.status, "installed");
-  assert.equal((await readdir(join(workspace, ".crewvane/runtime/spool"))
+  assert.equal((await readdir(join(workspace, ".atte/runtime/spool"))
     .catch(() => [])).filter(name => name.endsWith(".json")).length, 0);
   trace("semantic-write-verified");
   await page.getByRole("button", { name: "全部目标", exact: true }).click();
@@ -153,7 +153,7 @@ try {
   try {
     await expect(page.locator(".terminal-panel")).toBeVisible({ timeout: 8_000 });
   } catch (error) {
-    const opened = await page.evaluate(id => window.crewvane.openScene(id), goalId);
+    const opened = await page.evaluate(id => window.atte.openScene(id), goalId);
     throw new Error(`Goal-row scene did not open; explicit IPC result: ${JSON.stringify(opened)}; ${error}`);
   }
   await page.getByRole("button", { name: "目标记录", exact: true }).click();
@@ -172,7 +172,7 @@ try {
   await herdr(["agent", "prompt", ownerPane,
     `现场补充验收：仅运行 ${cli} goal progress ${goalId} --root ${workspace} --summary "应用关闭期间已真实写回" --next "恢复应用检查离线事件"，然后回复 CV_HOOK_OFFLINE_DONE。`,
     "--wait", "--timeout", "120000"], 130_000);
-  const spool = join(workspace, ".crewvane/runtime/spool");
+  const spool = join(workspace, ".atte/runtime/spool");
   await expect.poll(async () => (await readdir(spool).catch(() => []))
     .filter(name => name.endsWith(".json")).length, { timeout: 15_000 }).toBeGreaterThan(0);
   await launchApp();
@@ -197,9 +197,9 @@ try {
     capabilities: ["session.started"],
   });
   const benchmarkEnvironment = {
-    ...environment, CREWVANE_WORKSPACE: workspace,
-    CREWVANE_GOAL_ID: benchmark.id, CREWVANE_ATTEMPT_ID: benchmarkAttempt,
-    CREWVANE_AGENT_NAME: "owner-performance", CREWVANE_HOOK_TOKEN: benchmarkToken,
+    ...environment, ATTE_WORKSPACE: workspace,
+    ATTE_GOAL_ID: benchmark.id, ATTE_ATTEMPT_ID: benchmarkAttempt,
+    ATTE_AGENT_NAME: "owner-performance", ATTE_HOOK_TOKEN: benchmarkToken,
   };
   async function invokeHook(extra = {}) {
     const began = performance.now();
@@ -212,12 +212,12 @@ try {
     return performance.now() - began;
   }
   const hookTimings = [];
-  await page.evaluate(() => window.crewvane.openTerminal());
+  await page.evaluate(() => window.atte.openTerminal());
   await expect(page.locator(".terminal-panel")).toBeVisible();
   for (let sample = 0; sample < 25; sample++) hookTimings.push(await invokeHook());
   await expect(page.locator(".terminal-panel")).toBeVisible();
   const hookP95 = hookTimings.sort((a, b) => a - b)[Math.ceil(hookTimings.length * .95) - 1];
-  const offlineHookMs = await invokeHook({ CREWVANE_HOOK_SOCKET: join(trial, "offline.sock") });
+  const offlineHookMs = await invokeHook({ ATTE_HOOK_SOCKET: join(trial, "offline.sock") });
   assert.ok(hookP95 < 250, `packaged Hook p95 ${hookP95.toFixed(1)} ms`);
   assert.ok(offlineHookMs < 500, `packaged offline Hook ${offlineHookMs.toFixed(1)} ms`);
   await service.execute({ type: "goal.complete", goalId: benchmark.id, note: "性能夹具已验证" });

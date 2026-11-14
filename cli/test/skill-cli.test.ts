@@ -31,7 +31,7 @@ async function call(root: string, argv: string[]) {
 }
 
 test("real CLI creates, validates, installs, lists and binds a local method pack", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-skill-cli-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-skill-cli-"));
   fixtures.push(root);
   const draft = join(root, "draft");
   const created = await call(root, [
@@ -61,11 +61,11 @@ test("real CLI creates, validates, installs, lists and binds a local method pack
   assert.equal(installed.json.status, "ready");
   assert.equal(
     JSON.stringify((await call(root, ["skill", "list"])).json)
-      .includes("Crewvane Core 约束"),
+      .includes("Atte Core 约束"),
     false,
   );
   assert.match(
-    (await call(root, ["skill", "show", "crewvane.concierge"])).json.content,
+    (await call(root, ["skill", "show", "atte.concierge"])).json.content,
     /控制面管家/,
   );
 
@@ -98,12 +98,12 @@ test("real CLI creates, validates, installs, lists and binds a local method pack
   assert.match(resolved.json.text, /发布评审/);
   assert.deepEqual(
     resolved.json.packs.map((pack: { id: string }) => pack.id),
-    ["crewvane.owner", "crewvane.process.delivery", "acme.review"],
+    ["atte.owner", "atte.process.delivery", "acme.review"],
   );
 });
 
 test("managed Agents can inspect available methods but cannot change another goal's methods", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-skill-scope-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-skill-scope-"));
   fixtures.push(root);
   const first = await call(root, [
       "goal",
@@ -121,10 +121,10 @@ test("managed Agents can inspect available methods but cannot change another goa
       "--project",
       "personal",
     ]);
-  const previousGoal = process.env.CREWVANE_GOAL_ID,
-    previousCoordinator = process.env.CREWVANE_COORDINATOR;
-  process.env.CREWVANE_GOAL_ID = first.json.id;
-  delete process.env.CREWVANE_COORDINATOR;
+  const previousGoal = process.env.ATTE_GOAL_ID,
+    previousCoordinator = process.env.ATTE_COORDINATOR;
+  process.env.ATTE_GOAL_ID = first.json.id;
+  delete process.env.ATTE_COORDINATOR;
   try {
     assert.equal((await call(root, ["skill", "list"])).code, 0);
     const denied = await call(root, [
@@ -136,9 +136,9 @@ test("managed Agents can inspect available methods but cannot change another goa
     assert.equal(denied.code, 1);
     assert.match(denied.stderr, /当前目标|scope|权限|能力包/);
   } finally {
-    if (previousGoal === undefined) delete process.env.CREWVANE_GOAL_ID;
-    else process.env.CREWVANE_GOAL_ID = previousGoal;
-    if (previousCoordinator === undefined) delete process.env.CREWVANE_COORDINATOR;
-    else process.env.CREWVANE_COORDINATOR = previousCoordinator;
+    if (previousGoal === undefined) delete process.env.ATTE_GOAL_ID;
+    else process.env.ATTE_GOAL_ID = previousGoal;
+    if (previousCoordinator === undefined) delete process.env.ATTE_COORDINATOR;
+    else process.env.ATTE_COORDINATOR = previousCoordinator;
   }
 });

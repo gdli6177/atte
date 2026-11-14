@@ -14,6 +14,8 @@ import { reconcileAutonomyDefaults } from "./autonomy.js";
 import { decisionMarkdown } from "./governance.js";
 import { normalizeExternalWaits } from "./waiting.js";
 import { isSceneReference, type LegacySceneV0 } from "./session-types.js";
+import { prepareWorkspaceState } from "./state-migration.js";
+import { rewriteStoredCompatibility, STATE_DIRECTORY } from "./compatibility.js";
 export { initialState, newId } from "./model.js";
 const DEFAULT_EVENT_LOG_MAX_BYTES = 16 * 1024 * 1024;
 const DEFAULT_EVENT_TAIL_BYTES = 4 * 1024 * 1024;
@@ -242,6 +244,7 @@ function migrateStateV3(value: unknown): WorkspaceState {
   return state;
 }
 export function validateState(value: unknown): WorkspaceState {
+  value = rewriteStoredCompatibility(value);
   if (!record(value))
     throw new IncompatibleWorkspaceStateError(
       "invalid-state",
@@ -273,7 +276,7 @@ async function writeAtomic(path: string, body: string) {
 export class WorkspaceStore {
   constructor(readonly root: string) {}
   private async directory() {
-    const owner = await realpath(this.root), path = join(owner, ".crewvane");
+    const { directory: path } = await prepareWorkspaceState(this.root);
     await mkdir(path, { recursive: true });
     if ((await lstat(path)).isSymbolicLink()) throw new Error("状态目录不能是符号链接");
     return path;
@@ -332,7 +335,7 @@ export class WorkspaceStore {
   }
   private async recover(incompatible: IncompatibleWorkspaceStateError): Promise<WorkspaceState> {
     const owner = await realpath(this.root);
-    const directory = join(owner, ".crewvane"),
+    const { directory } = await prepareWorkspaceState(this.root),
       current = await this.recoveryReason(directory);
     if (!current) {
       try {
@@ -344,8 +347,8 @@ export class WorkspaceStore {
     }
     const detectedAt = new Date(),
       stamp = detectedAt.toISOString().replace(/\D/g, "").slice(0, 14),
-      archivedPath = join(owner, `.crewvane.backup-${stamp}-${randomUUID().slice(0, 8)}`),
-      staging = join(owner, `.crewvane.recovery-${randomUUID().slice(0, 8)}`),
+      archivedPath = join(owner, `.atte.backup-${stamp}-${randomUUID().slice(0, 8)}`),
+      staging = join(owner, `.atte.recovery-${randomUUID().slice(0, 8)}`),
       recovery = {
         id: newId("recovery"),
         detectedAt: detectedAt.toISOString(),
@@ -393,7 +396,7 @@ export class WorkspaceStore {
     }
     return next;
   }
-  /** Caller must hold the workspace-root lock. Recovery moves `.crewvane`
+  /** Caller must hold the workspace-root lock. Recovery moves `.atte`
    * atomically, so its lock must live beside that directory. */
   private async readUnlocked(): Promise<WorkspaceState> {
     const directory = await this.directory();
@@ -412,10 +415,11 @@ export class WorkspaceStore {
     }
   }
   async read(): Promise<WorkspaceState> {
-    return withLock(await realpath(this.root), () => this.readUnlocked());
+    return withLock(await realpath(this.root), () => this.readUnlocked(),
+      undefined, { workspaceCompatibility: true });
   }
   async update<T>(reason: string, action: (state: WorkspaceState) => T | Promise<T>): Promise<T> {
-    const owner = await realpath(this.root), directory = join(owner, ".crewvane");
+    const owner = await realpath(this.root), { directory } = await prepareWorkspaceState(this.root);
     return withLock(owner, async () => {
       const state = await this.readUnlocked(), before = JSON.stringify(state), result = await action(state);
       if (before === JSON.stringify(state)) return result;
@@ -431,7 +435,7 @@ export class WorkspaceStore {
       await appendFile(join(directory, "events.jsonl"), `${JSON.stringify({
         id: newId("evt"),
         type: "workspace_changed",
-        sequence: await nextSequence(this.root),
+        sequence: await nextSequence(directory),
         created_at: new Date().toISOString(),
         title: reason,
         source_task_id: "workspace",
@@ -439,6 +443,6 @@ export class WorkspaceStore {
         state_bytes: Buffer.byteLength(serialized),
       })}\n`, { mode: 0o600 });
       return result;
-    });
+    }, undefined, { workspaceCompatibility: true });
   }
 }

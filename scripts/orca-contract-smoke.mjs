@@ -8,8 +8,8 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { OrcaAdapter, createLaunchFiles } from "../packages/sessions/src/index.ts";
 
-const profile = process.env.CREWVANE_TEST_ORCA_PROFILE;
-assert(profile && profile.startsWith("/private/tmp/"), "Pass an isolated CREWVANE_TEST_ORCA_PROFILE, never a normal user profile.");
+const profile = process.env.ATTE_TEST_ORCA_PROFILE;
+assert(profile && profile.startsWith("/private/tmp/"), "Pass an isolated ATTE_TEST_ORCA_PROFILE, never a normal user profile.");
 const root = await realpath(await mkdtemp(join(tmpdir(), "cv-orca-contract-")));
 const cwd = join(root, "个人 事项");
 const shell = join(root, "shell");
@@ -21,11 +21,11 @@ const fs = require("node:fs");
 fs.writeFileSync(${JSON.stringify(inputPath)}, "");
 fs.writeFileSync(${JSON.stringify(factsPath)}, JSON.stringify({
   cwd: process.cwd(), argv: process.argv.slice(2), pid: process.pid,
-  goal: process.env.CREWVANE_GOAL_ID, attempt: process.env.CREWVANE_ATTEMPT_ID,
+  goal: process.env.ATTE_GOAL_ID, attempt: process.env.ATTE_ATTEMPT_ID,
   handle: process.env.ORCA_TERMINAL_HANDLE, pathEntries: process.env.PATH.split(":").length,
 }));
 process.stdin.setRawMode(true); process.stdin.resume();
-process.stdout.write("Crewvane private fixture ready\\r\\n");
+process.stdout.write("Atte private fixture ready\\r\\n");
 process.stdin.on("data", b => fs.appendFileSync(${JSON.stringify(inputPath)}, b));
 `);
 const quoted = value => `'${value.replaceAll("'", "'\\''")}'`;
@@ -34,7 +34,7 @@ await writeFile(join(shell, ".zshrc"), [
   `export PATH=${quoted(Array.from({ length: 1_000 }, (_, i) => `/tmp/cv-long-path-${i}`).join(":"))}:$PATH`,
   "",
 ].join("\n"));
-const appPath = process.env.CREWVANE_TEST_ORCA_APP ?? "/Applications/Orca.app";
+const appPath = process.env.ATTE_TEST_ORCA_APP ?? "/Applications/Orca.app";
 const adapter = new OrcaAdapter({
   appPath, directory: join(root, "control"),
   environment: { ...process.env, ORCA_USER_DATA_PATH: profile },
@@ -48,13 +48,13 @@ const files = await createLaunchFiles(join(root, "control"), {
   requestId, attemptId, bindingId, installationId: "cv-test-installation", backendEpoch: 0,
   cwd, executable: "cursor-2", args: ["--model", "test model 中文"],
   environment: {
-    CREWVANE_GOAL_ID: "g0-test-goal", CREWVANE_ATTEMPT_ID: attemptId,
-    CREWVANE_BACKEND: "orca", CREWVANE_BACKEND_EPOCH: "0", CREWVANE_WORKSPACE: cwd,
+    ATTE_GOAL_ID: "g0-test-goal", ATTE_ATTEMPT_ID: attemptId,
+    ATTE_BACKEND: "orca", ATTE_BACKEND_EPOCH: "0", ATTE_WORKSPACE: cwd,
   },
 });
 const request = {
   requestId, attemptId, bindingId, installationId: "cv-test-installation", backendEpoch: 0,
-  role: "owner", goalId: "g0-test-goal", cwd, title: "Crewvane contract fixture", ...files,
+  role: "owner", goalId: "g0-test-goal", cwd, title: "Atte contract fixture", ...files,
 };
 let scene;
 try {

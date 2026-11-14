@@ -22,13 +22,13 @@ const testEnvironment = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home
   // GitHub Actions invokes this script from bash even on macOS. The fixture
   // intentionally models the product's macOS target and the user's .zshrc.
   SHELL: "/bin/zsh",
-  PATH: "/usr/bin:/bin", CREWVANE_TEST_HOME: home,
-  CREWVANE_TEST_USER_DATA: userData, CREWVANE_TEST_WORKSPACE: "",
-  CREWVANE_TEST_ISOLATE_TOOLS: "1", CREWVANE_TEST_SKIP_HERDR_SETUP: "",
-  CREWVANE_HERDR_SESSION: session };
+  PATH: "/usr/bin:/bin", ATTE_TEST_HOME: home,
+  ATTE_TEST_USER_DATA: userData, ATTE_TEST_WORKSPACE: "",
+  ATTE_TEST_ISOLATE_TOOLS: "1", ATTE_TEST_SKIP_HERDR_SETUP: "",
+  ATTE_HERDR_SESSION: session };
 await mkdir(rootA); await mkdir(rootB);
-await mkdir(join(legacy, ".crewvane"), {recursive:true});
-await writeFile(join(legacy, ".crewvane/state.json"), '{"version":1}');
+await mkdir(join(legacy, ".atte"), {recursive:true});
+await writeFile(join(legacy, ".atte/state.json"), '{"version":1}');
 await writeFile(customCli, `#!${process.execPath}
 const fs = require("node:fs");
 const readline = require("node:readline");
@@ -56,7 +56,7 @@ async function picker(path, canceled = false) {
 }
 try {
   app = await electron.launch({
-    executablePath: resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+    executablePath: resolve(process.env.ATTE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     env: testEnvironment,
     timeout: 60_000,
   });
@@ -69,7 +69,7 @@ try {
   // The app must install Herdr itself, with no Homebrew and no system Herdr.
   const installDeadline = Date.now() + 180_000;
   do {
-    installed = await page.evaluate(() => window.crewvane.herdrStatus());
+    installed = await page.evaluate(() => window.atte.herdrStatus());
     if (installed.phase === "error")
       throw new Error(`Herdr 自动安装失败：${installed.detail ?? JSON.stringify(installed)}`);
     if (installed.installed && installed.phase === "ready" && installed.latestVersion) break;
@@ -87,34 +87,34 @@ try {
   await page.getByText("已打开工作区：所有事项", { exact: true }).waitFor();
   await completeAutonomySetup(page);
   await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
-  assert.equal((await page.evaluate(() => window.crewvane.environment())).workspace, await realpath(rootA));
+  assert.equal((await page.evaluate(() => window.atte.environment())).workspace, await realpath(rootA));
   await expect.poll(async () => {
-    const plugin = (await page.evaluate(() => window.crewvane.herdrStatus())).plugin;
+    const plugin = (await page.evaluate(() => window.atte.herdrStatus())).plugin;
     return plugin?.phase === "ready" && plugin.installed;
   }, { timeout: 60_000 }).toBe(true);
-  const pluginStatus = await page.evaluate(() => window.crewvane.herdrStatus());
+  const pluginStatus = await page.evaluate(() => window.atte.herdrStatus());
   assert.equal(pluginStatus.plugin.installed, true, JSON.stringify(pluginStatus));
   assert.equal(pluginStatus.plugin.path, join(userData, "herdr-plugin"));
   const pluginList = JSON.parse((await exec(installedExecutable,
-    ["plugin", "list", "--plugin", "dev.crewvane", "--json"], { env: testEnvironment })).stdout);
+    ["plugin", "list", "--plugin", "dev.atte", "--json"], { env: testEnvironment })).stdout);
   const plugin = pluginList.result.plugins[0];
   assert.equal(plugin.enabled, true);
   const pluginActions = plugin.actions.map(action => `${plugin.plugin_id}.${action.id}`);
-  assert.ok(pluginActions.includes("dev.crewvane.attention"));
-  assert.ok(pluginActions.includes("dev.crewvane.new-goal"));
-  assert.ok(pluginActions.includes("dev.crewvane.concierge"));
+  assert.ok(pluginActions.includes("dev.atte.attention"));
+  assert.ok(pluginActions.includes("dev.atte.new-goal"));
+  assert.ok(pluginActions.includes("dev.atte.concierge"));
   await page.getByRole("button", { name: "我的工作台", exact: true }).click();
   assert.equal(await page.getByRole("dialog").count(), 0, "workspace overview is navigation, not a directory picker");
   await page.getByRole("button", { name: "设置", exact: true }).click();
-  await page.getByText("让外部 Agent 会使用 Crewvane", { exact: true }).waitFor();
+  await page.getByText("让外部 Agent 会使用 Atte", { exact: true }).waitFor();
   await page.getByRole("button", { name: "安装 / 更新 Skills", exact: true }).click();
-  await expect.poll(() => access(join(home, ".agents/skills/crewvane/SKILL.md"))
+  await expect.poll(() => access(join(home, ".agents/skills/atte/SKILL.md"))
     .then(() => true).catch(() => false)).toBe(true);
-  assert.match(await readFile(join(home, ".agents/skills/crewvane/SKILL.md"), "utf8"), /crewvane ask/);
+  assert.match(await readFile(join(home, ".agents/skills/atte/SKILL.md"), "utf8"), /atte ask/);
   await page.evaluate(async () => {
-    await window.crewvane.writeClipboardText("Crewvane clipboard round trip");
+    await window.atte.writeClipboardText("Atte clipboard round trip");
   });
-  assert.equal(await page.evaluate(() => window.crewvane.readClipboardText()), "Crewvane clipboard round trip");
+  assert.equal(await page.evaluate(() => window.atte.readClipboardText()), "Atte clipboard round trip");
   await page.getByRole("button", { name: "更换工作区", exact: true }).click();
   await page.getByRole("dialog").getByText("当前工作区", { exact: true }).waitFor();
   await page.getByRole("dialog").getByText(await realpath(rootA), { exact: true }).waitFor();
@@ -126,19 +126,19 @@ try {
   await picker(rootB, true);
   await page.getByRole("button", { name: "更换工作区", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "选择其他工作区文件夹" }).click();
-  assert.equal((await page.evaluate(() => window.crewvane.environment())).workspace, await realpath(rootA));
+  assert.equal((await page.evaluate(() => window.atte.environment())).workspace, await realpath(rootA));
   assert.equal(await page.getByRole("dialog").isVisible(), true);
   await picker(legacy);
   await page.getByRole("dialog").getByRole("button", { name: "选择其他工作区文件夹" }).click();
   await expect.poll(async () =>
-    (await page.evaluate(() => window.crewvane.environment())).workspace
+    (await page.evaluate(() => window.atte.environment())).workspace
   ).toBe(await realpath(legacy));
   await completeAutonomySetup(page);
   await page.getByText("旧版工作区已自动保护", { exact: true }).waitFor();
   await page.screenshot({ path: join(home, "legacy-recovered-dark.png"), animations:"disabled" });
-  const recovered = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+  const recovered = await page.evaluate(() => window.atte.command({type:"snapshot"}));
   assert.equal(recovered.recovery.reason, "unsupported-version");
-  assert.equal(JSON.parse(await readFile(join(legacy, ".crewvane/state.json"), "utf8")).version, 4);
+  assert.equal(JSON.parse(await readFile(join(legacy, ".atte/state.json"), "utf8")).version, 4);
   assert.equal((await stat(recovered.recovery.archivedPath)).isDirectory(), true);
   assert.equal(
     JSON.parse(await readFile(join(recovered.recovery.archivedPath, "state.json"), "utf8")).version,
@@ -155,12 +155,12 @@ try {
   await picker(rootB);
   await page.getByRole("dialog").getByRole("button", { name: "选择其他工作区文件夹" }).click();
   await expect.poll(async () =>
-    (await page.evaluate(() => window.crewvane.environment())).workspace
+    (await page.evaluate(() => window.atte.environment())).workspace
   ).toBe(await realpath(rootB));
   await completeAutonomySetup(page);
   await page.getByRole("button", { name: "设置", exact: true }).click();
   // This command exists only as a function in the isolated user's .zshrc.
-  // Finder and Crewvane's directory scan cannot resolve it; the real Herdr
+  // Finder and Atte's directory scan cannot resolve it; the real Herdr
   // pane shell must preserve and execute the configured bare command name.
   const command = `cv-local-agent --model "local test model"`;
   await page.getByLabel("管家启动命令").fill(command);
@@ -168,8 +168,8 @@ try {
   await page.getByText("Agent 偏好已保存，将用于新启动的会话。", { exact: true }).waitFor();
   await page.getByRole("button", { name: "准备管家", exact: true }).click();
   trace("custom-cli-concierge");
-  await expect.poll(async () => (await page.evaluate(() => window.crewvane.command({type:"snapshot"}))).concierge.status, {timeout:90_000}).toBe("ready");
-  let state = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+  await expect.poll(async () => (await page.evaluate(() => window.atte.command({type:"snapshot"}))).concierge.status, {timeout:90_000}).toBe("ready");
+  let state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
   assert.equal(state.concierge.scene.backend, "herdr");
   const firstScene = state.concierge.scene;
   const firstReference = { ...firstScene.locator, transport: "pane",
@@ -178,11 +178,11 @@ try {
     "--session", session, "tab", "focus", firstReference.tabId,
   ], { env: testEnvironment, timeout: 10_000 });
   const conciergeAction = JSON.parse((await exec(installedExecutable, [
-    "--session", session, "plugin", "action", "invoke", "dev.crewvane.concierge",
+    "--session", session, "plugin", "action", "invoke", "dev.atte.concierge",
   ], { env: testEnvironment, timeout: 30_000 })).stdout);
   assert.equal(conciergeAction.result.action.action_id, "concierge");
   const action = JSON.parse((await exec(installedExecutable, [
-    "--session", session, "plugin", "action", "invoke", "dev.crewvane.attention",
+    "--session", session, "plugin", "action", "invoke", "dev.atte.attention",
   ], { env: testEnvironment, timeout: 30_000 })).stdout);
   assert.equal(action.result.action.action_id, "attention");
   let pluginPaneId;
@@ -190,13 +190,13 @@ try {
     const panes = JSON.parse((await exec(installedExecutable, [
       "--session", session, "pane", "list", "--workspace", firstReference.workspaceId,
     ], { env: testEnvironment })).stdout).result.panes;
-    pluginPaneId = panes.find(pane => pane.label === "Crewvane 注意力")?.pane_id;
+    pluginPaneId = panes.find(pane => pane.label === "Atte 注意力")?.pane_id;
     return pluginPaneId ?? null;
   }, { timeout: 20_000 }).not.toBeNull();
   assert.match(pluginPaneId, new RegExp(`^${firstReference.workspaceId}:p\\d+$`));
   await exec(installedExecutable, [
     "--session", session, "pane", "wait-output", pluginPaneId,
-    "--match", "CREWVANE", "--timeout", "10000",
+    "--match", "Atte", "--timeout", "10000",
   ], { env: testEnvironment, timeout: 20_000 });
   const boardOutput = (await exec(installedExecutable, [
     "--session", session, "pane", "read", pluginPaneId,
@@ -207,7 +207,7 @@ try {
     "--session", session, "pane", "close", pluginPaneId,
   ], { env: testEnvironment, timeout: 10_000 });
   const newGoalAction = JSON.parse((await exec(installedExecutable, [
-    "--session", session, "plugin", "action", "invoke", "dev.crewvane.new-goal",
+    "--session", session, "plugin", "action", "invoke", "dev.atte.new-goal",
   ], { env: testEnvironment, timeout: 30_000 })).stdout);
   assert.equal(newGoalAction.result.action.action_id, "new-goal");
   let newGoalPaneId;
@@ -215,7 +215,7 @@ try {
     const panes = JSON.parse((await exec(installedExecutable, [
       "--session", session, "pane", "list", "--workspace", firstReference.workspaceId,
     ], { env: testEnvironment })).stdout).result.panes;
-    newGoalPaneId = panes.find(pane => pane.label === "Crewvane 新目标")?.pane_id;
+    newGoalPaneId = panes.find(pane => pane.label === "Atte 新目标")?.pane_id;
     return newGoalPaneId ?? null;
   }, { timeout: 20_000 }).not.toBeNull();
   await new Promise(resolve => setTimeout(resolve, 1_000));
@@ -229,17 +229,17 @@ try {
     "Herdr 插件新建目标真实验收",
   ], { env: testEnvironment, timeout: 10_000 });
   await expect.poll(async () => {
-    const current = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+    const current = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return current.goals.some(goal => goal.title === "Herdr 插件新建目标真实验收");
   }, { timeout: 20_000 }).toBe(true);
   const eventPane = JSON.parse((await exec(installedExecutable, [
     "--session", session, "pane", "split", "--pane", firstReference.paneId,
     "--direction", "down", "--cwd", rootB, "--no-focus",
   ], { env: testEnvironment, timeout: 10_000 })).stdout).result.pane.pane_id;
-  const eventGoal = await page.evaluate(() => window.crewvane.command({ type:"goal.create", input:{
+  const eventGoal = await page.evaluate(() => window.atte.command({ type:"goal.create", input:{
     title:"Herdr 插件事件验收", projectId:"personal", mode:"manual",
   }}));
-  await page.evaluate(({ goalId, reference }) => window.crewvane.command({
+  await page.evaluate(({ goalId, reference }) => window.atte.command({
     type:"session.set", goalId, reference,
   }), {
     goalId: eventGoal.id,
@@ -252,7 +252,7 @@ try {
     "--session", session, "pane", "close", eventPane,
   ], { env: testEnvironment, timeout: 10_000 });
   await expect.poll(async () => {
-    const current = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+    const current = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return current.goals.find(goal => goal.id === eventGoal.id)?.live;
   }, { timeout: 20_000 }).toMatchObject({ state:"unknown", reachable:false });
   // A foreground PID proves process creation, not that its JS startup has
@@ -264,7 +264,7 @@ try {
   assert.ok(started.pid === firstScene.process.pid || parent === firstScene.process.pid,
     "The configured CLI must run in the verified launcher, without confusing child and launcher identities.");
   firstReference.processId = started.pid; // Legacy HerdrClient's foreground-only reference.
-  await page.evaluate(() => window.crewvane.prepareConcierge());
+  await page.evaluate(() => window.atte.prepareConcierge());
   assert.equal((await readFile(log, "utf8")).split("\n").filter(line => line.includes('"kind":"start"')).length, 1);
   const longGoalRequest =
     `${"请保留全部约束并完成端到端验收。".repeat(14)}完整正文末尾标记-${randomUUID()}`;
@@ -279,15 +279,15 @@ try {
   await page.getByLabel("要交给管家的事情").fill(longGoalRequest);
   await page.getByRole("button", { name:"确认交给管家", exact:true }).click();
   await expect.poll(async () => {
-    const current = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+    const current = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return current.goals.some(goal => goal.title === longGoalTitle);
   }, {timeout:10_000}).toBe(true);
-  const created = (await page.evaluate(() => window.crewvane.command({type:"snapshot"}))).goals
+  const created = (await page.evaluate(() => window.atte.command({type:"snapshot"}))).goals
     .find(goal => goal.title === longGoalTitle);
   assert.equal(created.description, longGoalRequest);
   assert.deepEqual(created.steps, []);
   await expect.poll(async () => {
-    const state = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+    const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === created.id)?.dispatch?.status;
   }, {timeout:60_000}).toBe("sent");
   await expect.poll(() => readFile(log, "utf8"), {timeout:10_000}).toContain(created.id);
@@ -297,7 +297,7 @@ try {
     .filter(entry => entry.kind === "input" && /不亲自执行(?:业务)?目标/.test(entry.text));
   assert.ok(roleInputs.length >= 2, "initial identity and new goal must both carry the no-execution boundary into real stdin");
   assert.ok(messages.includes("简单任务也交给独立负责人"));
-  assert.ok(messages.includes("crewvane owner launch") && messages.includes("crewvane owner send"),
+  assert.ok(messages.includes("atte owner launch") && messages.includes("atte owner send"),
     "case instructions must delegate through the backend-neutral owner CLI");
   assert.ok(messages.includes(longGoalRequest), "the full one-box intake must reach the real CLI");
   await page.getByRole("dialog").waitFor();
@@ -305,16 +305,16 @@ try {
   await page.getByLabel("发给管家的消息", { exact:true }).fill("补充约束：不要改变交付范围");
   await page.getByRole("button", { name:"交给管家", exact:true }).click();
   await expect.poll(() => readFile(log,"utf8"), {timeout:10_000}).toContain("补充约束：不要改变交付范围");
-  assert.ok((await readFile(log,"utf8")).includes("[CREWVANE_CASE_BEGIN]"),
+  assert.ok((await readFile(log,"utf8")).includes("[ATTE_CASE_BEGIN]"),
     "goal feedback must use the single-case envelope with the real CLI");
-  const feedbackGoal = (await page.evaluate(() => window.crewvane.command({type:"snapshot"}))).goals.find(goal => goal.id === created.id);
+  const feedbackGoal = (await page.evaluate(() => window.atte.command({type:"snapshot"}))).goals.find(goal => goal.id === created.id);
   assert.equal(feedbackGoal.next, "管家正在理解原文并整理目标。");
   assert.ok(feedbackGoal.activities.some(activity => activity.kind === "message" && activity.text === "补充约束：不要改变交付范围"));
   await page.getByRole("button", { name:"关闭", exact:true }).click();
-  const waiting = await page.evaluate(() => window.crewvane.command({ type:"goal.create", input:{
+  const waiting = await page.evaluate(() => window.atte.command({ type:"goal.create", input:{
     title:"等待审批后继续",projectId:"personal",mode:"concierge",
   }}));
-  await page.evaluate(id => window.crewvane.command({ type:"goal.wait", goalId:id, reason:"等 YR 审批", owner:"YR", remindAt:"2030-01-01T00:00:00Z" }), waiting.id);
+  await page.evaluate(id => window.atte.command({ type:"goal.wait", goalId:id, reason:"等 YR 审批", owner:"YR", remindAt:"2030-01-01T00:00:00Z" }), waiting.id);
   trace("waiting-reply");
   await page.getByRole("button", { name:"全部目标", exact:true }).click();
   await page.getByText("等待审批后继续", { exact:true }).click();
@@ -322,77 +322,77 @@ try {
   await page.getByLabel("发给管家的消息", { exact:true }).fill("YR 已批准，按原方案继续开发");
   await page.getByRole("button", { name:"交给管家", exact:true }).click();
   await expect.poll(async () => {
-    const state = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+    const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === waiting.id)?.dispatch?.status;
   }, {timeout:60_000}).toBe("sent");
   await expect.poll(() => readFile(log,"utf8"), {timeout:10_000}).toContain("YR 已批准，按原方案继续开发");
-  let waitingGoal = (await page.evaluate(() => window.crewvane.command({type:"snapshot"}))).goals.find(goal => goal.id === waiting.id);
+  let waitingGoal = (await page.evaluate(() => window.atte.command({type:"snapshot"}))).goals.find(goal => goal.id === waiting.id);
   assert.equal(waitingGoal.status,"active", "an external wait handed back to an Agent returns to active coordination");
   assert.equal(waitingGoal.waitingFor, undefined);
   assert.ok(waitingGoal.activities.some(activity => activity.text === "YR 已批准，按原方案继续开发"));
-  await page.evaluate(id => window.crewvane.command({
+  await page.evaluate(id => window.atte.command({
     type:"goal.progress", goalId:id, actor:"concierge",
     summary:"YR 已批准，按原方案继续开发", next:"开始实现",
   }), waiting.id);
   await expect.poll(async () => {
-    const state = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+    const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === waiting.id)?.status;
   }, {timeout:20_000}).toBe("active");
-  await page.evaluate(id => window.crewvane.command({ type:"goal.wait", goalId:id, reason:"继续等 YR 审批", owner:"YR", remindAt:"2030-01-01T00:00:00Z" }), waiting.id);
+  await page.evaluate(id => window.atte.command({ type:"goal.wait", goalId:id, reason:"继续等 YR 审批", owner:"YR", remindAt:"2030-01-01T00:00:00Z" }), waiting.id);
   await expect.poll(async () => {
-    const state = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+    const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === waiting.id)?.status;
   }, {timeout:20_000}).toBe("waiting");
   await page.getByRole("button", { name:"1 小时后提醒", exact:true }).click();
-  waitingGoal = (await page.evaluate(() => window.crewvane.command({type:"snapshot"}))).goals.find(goal => goal.id === waiting.id);
+  waitingGoal = (await page.evaluate(() => window.atte.command({type:"snapshot"}))).goals.find(goal => goal.id === waiting.id);
   assert.ok(Date.parse(waitingGoal.remindAt) > Date.now());
-  await page.evaluate(id => window.crewvane.command({
+  await page.evaluate(id => window.atte.command({
     type:"goal.progress", goalId:id, actor:"concierge",
     summary:"审批已确认", next:"由你继续收尾",
   }), waiting.id);
   await expect.poll(async () => {
-    const state = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+    const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === waiting.id)?.status;
   }, {timeout:20_000}).toBe("active");
   await page.locator(".goal-detail-advanced").evaluate(element => { element.open = true; });
   await page.getByRole("button", { name:"我来处理", exact:true }).click();
   await expect.poll(async () => {
-    const state = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+    const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === waiting.id)?.mode;
   }, {timeout:10_000}).toBe("manual");
-  waitingGoal = (await page.evaluate(() => window.crewvane.command({type:"snapshot"}))).goals.find(goal => goal.id === waiting.id);
+  waitingGoal = (await page.evaluate(() => window.atte.command({type:"snapshot"}))).goals.find(goal => goal.id === waiting.id);
   assert.equal(waitingGoal.mode,"manual"); assert.equal(waitingGoal.status,"active");
   assert.equal(waitingGoal.dispatch,undefined);
   await page.getByRole("button", { name:"关闭", exact:true }).click();
   // A decision written by the standalone CLI must wake the running desktop's
   // pending-dispatch loop and reach the same real concierge stdin.
-  const externalDecision = await page.evaluate(() => window.crewvane.command({ type:"goal.create", input:{
+  const externalDecision = await page.evaluate(() => window.atte.command({ type:"goal.create", input:{
     title:"外部 CLI 决定回传", projectId:"personal", mode:"concierge",
   }}));
-  await page.evaluate(id => window.crewvane.command({
+  await page.evaluate(id => window.atte.command({
     type:"goal.wait", goalId:id, reason:"等 YR 审批", owner:"YR",
   }), externalDecision.id);
-  await page.evaluate(id => window.crewvane.command({
+  await page.evaluate(id => window.atte.command({
     type:"goal.risk", goalId:id, category:"change-permissions",
     summary:"给生产环境增加一名管理员", actor:"管家",
   }), externalDecision.id);
-  let externalGoal = (await page.evaluate(() => window.crewvane.command({type:"snapshot"})))
+  let externalGoal = (await page.evaluate(() => window.atte.command({type:"snapshot"})))
     .goals.find(goal => goal.id === externalDecision.id);
   assert.equal(externalGoal.status, "active");
   assert.equal(externalGoal.waitingFor, undefined);
   trace("external-cli-decision");
-  await exec(join(home, ".local/bin/crewvane"), [
+  await exec(join(home, ".local/bin/atte"), [
     "goal", "resolve", externalDecision.id,
     "--note", "外部 CLI 已批准只读权限",
     "--outcome", "approved", "--actor", "你", "--root", rootB, "--json",
   ], { env: testEnvironment, timeout: 20_000 });
   await expect.poll(async () => {
-    const state = await page.evaluate(() => window.crewvane.command({type:"snapshot"}));
+    const state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === externalDecision.id)?.dispatch?.status;
   }, { timeout: 60_000 }).toBe("sent");
   await expect.poll(() => readFile(log, "utf8"), { timeout: 10_000 })
     .toContain("外部 CLI 已批准只读权限");
-  externalGoal = (await page.evaluate(() => window.crewvane.command({type:"snapshot"})))
+  externalGoal = (await page.evaluate(() => window.atte.command({type:"snapshot"})))
     .goals.find(goal => goal.id === externalDecision.id);
   assert.equal(externalGoal.status, "active");
   assert.equal(externalGoal.waitingFor, undefined);
@@ -426,16 +426,16 @@ try {
   const restoredEnvironment = { ...testEnvironment };
   // The empty first-run override deliberately suppresses saved selection.
   // Remove it when testing a normal restart and persisted workspace recovery.
-  delete restoredEnvironment.CREWVANE_TEST_WORKSPACE;
+  delete restoredEnvironment.ATTE_TEST_WORKSPACE;
   app = await electron.launch({
-    executablePath: resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+    executablePath: resolve(process.env.ATTE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     env:restoredEnvironment, timeout:60_000,
   });
   const restored = await app.firstWindow();
   restored.on("pageerror", error => errors.push(String(error)));
-  await expect.poll(async () => (await restored.evaluate(() => window.crewvane.environment())).workspace).toBe(await realpath(rootB));
-  await restored.evaluate(() => window.crewvane.prepareConcierge());
-  const reusedConcierge = (await restored.evaluate(() => window.crewvane.command({type:"snapshot"}))).concierge;
+  await expect.poll(async () => (await restored.evaluate(() => window.atte.environment())).workspace).toBe(await realpath(rootB));
+  await restored.evaluate(() => window.atte.prepareConcierge());
+  const reusedConcierge = (await restored.evaluate(() => window.atte.command({type:"snapshot"}))).concierge;
   assert.deepEqual(reusedConcierge.scene, firstScene);
   assert.equal(reusedConcierge.status, "ready", "Reusing an initialized concierge must not leave it preparing.");
   assert.equal(reusedConcierge.detail, undefined);
@@ -444,7 +444,7 @@ try {
   // Let the real custom CLI exit, then occupy the old pane with a manually
   // started process. Recovery must leave that process alone and open a new site.
   process.kill(firstReference.processId, "SIGTERM");
-  await expect.poll(async () => (await restored.evaluate(() => window.crewvane.command({type:"snapshot"})))
+  await expect.poll(async () => (await restored.evaluate(() => window.atte.command({type:"snapshot"})))
     .concierge.status, { timeout: 20_000 }).toBe("not_ready");
   await exec(installedExecutable, [
     "--session", session, "pane", "run", firstReference.paneId, command,
@@ -453,9 +453,9 @@ try {
     value.split("\n").filter(line => line.includes('"kind":"start"')).length),
   { timeout: 10_000 }).toBe(2);
   await restored.getByRole("button", { name: "找管家", exact: true }).click();
-  await expect.poll(async () => (await restored.evaluate(() => window.crewvane.command({type:"snapshot"})))
+  await expect.poll(async () => (await restored.evaluate(() => window.atte.command({type:"snapshot"})))
     .concierge.status, { timeout: 90_000 }).toBe("ready");
-  const recoveredConcierge = (await restored.evaluate(() => window.crewvane.command({type:"snapshot"}))).concierge;
+  const recoveredConcierge = (await restored.evaluate(() => window.atte.command({type:"snapshot"}))).concierge;
   assert.notEqual(recoveredConcierge.scene.locator.paneId, firstReference.paneId);
   assert.notEqual(recoveredConcierge.scene.process.pid, firstScene.process.pid);
   await expect.poll(() => readFile(log, "utf8").then(value =>
@@ -463,17 +463,17 @@ try {
   { timeout: 10_000 }).toBe(3);
   // A pending goal created after recovery reaches the replacement, not the
   // manually occupied pane.
-  const recoveredGoal = await restored.evaluate(() => window.crewvane.command({type:"goal.create", input:{
+  const recoveredGoal = await restored.evaluate(() => window.atte.command({type:"goal.create", input:{
     title:"恢复后仍能送达",projectId:"personal",mode:"concierge",
   }}));
   await expect.poll(async () => {
-    const state = await restored.evaluate(() => window.crewvane.command({type:"snapshot"}));
+    const state = await restored.evaluate(() => window.atte.command({type:"snapshot"}));
     return state.goals.find(goal => goal.id === recoveredGoal.id)?.dispatch?.status;
   }, {timeout:60_000}).toBe("sent");
   await expect.poll(() => readFile(log, "utf8"), {timeout:10_000}).toContain(recoveredGoal.id);
   // The old reference must still reject messages even though its pane now holds
   // a manual process.
-  const exitedGoal = await restored.evaluate(() => window.crewvane.command({type:"goal.create", input:{
+  const exitedGoal = await restored.evaluate(() => window.atte.command({type:"goal.create", input:{
     title:"退出后的任务",projectId:"personal",mode:"manual",
   }}));
   const { HerdrClient } = await import("../apps/desktop/electron/herdr.ts");
@@ -484,12 +484,12 @@ try {
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ ok: true, home, version: installed.version, checks: [
     "official verified auto-install without Homebrew or system PATH", "first workspace selection feedback",
-    "bundled Herdr plugin auto-linked", "real Herdr plugin pane renders Crewvane attention",
+    "bundled Herdr plugin auto-linked", "real Herdr plugin pane renders Atte attention",
     "real Herdr plugin action creates a one-line goal",
     "real Herdr pane close event reaches the matching goal",
     "same directory feedback", "cancel preserves state", "legacy workspace is archived and automatically recovered",
     "workspace switching",
-    "packaged Crewvane skill installs into detected agent directories", "system clipboard round trip",
+    "packaged Atte skill installs into detected agent directories", "system clipboard round trip",
     "arbitrary CLI saves and starts", "native argv preserved", "reuse custom concierge",
     "real goal and delegation-only role delivered to CLI stdin", "raw Herdr opens independently", "restart reuses installed latest and running CLI",
     "visible goal feedback reaches CLI without replacing the next step",
@@ -501,7 +501,7 @@ try {
   ] }));
 } catch (error) {
   if (app) await (await app.firstWindow()).screenshot({path:join(home,"failure.png")}).catch(() => {});
-  const artifactDir = process.env.CREWVANE_ONBOARDING_ARTIFACTS;
+  const artifactDir = process.env.ATTE_ONBOARDING_ARTIFACTS;
   if (artifactDir) {
     await mkdir(artifactDir, { recursive: true });
     await exec("cp", ["-R", `${home}/.`, artifactDir]).catch(() => {});
@@ -511,5 +511,5 @@ try {
 } finally {
   if (installedExecutable) await exec(installedExecutable, ["--session", session, "server", "stop"], { env:testEnvironment, timeout: 10_000 }).catch(() => {});
   await app?.close();
-  if (process.env.CREWVANE_KEEP_TEST_ARTIFACTS !== "1") await rm(home, {recursive:true,force:true});
+  if (process.env.ATTE_KEEP_TEST_ARTIFACTS !== "1") await rm(home, {recursive:true,force:true});
 }

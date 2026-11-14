@@ -17,9 +17,9 @@ export class Executables {
       if (!this.isolated) {
         try {
           const { stdout } = await exec(this.env.SHELL || "/bin/zsh", [
-            "-ilc", 'printf "\\n__CREWVANE_PATH__%s\\n" "$PATH"',
+            "-ilc", 'printf "\\n__ATTE_PATH__%s\\n" "$PATH"',
           ], { env: this.env, timeout: 5_000, maxBuffer: 256_000 });
-          shellPath = stdout.split("__CREWVANE_PATH__").at(-1)?.split(/\r?\n/)[0] ?? "";
+          shellPath = stdout.split("__ATTE_PATH__").at(-1)?.split(/\r?\n/)[0] ?? "";
         } catch { /* fixed locations and inherited PATH remain available */ }
       }
       return [...new Set([

@@ -29,7 +29,7 @@ export class TerminalHost {
       return this.snapshot(session)!;
     }
     const child = utilityProcess.fork(join(__dirname, "terminal-worker.cjs"), [], {
-      serviceName: "Crewvane Herdr terminal",
+      serviceName: "Atte Herdr terminal",
       stdio: "pipe",
       env: this.environment,
     });

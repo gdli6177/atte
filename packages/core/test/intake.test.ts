@@ -9,7 +9,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 test("one natural-language request preserves the full request without a workflow", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-intake-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "atte-intake-")); roots.push(root);
   const service = new WorkspaceService(root);
   const request = "修复等待审批后无法继续的问题\nYR 已通过，验证真实通知管家和负责人。";
   const goal = await service.execute({ type: "goal.intake", text: request }) as Goal;
@@ -23,16 +23,16 @@ test("one natural-language request preserves the full request without a workflow
 });
 
 test("project context is preserved when already selected; an unknown project is rejected", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-intake-project-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "atte-intake-project-")); roots.push(root);
   const service = new WorkspaceService(root);
-  const project = await service.execute({ type: "project.add", name: "Crewvane" }) as { id: string };
+  const project = await service.execute({ type: "project.add", name: "Atte" }) as { id: string };
   const goal = await service.execute({ type: "goal.intake", text: "修复目标创建", projectId: project.id }) as Goal;
   assert.equal(goal.projectId, project.id);
   await assert.rejects(service.execute({ type: "goal.intake", text: "其他事", projectId: "missing" }), /有效项目/);
 });
 
 test("taking over a new goal prevents new or late concierge dispatch receipts", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-intake-takeover-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "atte-intake-takeover-")); roots.push(root);
   const service = new WorkspaceService(root);
   const goal = await service.execute({ type: "goal.intake", text: "先记录，再由我亲自处理" }) as Goal;
   await service.execute({ type: "goal.dispatch", goalId: goal.id, status: "pending", requestId: "handoff-before-takeover" });
@@ -48,14 +48,14 @@ test("taking over a new goal prevents new or late concierge dispatch receipts", 
 });
 
 test("an intake request beginning with a newline still has a title", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-intake-title-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "atte-intake-title-")); roots.push(root);
   const service = new WorkspaceService(root);
   const goal = await service.execute({ type: "goal.intake", text: "\n\n整理今天所有的事情" }) as Goal;
   assert.equal(goal.title, "整理今天所有的事情");
 });
 
 test("a valid single-line intake request gets a bounded automatic title", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-intake-long-title-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "atte-intake-long-title-")); roots.push(root);
   const service = new WorkspaceService(root);
   const request = `${"长".repeat(180)}\n保留完整正文。`;
   const goal = await service.execute({ type: "goal.intake", text: request }) as Goal;
@@ -65,7 +65,7 @@ test("a valid single-line intake request gets a bounded automatic title", async 
 });
 
 test("a long Herdr direct message gets the same bounded automatic title", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-direct-long-title-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "atte-direct-long-title-")); roots.push(root);
   const service = new WorkspaceService(root);
   const request = "航".repeat(180);
   const goal = await service.execute({ type: "goal.direct", text: request }) as Goal;
@@ -75,7 +75,7 @@ test("a long Herdr direct message gets the same bounded automatic title", async 
 });
 
 test("automatic titles do not split Unicode surrogate pairs", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-intake-title-unicode-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "atte-intake-title-unicode-")); roots.push(root);
   const service = new WorkspaceService(root);
   const request = "🧭".repeat(100);
   const goal = await service.execute({ type: "goal.intake", text: request }) as Goal;
@@ -84,7 +84,7 @@ test("automatic titles do not split Unicode surrogate pairs", async () => {
 });
 
 test("human feedback replaces an in-flight notification and can be handed back to the concierge", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-intake-feedback-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "atte-intake-feedback-")); roots.push(root);
   const service = new WorkspaceService(root);
   const goal = await service.execute({ type: "goal.intake", text: "先理解目标" }) as Goal;
   await service.execute({ type: "goal.dispatch", goalId: goal.id, status: "pending", requestId: "initial" });

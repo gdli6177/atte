@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Atte 注意力层</title>
+  <desc id="desc">由两束汇聚线和中心光点构成的极简 A，表达注意力收束。</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#0a1518"/><stop offset="1" stop-color="#152b2e"/>
+    </linearGradient>
+    <linearGradient id="stroke" gradientUnits="userSpaceOnUse" x1="200" y1="760" x2="800" y2="260">
+      <stop stop-color="#5ce1c5"/><stop offset=".55" stop-color="#91a9ff"/><stop offset="1" stop-color="#f8c96f"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="22" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <rect x="28" y="28" width="968" height="968" rx="199" fill="none" stroke="#d9fff6" stroke-opacity=".12" stroke-width="6"/>
+  <path d="M238 738 467 278" fill="none" stroke="url(#stroke)" stroke-width="64" stroke-linecap="round"/>
+  <path d="M786 738 557 278" fill="none" stroke="url(#stroke)" stroke-width="64" stroke-linecap="round"/>
+  <path d="M349 584 L675 584" fill="none" stroke="url(#stroke)" stroke-width="46" stroke-linecap="round" stroke-opacity=".86"/>
+  <circle cx="512" cy="501" r="58" fill="#fff0b5" filter="url(#glow)"/>
+  <circle cx="512" cy="501" r="23" fill="#fffdf1"/>
+
+</svg>

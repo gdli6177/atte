@@ -8,6 +8,8 @@ import {
   normalizeNativeHookEvent,
   spoolAgentRuntimeEvents,
   type AgentRuntimeEventV1,
+  environmentValue,
+  workspaceDataDirectory,
 } from "../../packages/core/src/index.js";
 
 const MAX_PAYLOAD_BYTES = 512_000;
@@ -67,12 +69,12 @@ export async function ingestAgentHook(input: HookIngestInput): Promise<{
   reason?: string;
 }> {
   const environment = input.environment ?? process.env;
-  const goalId = environment.CREWVANE_GOAL_ID?.trim(),
-    attemptId = environment.CREWVANE_ATTEMPT_ID?.trim(),
-    token = environment.CREWVANE_HOOK_TOKEN?.trim(),
-    agent = environment.CREWVANE_AGENT_NAME?.trim(),
-    workspace = environment.CREWVANE_WORKSPACE?.trim();
-  // Installed Hooks are global. An Agent outside a Crewvane target is a no-op.
+  const goalId = environmentValue(environment, "GOAL_ID")?.trim(),
+    attemptId = environmentValue(environment, "ATTEMPT_ID")?.trim(),
+    token = environmentValue(environment, "HOOK_TOKEN")?.trim(),
+    agent = environmentValue(environment, "AGENT_NAME")?.trim(),
+    workspace = environmentValue(environment, "WORKSPACE")?.trim();
+  // Installed Hooks are global. An Agent outside a Atte target is a no-op.
   if (!goalId || !attemptId || !token || !agent || !workspace)
     return { accepted: false, reason: "not_managed" };
   if (!isAgentRuntimeAdapter(input.adapter))
@@ -127,7 +129,7 @@ export async function ingestAgentHook(input: HookIngestInput): Promise<{
         : {}),
     });
   }
-  const socketPath = environment.CREWVANE_HOOK_SOCKET?.trim() ||
+  const socketPath = environmentValue(environment, "HOOK_SOCKET")?.trim() ||
     agentRuntimeSocketPath(workspace);
   const send = input.send ?? (async (queued, hookToken) =>
     sendOverSocket(socketPath, queued, hookToken));
@@ -137,8 +139,8 @@ export async function ingestAgentHook(input: HookIngestInput): Promise<{
     // Delivery is observational and fail-open. Fall through to the local spool.
   }
 
-  const spoolRoot = environment.CREWVANE_HOOK_SPOOL?.trim() ||
-    join(workspace, ".crewvane", "runtime", "spool");
+  const spoolRoot = environmentValue(environment, "HOOK_SPOOL")?.trim() ||
+    join(workspaceDataDirectory(workspace), "runtime", "spool");
   const bodyBytes = Buffer.byteLength(JSON.stringify(events));
   if (bodyBytes > MAX_SPOOL_BYTES)
     return { accepted: false, reason: "spool_too_large" };

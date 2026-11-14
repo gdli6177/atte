@@ -33,7 +33,7 @@ async function writeSystemClipboard(value) {
 const originalClipboard = await readSystemClipboard().catch(() => undefined);
 // Keep the isolated Herdr socket below macOS AF_UNIX's sun_path limit.
 const home = await mkdtemp("/tmp/cv-terminal-");
-const workspace = join(home, "workspace"), session = `crewvane-tty-${randomUUID().slice(0, 8)}`;
+const workspace = join(home, "workspace"), session = `atte-tty-${randomUUID().slice(0, 8)}`;
 const herdrEnvironment = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"),
   XDG_STATE_HOME: join(home, ".local/state"), XDG_DATA_HOME: join(home, ".local/share"),
   XDG_CACHE_HOME: join(home, ".cache") };
@@ -42,11 +42,11 @@ let app, herdrExecutable;
 const errors = [];
 try {
   app = await electron.launch({
-    executablePath: resolve(process.env.CREWVANE_APP_PATH ||
-      "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+    executablePath: resolve(process.env.ATTE_APP_PATH ||
+      "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     args: [],
-    env: { ...process.env, CREWVANE_TEST_HOME: home, CREWVANE_TEST_USER_DATA: join(home, "userData"),
-      CREWVANE_TEST_WORKSPACE: workspace, CREWVANE_HERDR_SESSION: session,
+    env: { ...process.env, ATTE_TEST_HOME: home, ATTE_TEST_USER_DATA: join(home, "userData"),
+      ATTE_TEST_WORKSPACE: workspace, ATTE_HERDR_SESSION: session,
       // Force Herdr's OSC 52 branch even on a local test machine. This covers
       // remote/SSH-like clients and terminals where the native branch is unavailable.
       SSH_CONNECTION: process.env.SSH_CONNECTION ?? "127.0.0.1 1 127.0.0.1 22" },
@@ -54,45 +54,45 @@ try {
   });
   const page = await app.firstWindow();
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.waitForFunction(() => !!window.crewvane);
+  await page.waitForFunction(() => !!window.atte);
   await completeAutonomySetup(page);
   await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
-  herdrExecutable = (await page.evaluate(() => window.crewvane.herdrStatus())).executable;
+  herdrExecutable = (await page.evaluate(() => window.atte.herdrStatus())).executable;
   assert.ok(herdrExecutable);
-  const goal = await page.evaluate(() => window.crewvane.command({
+  const goal = await page.evaluate(() => window.atte.command({
     type: "goal.create", input: { title: "隔离的真实终端测试", projectId: "personal", mode: "manual" },
   }));
   // This fixture is written directly through IPC before React has necessarily
   // finished its one-time subscription setup. Reload once to verify normal
   // startup recovery and wait until the renderer has loaded the goal.
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => !!window.crewvane);
+  await page.waitForFunction(() => !!window.atte);
   await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
   await page.getByRole("button", { name: "全部目标", exact: true }).click();
   await page.locator(".goal-row").filter({ hasText: goal.title }).waitFor();
   // A manually recorded goal opens the workspace TUI without starting a model.
-  await page.evaluate((id) => window.crewvane.openHerdr(id), goal.id);
+  await page.evaluate((id) => window.atte.openHerdr(id), goal.id);
   await page.getByRole("region", { name: "Herdr 工作现场" }).waitFor();
   await page.getByRole("region", { name: `现场目标：${goal.title}` }).waitFor();
   // Hosted macOS runners can expose a viewport narrower than 1080px, where
   // the compact scene deliberately hides this label while retaining context.
   await page.getByText("当前事项", { exact: true }).waitFor({ state: "attached" });
   await page.waitForFunction(() => document.querySelector(".xterm-screen")?.clientWidth > 200);
-  let connection = await page.evaluate(() => window.crewvane.terminalSnapshot());
+  let connection = await page.evaluate(() => window.atte.terminalSnapshot());
   assert.equal(connection.session, session);
   assert.equal(connection.running, true);
   // A fresh Herdr Session renders its first-run welcome, then the optional
   // integrations panel. Continue and close those overlays before typing into
   // the focused shell; this exercises the same path as a first-time user.
-  await page.evaluate((session) => window.crewvane.writeTerminal(session, "\r"), session);
+  await page.evaluate((session) => window.atte.writeTerminal(session, "\r"), session);
   await new Promise(resolve => setTimeout(resolve, 500));
-  await page.evaluate((session) => window.crewvane.writeTerminal(session, "\x1b"), session);
+  await page.evaluate((session) => window.atte.writeTerminal(session, "\x1b"), session);
   await new Promise(resolve => setTimeout(resolve, 500));
   const marker = `tty_${randomUUID().replaceAll("-", "")}`;
   const resultFile = join(workspace, "terminal-result.txt");
   await page.evaluate(async ({ session, marker, resultFile }) => {
     const quote = text => `'${text.replaceAll("'", "'\\''")}'`;
-    await window.crewvane.writeTerminal(session,
+    await window.atte.writeTerminal(session,
       `/usr/bin/printf '%s' ${quote(marker)} > ${quote(resultFile)} && ` +
       `/usr/bin/printf '%s\\n' ${quote(marker)}\r`);
   }, { session, marker, resultFile });
@@ -100,7 +100,7 @@ try {
   // actual shell-side effect rather than mistaking echoed input for execution.
   await expect.poll(() => readFile(resultFile, "utf8").catch(() => ""), { timeout: 30_000 }).toBe(marker);
   await page.locator(".xterm-accessibility").filter({ hasText: marker }).waitFor({ state: "attached" });
-  const firstPid = await app.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === "Crewvane Herdr terminal").map(item => item.pid));
+  const firstPid = await app.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   assert.equal(firstPid.length, 1);
   const textarea = page.locator(".xterm-helper-textarea");
   await textarea.focus();
@@ -145,7 +145,7 @@ try {
   await expect.poll(readSystemClipboard, { timeout: 10_000 }).toBe(marker);
   await expect(page.getByRole("status")).toContainText("已复制");
   const terminalData = await page.evaluate(async () =>
-    (await window.crewvane.terminalSnapshot())?.data ?? "");
+    (await window.atte.terminalSnapshot())?.data ?? "");
   assert.ok(terminalData.includes("\x1b]52;c;"), "Herdr copy-on-select must exercise OSC 52");
   // Exercise the macOS shortcut, direct Control+V, a browser paste event and
   // the real Electron menu/Paste path. The last two protect against xterm,
@@ -198,7 +198,7 @@ try {
   }, imagePng);
   await page.evaluate(({ session, imageResult }) => {
     const quote = text => `'${text.replaceAll("'", "'\\''")}'`;
-    window.crewvane.writeTerminal(session,
+    window.atte.writeTerminal(session,
       `/usr/bin/python3 -c ${quote(`import os, tty\npath=${JSON.stringify(imageResult)}\nopen(path, "w").write("ready")\ntty.setraw(0)\ndata=os.read(0, 1)\nopen(path, "w").write(str(data[0]))`)}\r`);
   }, { session, imageResult });
   await expect.poll(() => readFile(imageResult, "utf8").catch(() => ""), { timeout: 30_000 }).toBe("ready");
@@ -211,17 +211,17 @@ try {
   await page.locator(".top-actions").getByRole("button", { name: "新目标", exact: true }).click();
   await page.getByLabel("要交给管家的事情").fill("不能被终端抢走的草稿");
   // An arriving connection/open event must not dismiss a form or steal its focus.
-  await page.evaluate((id) => window.crewvane.openHerdr(id), goal.id);
+  await page.evaluate((id) => window.atte.openHerdr(id), goal.id);
   assert.equal(await page.locator(".terminal-panel").isVisible(), false);
   assert.equal(await page.getByLabel("要交给管家的事情").inputValue(), "不能被终端抢走的草稿");
   await page.getByLabel("要交给管家的事情").type("，可以继续输入");
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.getByRole("region", { name: "Herdr 工作现场" }).waitFor();
   await page.getByRole("button", { name: "隐藏终端", exact: true }).click();
-  await page.evaluate((id) => window.crewvane.openHerdr(id), goal.id);
+  await page.evaluate((id) => window.atte.openHerdr(id), goal.id);
   await page.locator(".terminal-panel").waitFor();
   await expect.poll(async () => page.evaluate(async () =>
-    (await window.crewvane.terminalSnapshot())?.data ?? "")
+    (await window.atte.terminalSnapshot())?.data ?? "")
   ).toContain(marker);
   await page.getByRole("button", { name: "目标记录", exact: true }).click();
   await page.getByRole("dialog", { name: new RegExp(goal.title) }).waitFor();
@@ -230,24 +230,24 @@ try {
   await page.getByRole("region", { name: "Herdr 工作现场" }).waitFor();
   await page.getByRole("button", { name: "回到注意力", exact: true }).click();
   assert.equal(await page.locator(".terminal-panel").isVisible(), false);
-  await page.evaluate((id) => window.crewvane.openHerdr(id), goal.id);
+  await page.evaluate((id) => window.atte.openHerdr(id), goal.id);
   await expect.poll(async () => page.evaluate(async () =>
-    (await window.crewvane.terminalSnapshot())?.data ?? "")
+    (await window.atte.terminalSnapshot())?.data ?? "")
   ).toContain(marker);
-  const nextPid = await app.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === "Crewvane Herdr terminal").map(item => item.pid));
+  const nextPid = await app.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   assert.deepEqual(nextPid, firstPid);
   const panel = page.getByRole("region", { name: "Herdr 工作现场" });
   const beforeExpandPid = await app.evaluate(({ app }) =>
-    app.getAppMetrics().filter(item => item.name === "Crewvane Herdr terminal").map(item => item.pid));
+    app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   await page.getByRole("button", { name: "全屏显示现场", exact: true }).click();
   await expect(panel).toHaveClass(/expanded/);
   const expandedPid = await app.evaluate(({ app }) =>
-    app.getAppMetrics().filter(item => item.name === "Crewvane Herdr terminal").map(item => item.pid));
+    app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   assert.deepEqual(expandedPid, beforeExpandPid);
   await page.getByRole("button", { name: "退出全屏现场", exact: true }).click();
   await expect(panel).not.toHaveClass(/expanded/);
   const collapsedPid = await app.evaluate(({ app }) =>
-    app.getAppMetrics().filter(item => item.name === "Crewvane Herdr terminal").map(item => item.pid));
+    app.getAppMetrics().filter(item => item.name === "Atte Herdr terminal").map(item => item.pid));
   assert.deepEqual(collapsedPid, beforeExpandPid);
   const herdr = async (args) => JSON.parse((await exec(herdrExecutable, ["--session", session, ...args], {
     timeout: 20_000,
@@ -264,17 +264,17 @@ try {
     tabId = tab?.tab_id ?? tab?.id,
     paneId = rootPane?.pane_id ?? rootPane?.id;
   assert.ok(tabId); assert.ok(paneId);
-  await page.evaluate(({ id, reference }) => window.crewvane.command({
+  await page.evaluate(({ id, reference }) => window.atte.command({
     type: "session.set", goalId: id, reference,
   }), {
     id: goal.id,
     reference: { session, workspaceId, tabId, paneId, agent: "closure-test-owner" },
   });
-  await page.evaluate((id) => window.crewvane.command({
+  await page.evaluate((id) => window.atte.command({
     type: "goal.drop", goalId: id, note: "验证结束目标自动关闭负责人 Tab", actor: "你",
   }), goal.id);
   await expect.poll(() => page.evaluate(async (id) => {
-    const state = await window.crewvane.command({ type: "snapshot" });
+    const state = await window.atte.command({ type: "snapshot" });
     return state.goals.find(item => item.id === id)?.herdr;
   }, goal.id)).toBe(undefined);
   const tabs = await herdr(["tab", "list", "--workspace", workspaceId]),
@@ -287,7 +287,7 @@ try {
   await page.screenshot({ path: join(home, "embedded-light.png") });
   await page.evaluate(async () => {
     let rejected = false;
-    try { await window.crewvane.writeTerminal("unrelated-session", "echo should-not-run\r"); } catch { rejected = true; }
+    try { await window.atte.writeTerminal("unrelated-session", "echo should-not-run\r"); } catch { rejected = true; }
     if (!rejected) throw new Error("Cross-workspace terminal input was accepted");
   });
   assert.deepEqual(errors, []);
@@ -316,5 +316,5 @@ try {
   }
   if (originalClipboard !== undefined)
     await writeSystemClipboard(originalClipboard).catch(() => {});
-  if (process.env.CREWVANE_KEEP_TEST_ARTIFACTS !== "1") await rm(home, { recursive: true, force: true });
+  if (process.env.ATTE_KEEP_TEST_ARTIFACTS !== "1") await rm(home, { recursive: true, force: true });
 }

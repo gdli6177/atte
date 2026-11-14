@@ -126,7 +126,7 @@ test("legacy invalid waits normalize without losing attention, history or extern
   state.goals.push({ ...structuredClone(base), id: `${id}_due`, status: "waiting", waitingFor: "YR",
     remindAt: "2020-01-01T00:00:00Z",
     attention: { id: "reminder_original", kind: "follow_up", summary: "检查审批进展", since: base.updatedAt } });
-  await writeFile(join(root, ".crewvane/state.json"), JSON.stringify(state));
+  await writeFile(join(root, ".atte/state.json"), JSON.stringify(state));
   const normalized = await new WorkspaceService(root).read();
   assert.deepEqual(normalized.goals.slice(0, 6).map(goal => goal.status),
     ["active", "active", "active", "active", "active", "waiting"]);
@@ -137,7 +137,7 @@ test("legacy invalid waits normalize without losing attention, history or extern
   assert.ok(normalized.goals.every(goal => goal.activities.length === base.activities.length));
   assert.equal(normalized.recovery, undefined, "do not archive otherwise valid workspace data");
   await service.execute({ type: "workspace.rename", name: "等待语义回归" });
-  const persisted = JSON.parse(await readFile(join(root, ".crewvane/state.json"), "utf8"));
+  const persisted = JSON.parse(await readFile(join(root, ".atte/state.json"), "utf8"));
   assert.equal(persisted.goals[1].status, "active");
 });
 
@@ -146,7 +146,7 @@ test("historical self-waits are active and still receive quiet-owner reconciliat
   const goal = state.goals[0]!;
   goal.status = "waiting"; goal.waitingFor = "owner-a";
   goal.live = { state: "idle", reachable: true, checkedAt: new Date(Date.now() - 120_000).toISOString() };
-  await writeFile(join(root, ".crewvane/state.json"), JSON.stringify(state));
+  await writeFile(join(root, ".atte/state.json"), JSON.stringify(state));
   const requests = await service.execute({ type: "watchdog.inspect", at: new Date().toISOString() }) as { reason: string }[];
   assert.equal((await service.read()).goals[0]!.status, "active");
   assert.equal(requests[0]?.reason, "settled");

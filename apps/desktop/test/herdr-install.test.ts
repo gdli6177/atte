@@ -8,7 +8,7 @@ import { Executables } from "../electron/executables.ts";
 import { HerdrInstallation } from "../electron/herdr-install.ts";
 
 async function fixture(run: (f: { home: string; bin: string; path: string; tools: Executables }) => Promise<void>) {
-  const home = await mkdtemp(join(tmpdir(), "crewvane-herdr-install-"));
+  const home = await mkdtemp(join(tmpdir(), "atte-herdr-install-"));
   const bin = join(home, "managed"), path = join(bin, "herdr");
   await mkdir(bin);
   try { await run({ home, bin, path, tools: new Executables(home, bin, { PATH: "/usr/bin:/bin" }, true) }); }
@@ -37,7 +37,7 @@ test("Finder-style PATH finds a CLI in the user's login shell configuration", ()
   await mkdir(custom);
   await writeFile(join(custom, "herdr"), binary("0.9.5"), { mode: 0o700 });
   const shell = join(home, "shell");
-  await writeFile(shell, `#!/bin/sh\nprintf '\\n__CREWVANE_PATH__${custom}\\n'\n`, { mode: 0o700 });
+  await writeFile(shell, `#!/bin/sh\nprintf '\\n__ATTE_PATH__${custom}\\n'\n`, { mode: 0o700 });
   const tools = new Executables(home, bin, { PATH: "/usr/bin:/bin", SHELL: shell });
   assert.equal(await tools.find("herdr"), join(custom, "herdr"));
   assert.equal(await tools.find("~/custom/herdr"), join(custom, "herdr"));

@@ -29,19 +29,19 @@ if (externalState) externalState.dispatch = undefined;
 const historical = state.goals.find(goal => goal.id === human.id);
 historical.status = "waiting"; historical.waitingFor = "你"; historical.owner = "你";
 historical.next = "请确认先采用方案 A 还是方案 B";
-await writeFile(join(workspace, ".crewvane/state.json"), JSON.stringify(state));
+await writeFile(join(workspace, ".atte/state.json"), JSON.stringify(state));
 
 const errors = [];
 let app;
 async function launch() {
   app = await electron.launch({
-    executablePath: resolve(process.env.CREWVANE_APP_PATH ||
-      "apps/desktop/release/Crewvane-darwin-arm64/Crewvane.app/Contents/MacOS/Crewvane"),
+    executablePath: resolve(process.env.ATTE_APP_PATH ||
+      "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     args: [],
     env: {
-      ...process.env, CREWVANE_TEST_USER_DATA: join(home, "userData"),
-      CREWVANE_TEST_HOME: home, CREWVANE_TEST_WORKSPACE: workspace,
-      CREWVANE_TEST_ISOLATE_TOOLS: "1", CREWVANE_TEST_SKIP_HERDR_SETUP: "1",
+      ...process.env, ATTE_TEST_USER_DATA: join(home, "userData"),
+      ATTE_TEST_HOME: home, ATTE_TEST_WORKSPACE: workspace,
+      ATTE_TEST_ISOLATE_TOOLS: "1", ATTE_TEST_SKIP_HERDR_SETUP: "1",
       HOME: home, XDG_CONFIG_HOME: join(home, ".config"),
       XDG_STATE_HOME: join(home, ".local/state"), PATH: "/usr/bin:/bin",
     },
@@ -52,7 +52,7 @@ async function launch() {
   await page.getByRole("button", { name: "注意力", exact: true }).waitFor();
   return page;
 }
-const snapshot = page => page.evaluate(() => window.crewvane.command({ type: "snapshot" }));
+const snapshot = page => page.evaluate(() => window.atte.command({ type: "snapshot" }));
 try {
   let page = await launch();
   await expect(page.locator(".attention-card").filter({ hasText: "等我确认方案" })).toBeVisible();
@@ -95,11 +95,11 @@ try {
   await expect(page.locator(".waiting-row")).toHaveCount(0);
 
   // A scheduled active-goal reminder remains actionable without fabricating a wait.
-  const reminder = await page.evaluate(() => window.crewvane.command({
+  const reminder = await page.evaluate(() => window.atte.command({
     type: "goal.direct", text: "活动目标定时提醒",
   }));
   await expect(page.locator(".attention-card").filter({ hasText: reminder.title })).toHaveCount(0);
-  await page.evaluate(goalId => window.crewvane.command({
+  await page.evaluate(goalId => window.atte.command({
     type: "goal.remind", goalId, at: new Date(Date.now() + 1000).toISOString(),
   }), reminder.id);
   await expect(page.locator(".attention-card").filter({ hasText: reminder.title })).toBeVisible({ timeout: 6000 });
@@ -112,7 +112,7 @@ try {
   await page.getByRole("button", { name: "浅色模式", exact: true }).click();
   await page.screenshot({ path: join(home, "attention-light-restored.png"), animations: "disabled" });
   assert.deepEqual(errors, []);
-  await readFile(join(workspace, ".crewvane/state.json"), "utf8");
+  await readFile(join(workspace, ".atte/state.json"), "utf8");
   console.log(`External-wait packaged-app regression passed. Evidence: ${home}`);
 } finally {
   await app?.close();

@@ -70,7 +70,7 @@ export function GoalAttentionCard({
           </header>
           <Dialog.Title className="goal-attention-title">{goal.title}</Dialog.Title>
           <Dialog.Description className="goal-attention-description">
-            先看依据，再选择继续、退回或回到现场。
+            先看依据，再记录决定、验收或给管家发消息。
           </Dialog.Description>
           <div className="goal-attention-body">
             <section className={`attention-action-focus ${view.tone}`} aria-label="当前需要处理的事项">

@@ -39,7 +39,7 @@ import {
 } from "../../../packages/core/src/model.js";
 import { taskPoolGoals } from "../../../packages/core/src/task-pool.js";
 import type {
-  CrewvaneCommand,
+  AtteCommand,
   AcceptanceMode,
   AgentPreferences,
   Goal,
@@ -53,8 +53,10 @@ import type {
   WorkspaceState,
 } from "../../../packages/core/src/types.js";
 import { api, type BackendControlStatus } from "./api.js";
+import { migratePreference } from "./storage-compat.js";
 type HerdrEnvironmentStatus = Awaited<ReturnType<typeof api.herdrStatus>>;
 import { GoalIntakeForm } from "./features/intake/GoalIntakeForm.js";
+import { AppearanceSettings } from "./features/settings/AppearanceSettings.js";
 import { OrcaInstallationCard } from "./features/settings/OrcaInstallationCard.js";
 import { BackendSelectionCard } from "./features/settings/BackendSelectionCard.js";
 import { TaskPool } from "./features/tasks/TaskPool.js";
@@ -67,6 +69,7 @@ import { goalProgressLabel, presentSceneContext, sceneSyncPresentation } from ".
 import type { GoalDetailService } from "./features/goals/goalService.js";
 import {
   Button,
+  BrandMark,
   Checkbox,
   ChoiceGroup,
   EmptyState,
@@ -76,6 +79,7 @@ import {
   Modal,
   SectionHeading,
   Select,
+  SettingsGroup,
   SettingsSection,
   StatusPill,
   TextArea,
@@ -89,7 +93,6 @@ import type {
   ManagedAdapterId,
 } from "../electron/agent-hook-manager.js";
 import type { CoordinatorInboxStatus } from "../electron/coordinator-inbox.js";
-import pixelMark from "../assets/brand/crewvane-mage.png";
 import "./style.css";
 const HerdrTerminal = lazy(() => import("./terminal.js").then((module) => ({ default: module.HerdrTerminal })));
 const pages = {
@@ -152,9 +155,10 @@ function App() {
     [version, setVersion] = useState(""),
     [page, setPage] = useState<keyof typeof pages>("home");
   const [theme, setTheme] = useState<string>(
-      localStorage.getItem("crewvane.theme") === "light" ? "light" : "dark",
+      migratePreference(localStorage, "theme") === "light" ? "light" : "dark",
     ),
-    [collapsed, setCollapsed] = useState(() => localStorage.getItem("crewvane.sidebar-collapsed") === "true");
+    [collapsed, setCollapsed] = useState(() =>
+      migratePreference(localStorage, "sidebar-collapsed") === "true");
   const [projectId, setProjectId] = useState(""),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState("all");
@@ -248,9 +252,9 @@ function App() {
   const sceneContext = sceneGoal ? presentSceneContext(sceneGoal, state) : undefined;
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("crewvane.theme", theme);
+    localStorage.setItem("atte.theme", theme);
   }, [theme]);
-  useEffect(() => { localStorage.setItem("crewvane.sidebar-collapsed", String(collapsed)); }, [collapsed]);
+  useEffect(() => { localStorage.setItem("atte.sidebar-collapsed", String(collapsed)); }, [collapsed]);
   useEffect(() => {
     api
       .environment()
@@ -374,7 +378,7 @@ function App() {
     setToast(text);
     toastTimer.current = setTimeout(() => setToast(""), 3500);
   }
-  async function execute(command: CrewvaneCommand) {
+  async function execute(command: AtteCommand) {
     setBusy(true);
     setError("");
     try {
@@ -536,10 +540,10 @@ function App() {
       </a>
       <aside className="sidebar">
         <div className="brand">
-          <img src={pixelMark} alt="Crewvane" />
+          <BrandMark />
           <div>
-            <strong>Crewvane</strong>
-            <span>协 航</span>
+            <strong>Atte</strong>
+            <span>注意力中心 · The attention layer</span>
           </div>
         </div>
         <button
@@ -655,7 +659,7 @@ function App() {
         </div>
         <div className="concierge">
           <div className="concierge-orb">
-            <img src={pixelMark} alt="" />
+            <BrandMark variant="mascot" decorative />
             <i />
           </div>
           <strong>所有事，找管家。</strong>
@@ -768,15 +772,13 @@ function App() {
         )}
           {!workspace ? (
             <section className="welcome">
-              <img src={pixelMark} alt="Crewvane" />
-              <span className="eyebrow">YOUR MIND, CLEARER</span>
+              <BrandMark variant="mascot" />
+              <span className="eyebrow">Atte · 注意力中心 · The attention layer</span>
               <h1>
-                把事情放下，
-                <br />
-                把方向留住。
+                把注意力留给重要的事。
               </h1>
               <p>
-                一位管家，整理所有项目与个人事项。
+                人只做拍板，Agent 并行推进。
                 <br />
                 只有真正需要你的时刻，才打扰你。
               </p>
@@ -818,10 +820,7 @@ function App() {
                   </p>
                 </div>
                 <div className="pixel-scene" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                  <img src={pixelMark} alt="" />
+                  <BrandMark variant="mascot" decorative />
                 </div>
               </section>
               <section className="attention-section">
@@ -1153,7 +1152,7 @@ function App() {
                     setSkills(result.status);
                     notify(result.errors.length
                       ? `Skills 已更新；${result.errors.length} 个目录因已有同名技能而跳过。`
-                      : "Crewvane Skills 已安装到检测到的 Agent。");
+                      : "Atte Skills 已安装到检测到的 Agent。");
                   }
                   if (action === "agent-hooks") {
                     setAgentHooks(await api.agentRuntimeStatus());
@@ -1201,7 +1200,7 @@ function App() {
       {modal === "workspace" && <Modal title="工作区存储位置" description="这里只设置所有目标、提醒和管家的保存位置，不是选择项目。" error={error} onClose={() => setModal("")}>
         <div className="workspace-location">
           <Folder size={22} />
-          <div><strong>{workspace ? "当前工作区" : "先选择一个工作区文件夹"}</strong><p>{workspace || "建议创建一个专门的文件夹，例如 Documents/Crewvane。"}</p></div>
+          <div><strong>{workspace ? "当前工作区" : "先选择一个工作区文件夹"}</strong><p>{workspace || "建议创建一个专门的文件夹，例如 Documents/Atte。"}</p></div>
         </div>
         <p className="workspace-help">要处理某个代码项目，请在左侧「项目」旁点 + 添加。切换工作区后，将显示所选目录自己的目标和管家。</p>
         <div className="form-actions">
@@ -1284,7 +1283,7 @@ function App() {
                 disabled={busy}
                 placeholder={webhook.configured
                   ? "留空保持不变"
-                  : "https://hooks.example.com/crewvane"}
+                  : "https://hooks.example.com/atte"}
               />
             </Field>
             <Field
@@ -1497,7 +1496,7 @@ type GoalFormProps = {
   goal: Goal;
   error: string;
   busy: boolean;
-  execute: (command: CrewvaneCommand) => Promise<unknown>;
+  execute: (command: AtteCommand) => Promise<unknown>;
   onClose: () => void;
   onSaved: () => void;
 };
@@ -1740,290 +1739,290 @@ function Settings({
     <div className="content settings">
       <section className="intro">
         <div>
-          <span className="eyebrow">YOUR MIND, CLEARER</span>
+          <span className="eyebrow">Atte · 注意力中心</span>
           <h1>只设置必要的。</h1>
           <p>选择真实工作现场，保留你已有的终端、CLI、模型与工作方式。</p>
         </div>
       </section>
+      <nav className="settings-navigation" aria-label="设置分组">
+        <a href="#settings-general" onClick={event => {
+          event.preventDefault();
+          const section = document.getElementById("settings-general");
+          section?.scrollIntoView({ block: "start" });
+          section?.focus({ preventScroll: true });
+        }}>工作区与外观</a>
+        <a href="#settings-scenes" onClick={event => {
+          event.preventDefault();
+          const section = document.getElementById("settings-scenes");
+          section?.scrollIntoView({ block: "start" });
+          section?.focus({ preventScroll: true });
+        }}>执行现场</a>
+        <a href="#settings-agents" onClick={event => {
+          event.preventDefault();
+          const section = document.getElementById("settings-agents");
+          section?.scrollIntoView({ block: "start" });
+          section?.focus({ preventScroll: true });
+        }}>Agent 与工作方法</a>
+        <a href="#settings-authority" onClick={event => {
+          event.preventDefault();
+          const section = document.getElementById("settings-authority");
+          section?.scrollIntoView({ block: "start" });
+          section?.focus({ preventScroll: true });
+        }}>授权与自主推进</a>
+        <a href="#settings-notifications" onClick={event => {
+          event.preventDefault();
+          const section = document.getElementById("settings-notifications");
+          section?.scrollIntoView({ block: "start" });
+          section?.focus({ preventScroll: true });
+        }}>通知</a>
+      </nav>
+      <p className="settings-save-hint">修改字段后点击“保存”；安装、检测与更换工作区按按钮说明执行。</p>
       <div className="settings-groups">
-        <section className="settings-group" aria-labelledby="settings-work-heading">
-          <header className="settings-group__head">
-            <span>01</span>
-            <div>
-              <h2 id="settings-work-heading">工作方式</h2>
-              <p>决定谁负责执行，以及哪些动作需要你明确批准。</p>
+        <SettingsGroup id="settings-general" title="工作区与外观" description="选择数据位置、界面主题，查看本地存储。">
+          <SettingsSection
+            icon={<Folder />}
+            title="工作区存储位置"
+            description="目标保存在此目录的 .atte 中。切换工作区后，界面会显示该目录自己的目标。"
+          >
+            <div className="settings-facts">
+              <code>{workspace}</code>
             </div>
-          </header>
-          <div className="ui-settings-grid">
-            <BackendSelectionCard
-              status={backendStatus}
-              onStatusChange={setBackendStatus}
-            />
-            {backendStatus?.control.selected === "herdr" && (
-              <SceneSettingsEditor busy={busy} notify={notify} />
-            )}
-            <AgentPreferencesEditor
-              key={workspace}
-              preferences={state.agents ?? { concierge: "codex" }}
-              options={agentOptions}
-              busy={busy}
-              onSave={saveAgents}
-            />
-            <GovernanceEditor
-              projects={state.projects}
-              decisions={state.decisions ?? []}
-              busy={busy}
-              onSave={savePolicy}
-            />
-            <ExperimentalAutonomySettings
-              state={state}
-              busy={busy}
-              onSaveWorkspace={saveAutonomy}
-              onSaveProject={saveProjectAutonomy}
-            />
-          </div>
-        </section>
-        <section className="settings-group" aria-labelledby="settings-tools-heading">
-          <header className="settings-group__head">
-            <span>02</span>
-            <div>
-              <h2 id="settings-tools-heading">连接与环境</h2>
-              <p>管理执行后端、Agent 生命周期事件、命令行入口、Skill 和工作区位置。</p>
+            <div className="ui-settings-card__actions">
+              <Button variant="secondary" size="sm" onClick={() => void pickWorkspace()}>
+                更换工作区
+              </Button>
             </div>
-          </header>
-          <div className="ui-settings-grid">
-        {backendStatus?.control.selected === "herdr" && <SettingsSection
-          wide
-          icon={<SquareTerminal />}
-          title="Herdr 运行时"
-          description="Herdr 负责当前执行现场与全局管家。更新会保留现有目标；正在运行的版本不会在检查阶段被替换。"
-        >
-          <div className="settings-facts">
-            {herdr?.session && (
-              <div className="external-herdr-command" role="group" aria-label="在外部终端打开同一 Herdr 会话">
-                <div>
-                  <strong>在 iTerm2 / Terminal 中打开同一现场</strong>
-                  <p>裸跑 herdr 默认连接 default Session，不会自动显示这个工作区；复制下面的命令才能进入 Crewvane 当前 Session。</p>
-                  <code>herdr session attach {herdr.session}</code>
+          </SettingsSection>
+          <AppearanceSettings theme={theme} onSave={value => {
+            setTheme(value);
+            notify("外观已保存。");
+          }} />
+          <StorageMaintenance />
+        </SettingsGroup>
+        <SettingsGroup id="settings-scenes" title="执行现场" description="选择会话后端，设置打开方式并管理运行时。">
+          <BackendSelectionCard
+            status={backendStatus}
+            onStatusChange={setBackendStatus}
+          />
+          {backendStatus?.control.selected === "herdr" && (
+            <SceneSettingsEditor busy={busy} notify={notify} />
+          )}
+          {backendStatus?.control.selected === "herdr" && <SettingsSection
+            wide
+            icon={<SquareTerminal />}
+            title="Herdr 运行时"
+            description="Herdr 负责当前执行现场与全局管家。更新会保留现有目标；正在运行的版本不会在检查阶段被替换。"
+          >
+            <div className="settings-facts">
+              {herdr?.session && (
+                <div className="external-herdr-command" role="group" aria-label="在外部终端打开同一 Herdr 会话">
+                  <div>
+                    <strong>在 iTerm2 / Terminal 中打开同一现场</strong>
+                    <p>裸跑 herdr 默认连接 default Session，不会自动显示这个工作区；复制下面的命令才能进入 Atte 当前 Session。</p>
+                    <code>herdr session attach {herdr.session}</code>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Copy size={14} />}
+                    aria-label="复制外部终端 attach 命令"
+                    onClick={() => void copyAttachCommand()}
+                  >
+                    {attachCopyState === "copied" ? "已复制" : attachCopyState === "failed" ? "复制失败" : "复制命令"}
+                  </Button>
                 </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={<Copy size={14} />}
-                  aria-label="复制外部终端 attach 命令"
-                  onClick={() => void copyAttachCommand()}
-                >
-                  {attachCopyState === "copied" ? "已复制" : attachCopyState === "failed" ? "复制失败" : "复制命令"}
-                </Button>
-              </div>
-            )}
-            {herdr?.executable && <code>{herdr.executable}</code>}
-          </div>
-          <div className="settings-inline">
-            {herdr?.installed ? (
-              <span className="settings-status ready">
-                <i />
-                已安装 {herdr.version}
-                {herdr.latestVersion ? ` · 最新 ${herdr.latestVersion}` : ""}
-                {herdr.plugin?.phase === "ready" ? " · 注意力面板已接入" : ""}
-              </span>
-            ) : (
-              <LoadingState label={herdr?.detail || "正在检测运行环境…"} />
-            )}
-            {herdr?.plugin?.phase === "error" && (
-              <span className="ui-field__error">{herdr.plugin.detail}</span>
-            )}
-          </div>
-          {herdr?.detail && (
-            <p
-              className={herdr.phase === "error" ? "ui-field__error" : "muted"}
-              role={herdr.phase === "error" ? "alert" : "status"}
-              aria-live="polite"
-            >
-              {herdr.detail}
-            </p>
-          )}
-          <div className="ui-settings-card__actions">
-            <Button
-              variant={herdr?.updateAvailable ? "primary" : "secondary"}
-              size="sm"
-              icon={herdr?.updateAvailable ? <Download size={14} /> : <RefreshCw size={14} />}
-              disabled={busy || herdr?.phase === "checking" || herdr?.phase === "downloading"}
-              onClick={() => void onAction(
-                herdr?.updateAvailable || !herdr?.installed ? "herdr-install" : "herdr-check",
               )}
-            >
-              {herdr?.phase === "downloading"
-                ? "正在更新…"
-                : herdr?.phase === "checking"
-                  ? "正在检查…"
-                  : !herdr?.installed
-                    ? "安装 Herdr"
-                    : herdr.updateAvailable
-                      ? `更新 Herdr`
-                      : "检查更新"}
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={busy}
-              onClick={() => void onAction("concierge")}
-            >
-              {busy ? "正在准备…" : "准备管家"}
-            </Button>
-            <Button variant="ghost" size="sm" disabled={busy} onClick={openHerdr}>
-              内嵌轻现场
-            </Button>
-          </div>
-        </SettingsSection>}
-        <OrcaInstallationCard />
-        <AgentRuntimeSettings
-          adapters={agentHooks ?? []}
-          busy={busy}
-          onChange={onAgentHooksChange}
-          notify={notify}
-        />
-        <MethodLibrary busy={busy} notify={notify} workspace={workspace} />
-        <SettingsSection
-          icon={<Zap />}
-          title="Crewvane 命令行"
-          description="管家通过它读写当前案卷，不能列出或修改其他目标。应用内置，无需另外安装 Node。"
-        >
-          <div className="settings-facts">
-            <code>{cli?.path}</code>
-          </div>
-          <div className="ui-settings-card__actions">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={busy}
-              onClick={() => void onAction("cli")}
-            >
-              {cli?.installed ? "重新安装" : "安装到 ~/.local/bin"}
-            </Button>
-          </div>
-        </SettingsSection>
-        <SettingsSection
-          icon={<Bot />}
-          title="让外部 Agent 会使用 Crewvane"
-          description="安装随应用打包的 Crewvane Skill。Codex、Claude Code、Cursor 或其他读取通用 Agent Skills 目录的工具，可以直接提交目标、查看目标并追加说明。"
-        >
-          {skills?.targets?.length ? (
-            <div className="skill-targets">
-              {skills.targets.map((target: any) => (
-                <small
-                  key={target.id}
-                  className={target.phase === "conflict" ? "conflict" : target.phase}
-                  title={target.path}
-                >
-                  {target.label}
+              {herdr?.executable && <code>{herdr.executable}</code>}
+            </div>
+            <div className="settings-inline">
+              {herdr?.installed ? (
+                <span className="settings-status ready">
                   <i />
-                  {target.phase === "installed" ? "已安装"
-                    : target.phase === "outdated" ? `可更新 ${target.managedVersion ?? ""}`
-                      : target.phase === "conflict" ? "已有同名 Skill，已保护"
-                        : "未安装"}
-                </small>
-              ))}
+                  已安装 {herdr.version}
+                  {herdr.latestVersion ? ` · 最新 ${herdr.latestVersion}` : ""}
+                  {herdr.plugin?.phase === "ready" ? " · 注意力面板已接入" : ""}
+                </span>
+              ) : (
+                <LoadingState label={herdr?.detail || "正在检测运行环境…"} />
+              )}
+              {herdr?.plugin?.phase === "error" && (
+                <span className="ui-field__error">{herdr.plugin.detail}</span>
+              )}
             </div>
-          ) : (
-            <LoadingState label="正在检测 Agent Skills 目录…" />
-          )}
-          <div className="ui-settings-card__actions">
-            <span className="settings-status">
-              {skills ? `${skills.installed}/${skills.available} 已就绪` : ""}
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={busy}
-              onClick={() => void onAction("skills")}
-            >
-              {skills?.targets?.length && skills.installed === skills.available
-                ? "重新安装 Skills"
-                : "安装 / 更新 Skills"}
-            </Button>
-          </div>
-        </SettingsSection>
-        <SettingsSection
-          icon={<Folder />}
-          title="工作区存储位置"
-          description="目标保存在此目录的 .crewvane 中。切换工作区后，界面会显示该目录自己的目标。"
-        >
-          <div className="settings-facts">
-            <code>{workspace}</code>
-          </div>
-          <div className="ui-settings-card__actions">
-            <Button variant="secondary" size="sm" onClick={() => void pickWorkspace()}>
-              更换工作区
-            </Button>
-          </div>
-        </SettingsSection>
-        <StorageMaintenance />
-          </div>
-        </section>
-        <section className="settings-group" aria-labelledby="settings-prefs-heading">
-          <header className="settings-group__head">
-            <span>03</span>
-            <div>
-              <h2 id="settings-prefs-heading">提醒与外观</h2>
-              <p>选择界面观感，以及哪些变化应该主动找到你。</p>
-            </div>
-          </header>
-          <div className="ui-settings-grid">
-        <SettingsSection
-          icon={theme === "dark" ? <Moon /> : <Sun />}
-          title="外观"
-          description="深夜像素或清爽日光，任务始终清晰。"
-        >
-          <div className="settings-inline">
-            <span className="settings-status">
-              <i />
-              当前：{theme === "dark" ? "深色" : "浅色"}
-            </span>
-          </div>
-          <div className="ui-settings-card__actions">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            >
-              {theme === "dark" ? "切换到浅色" : "切换到深色"}
-            </Button>
-          </div>
-        </SettingsSection>
-        <SettingsSection
-          wide
-          icon={<Bell />}
-          title="需要你时，主动通知"
-          description="系统通知默认开启；可接一个 Webhook，同步目标状态变化，并把决定、验收、到期跟进和真正需要介入的事项推到你的工作流。"
-        >
-          <div className="settings-facts">
-            {webhook.configured && (
-              <p>
-                {webhook.endpoint} · {webhook.enabled ? "已启用" : "已暂停"}
-                {webhook.tokenConfigured ? " · Bearer 认证" : ""}
-                {" · "}
-                {webhook.statuses.length ? `${webhook.statuses.length} 种状态` : "不订阅状态变化"}
+            {herdr?.detail && (
+              <p
+                className={herdr.phase === "error" ? "ui-field__error" : "muted"}
+                role={herdr.phase === "error" ? "alert" : "status"}
+                aria-live="polite"
+              >
+                {herdr.detail}
               </p>
             )}
-            {webhook.lastSuccessAt && <p>最近送达：{time(webhook.lastSuccessAt)}</p>}
-            {webhook.lastError && (
-              <p className="ui-field__error">
-                上次发送失败：{webhook.lastError}
-                {webhook.lastErrorAt ? ` · ${time(webhook.lastErrorAt)}` : ""}
-              </p>
+            <div className="ui-settings-card__actions">
+              <Button
+                variant={herdr?.updateAvailable ? "primary" : "secondary"}
+                size="sm"
+                icon={herdr?.updateAvailable ? <Download size={14} /> : <RefreshCw size={14} />}
+                disabled={busy || herdr?.phase === "checking" || herdr?.phase === "downloading"}
+                onClick={() => void onAction(
+                  herdr?.updateAvailable || !herdr?.installed ? "herdr-install" : "herdr-check",
+                )}
+              >
+                {herdr?.phase === "downloading"
+                  ? "正在更新…"
+                  : herdr?.phase === "checking"
+                    ? "正在检查…"
+                    : !herdr?.installed
+                      ? "安装 Herdr"
+                      : herdr.updateAvailable
+                        ? `更新 Herdr`
+                        : "检查更新"}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy}
+                onClick={() => void onAction("concierge")}
+              >
+                {busy ? "正在准备…" : "准备管家"}
+              </Button>
+              <Button variant="ghost" size="sm" disabled={busy} onClick={openHerdr}>
+                内嵌轻现场
+              </Button>
+            </div>
+          </SettingsSection>}
+          <OrcaInstallationCard />
+        </SettingsGroup>
+        <SettingsGroup id="settings-agents" title="Agent 与工作方法" description="管理执行命令、生命周期接入、命令行与可复用方法。">
+          <AgentPreferencesEditor
+            key={workspace}
+            preferences={state.agents ?? { concierge: "codex" }}
+            options={agentOptions}
+            busy={busy}
+            onSave={saveAgents}
+          />
+          <AgentRuntimeSettings
+            adapters={agentHooks ?? []}
+            busy={busy}
+            onChange={onAgentHooksChange}
+            notify={notify}
+          />
+          <MethodLibrary busy={busy} notify={notify} workspace={workspace} />
+          <SettingsSection
+            icon={<Zap />}
+            title="Atte 命令行"
+            description="管家通过它读写当前案卷，不能列出或修改其他目标。应用内置，无需另外安装 Node。"
+          >
+            <div className="settings-facts">
+              <code>{cli?.path}</code>
+            </div>
+            <div className="ui-settings-card__actions">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy}
+                onClick={() => void onAction("cli")}
+              >
+                {cli?.installed ? "重新安装" : "安装到 ~/.local/bin"}
+              </Button>
+            </div>
+          </SettingsSection>
+          <SettingsSection
+            icon={<Bot />}
+            title="让外部 Agent 会使用 Atte"
+            description="安装随应用打包的 Atte Skill。Codex、Claude Code、Cursor 或其他读取通用 Agent Skills 目录的工具，可以直接提交目标、查看目标并追加说明。"
+          >
+            {skills?.targets?.length ? (
+              <div className="skill-targets">
+                {skills.targets.map((target: any) => (
+                  <small
+                    key={target.id}
+                    className={target.phase === "conflict" ? "conflict" : target.phase}
+                    title={target.path}
+                  >
+                    {target.label}
+                    <i />
+                    {target.phase === "installed" ? "已安装"
+                      : target.phase === "outdated" ? `可更新 ${target.managedVersion ?? ""}`
+                        : target.phase === "conflict" ? "已有同名 Skill，已保护"
+                          : "未安装"}
+                  </small>
+                ))}
+              </div>
+            ) : (
+              <LoadingState label="正在检测 Agent Skills 目录…" />
             )}
-          </div>
-          <div className="ui-settings-card__actions">
-            <Button variant="secondary" size="sm" onClick={openWebhook}>
-              {webhook.configured ? "管理 Webhook" : "配置 Webhook"}
-            </Button>
+            <div className="ui-settings-card__actions">
+              <span className="settings-status">
+                {skills ? `${skills.installed}/${skills.available} 已就绪` : ""}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy}
+                onClick={() => void onAction("skills")}
+              >
+                {skills?.targets?.length && skills.installed === skills.available
+                  ? "重新安装 Skills"
+                  : "安装 / 更新 Skills"}
+              </Button>
+            </div>
+          </SettingsSection>
+        </SettingsGroup>
+        <SettingsGroup id="settings-authority" title="授权与自主推进" description="管理项目上线策略、决定账本与实验验收授权。">
+          <GovernanceEditor
+            projects={state.projects}
+            decisions={state.decisions ?? []}
+            busy={busy}
+            onSave={savePolicy}
+          />
+          <ExperimentalAutonomySettings
+            state={state}
+            busy={busy}
+            onSaveWorkspace={saveAutonomy}
+            onSaveProject={saveProjectAutonomy}
+          />
+        </SettingsGroup>
+        <SettingsGroup id="settings-notifications" title="通知" description="管理需要你时的提醒与状态变化通知。">
+          <SettingsSection
+            wide
+            icon={<Bell />}
+            title="需要你时，主动通知"
+            description="系统通知默认开启；可接一个 Webhook，同步目标状态变化，并把决定、验收、到期跟进和真正需要介入的事项推到你的工作流。"
+          >
+            <div className="settings-facts">
+              {webhook.configured && (
+                <p>
+                  {webhook.endpoint} · {webhook.enabled ? "已启用" : "已暂停"}
+                  {webhook.tokenConfigured ? " · Bearer 认证" : ""}
+                  {" · "}
+                  {webhook.statuses.length ? `${webhook.statuses.length} 种状态` : "不订阅状态变化"}
+                </p>
+              )}
+              {webhook.lastSuccessAt && <p>最近送达：{time(webhook.lastSuccessAt)}</p>}
+              {webhook.lastError && (
+                <p className="ui-field__error">
+                  上次发送失败：{webhook.lastError}
+                  {webhook.lastErrorAt ? ` · ${time(webhook.lastErrorAt)}` : ""}
+                </p>
+              )}
+            </div>
+            <div className="ui-settings-card__actions">
+              <Button variant="secondary" size="sm" onClick={openWebhook}>
+                {webhook.configured ? "管理 Webhook" : "配置 Webhook"}
+              </Button>
+            </div>
+          </SettingsSection>
+        </SettingsGroup>
+        <SettingsSection icon={<Bot />} title="关于 Atte" description="注意力中心 · The attention layer">
+          <div className="about-mark"><BrandMark variant="icon" /></div>
+          <div className="settings-facts">
+            <p>人只做拍板，Agent 并行推进。管家把决定、验收和需要介入的事项带到你面前。</p>
+            <p>当前版本：{version}</p>
           </div>
         </SettingsSection>
-          </div>
-        </section>
         <p className="settings-foot">
-          Crewvane {version} · 一位管家 · {state.projects.length} 个项目 ·{" "}
+          Atte {version} · 注意力中心 · The attention layer · {state.projects.length} 个项目 ·{" "}
           {state.goals.length} 个目标
         </p>
       </div>
@@ -2056,14 +2055,13 @@ function SceneSettingsEditor({
         "",
       )));
   }, []);
-  async function save(next?: {
-    openWith: "external" | "embedded";
-    terminal: "auto" | "iterm2" | "terminal" | "ghostty";
-  }) {
+  const dirty = Boolean(status &&
+    (openWith !== status.settings.openWith || terminal !== status.settings.terminal));
+  async function save() {
     setSaving(true);
     setFailure("");
     try {
-      const value = await api.saveSceneSettings(next ?? { openWith, terminal });
+      const value = await api.saveSceneSettings({ openWith, terminal });
       setStatus(value);
       setOpenWith(value.settings.openWith);
       setTerminal(value.settings.terminal);
@@ -2116,17 +2114,17 @@ function SceneSettingsEditor({
           <ChoiceGroup
             label="默认打开方式"
             value={openWith}
-            disabled={busy || saving}
+            disabled={busy || saving || !status}
             options={[
               { value: "external", label: "外部终端（推荐）" },
               { value: "embedded", label: "内嵌轻现场" },
             ]}
-            onChange={value => void save({ openWith: value, terminal })}
+            onChange={setOpenWith}
           />
           <p>
             {openWith === "external"
-              ? "使用你熟悉的真实终端，Crewvane 只负责定位同一 Herdr Session 和目标 Tab。"
-              : "不离开 Crewvane，复杂快捷键或图片输入可随时切到外部终端。"}
+              ? "使用你熟悉的真实终端，Atte 只负责定位同一 Herdr Session 和目标 Tab。"
+              : "不离开 Atte，复杂快捷键或图片输入可随时切到外部终端。"}
           </p>
         </div>
         <div>
@@ -2136,11 +2134,10 @@ function SceneSettingsEditor({
               <button
                 key={option.value}
                 type="button"
-                disabled={busy || saving || ("disabled" in option && option.disabled)}
+                disabled={busy || saving || !status || ("disabled" in option && option.disabled)}
                 aria-pressed={terminal === option.value}
                 onClick={() => {
                   setTerminal(option.value);
-                  void save({ openWith, terminal: option.value });
                 }}
               >
                 {option.label}
@@ -2156,6 +2153,7 @@ function SceneSettingsEditor({
         </div>
       </div>
       <div className="settings-facts">
+        <p>当前生效：{status?.settings.openWith === "embedded" ? "内嵌轻现场" : "外部终端"} · {status?.settings.terminal ?? "检测中"}</p>
         <p>
           Terminal 可不用自动化权限直接启动。iTerm2 首次打开或精确定位已有窗口时，macOS 可能请求“自动化”权限；拒绝后不会丢失目标或 Herdr Session，可继续使用内嵌轻现场。
         </p>
@@ -2165,7 +2163,16 @@ function SceneSettingsEditor({
         <Button
           variant="secondary"
           size="sm"
-          disabled={busy || saving}
+          disabled={busy || saving || !dirty}
+          onClick={() => void save()}
+        >
+          {saving ? "正在保存…" : "保存工作现场"}
+        </Button>
+        <span className="settings-status" role="status">{dirty ? "有未保存的更改" : "已保存"}</span>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={busy || saving || dirty || !status}
           onClick={() => void test()}
         >
           {saving ? "正在打开…" : "测试打开现场"}
@@ -2302,9 +2309,9 @@ function MethodLibrary({
   async function copyAuthorPrompt() {
     try {
       await api.writeClipboardText(
-        `请使用 crewvane-local-pack-author，把我接下来描述的工作方法创建成 Crewvane 本地能力包。先问我真正缺少的信息，使用 crewvane skill draft / validate 创建草稿，展示名称、适用范围、步骤、检查清单和 script SHA-256；得到我明确确认后再 install。工作区：${workspace}`,
+        `请使用 atte-local-pack-author，把我接下来描述的工作方法创建成 Atte 本地能力包。先问我真正缺少的信息，使用 atte skill draft / validate 创建草稿，展示名称、适用范围、步骤、检查清单和 script SHA-256；得到我明确确认后再 install。工作区：${workspace}`,
       );
-      notify("创建说明已复制，可发给任意已安装 Crewvane Skills 的 Agent。");
+      notify("创建说明已复制，可发给任意已安装 Atte Skills 的 Agent。");
     } catch (reason) {
       setFailure(errorText(reason));
     }
@@ -2434,7 +2441,7 @@ function MethodLibrary({
                 <BookOpen size={14} />
                 {builtinPacks.length} 个内置方法
               </span>
-              <small>由 Crewvane 随版本维护，可查看，不占用目标的本地槽位。</small>
+              <small>由 Atte 随版本维护，可查看，不占用目标的本地槽位。</small>
             </summary>
             <div>
               {builtinPacks.map(pack => (
@@ -3017,7 +3024,7 @@ function AgentRuntimeSettings({
       notify(action === "disable"
         ? "已停用 Hook；该 Agent 仍可使用当前会话后端与巡检状态。"
         : action === "uninstall"
-          ? "已移除 Crewvane 管理的 Hook，其他用户 Hook 保持不变。"
+          ? "已移除 Atte 管理的 Hook，其他用户 Hook 保持不变。"
           : "Agent Hook 已更新。");
     } catch (reason) {
       setFailure(String(reason).replace(
@@ -3033,7 +3040,7 @@ function AgentRuntimeSettings({
       wide
       icon={<Bot />}
       title="Agent 接入"
-      description="检测到兼容 Agent 后自动安装受管 Hook。Hook 只证明会话、回合和阻塞等生命周期；目标完成、外部等待、找人决定和验收仍由 Crewvane CLI 结构化写回。"
+      description="检测到兼容 Agent 后自动安装受管 Hook。Hook 只证明会话、回合和阻塞等生命周期；目标完成、外部等待、找人决定和验收仍由 Atte CLI 结构化写回。"
     >
       <div className="agent-runtime-list">
         {adapters.length ? adapters.map(adapter => {
@@ -3056,7 +3063,7 @@ function AgentRuntimeSettings({
               <div className="agent-runtime-detail">
                 <span>
                   {adapter.status === "waiting-trust"
-                    ? "在 Codex 中打开 /hooks 并信任 Crewvane 的条目后开始生效。"
+                    ? "在 Codex 中打开 /hooks 并信任 Atte 的条目后开始生效。"
                     : adapter.status === "not-installed"
                       ? adapter.command ? "已检测到本机 CLI，可安装受管 Hook。" : "未检测到本机 CLI。"
                       : adapter.status === "installed"
@@ -3113,7 +3120,7 @@ function AgentRuntimeSettings({
       </div>
       {failure && <p className="ui-field__error" role="alert">{failure}</p>}
       <p className="ui-field__hint">
-        Codex 官方 Hook 需要你在其 Hook 审查界面信任后才会运行。Crewvane 不会绕过信任流程，也不会覆盖你已有 Hooks 或 OMP extensions。
+        Codex 官方 Hook 需要你在其 Hook 审查界面信任后才会运行。Atte 不会绕过信任流程，也不会覆盖你已有 Hooks 或 OMP extensions。
       </p>
     </SettingsSection>
   );
@@ -3132,7 +3139,7 @@ function AgentPreferencesEditor({ preferences, options, busy, onSave }: {
       wide
       icon={<Bot />}
       title="Agent 启动命令"
-      description="填写每个角色的启动命令，可附带模型等原生参数。Crewvane 不替换 CLI，也不借用 Codex 等运行时专属的沙箱参数；已有会话继续工作，新会话使用保存后的命令。"
+      description="填写每个角色的启动命令，可附带模型等原生参数。Atte 不替换 CLI，也不借用 Codex 等运行时专属的沙箱参数；已有会话继续工作，新会话使用保存后的命令。"
     >
       <form
         className="ui-form"
@@ -3172,7 +3179,7 @@ function AgentPreferencesEditor({ preferences, options, busy, onSave }: {
         </datalist>
         <div className="ui-form__footer">
           <p className="ui-form__note">
-            填写本机任意交互式 CLI 和参数，例如 codex --model gpt-5、npx --yes my-agent。支持绝对路径与 ~/ 路径；切换 Herdr 或 Orca 后仍使用同一条命令。管家案卷边界由 Crewvane CLI 约束，不是操作系统文件沙箱。环境变量和 shell 表达式请放入自己的启动脚本。
+            填写本机任意交互式 CLI 和参数，例如 codex --model gpt-5、npx --yes my-agent。支持绝对路径与 ~/ 路径；切换 Herdr 或 Orca 后仍使用同一条命令。管家案卷边界由 Atte CLI 约束，不是操作系统文件沙箱。环境变量和 shell 表达式请放入自己的启动脚本。
           </p>
           <Button type="submit" variant="secondary" disabled={busy}>
             保存偏好

@@ -1,6 +1,6 @@
 import type {
   ContinuationTrigger,
-  CrewvaneCommand,
+  AtteCommand,
 } from "../../../packages/core/src/index.js";
 
 export interface AutonomyCandidate {
@@ -22,7 +22,7 @@ export interface AutonomyClaim {
   };
 }
 export interface AutonomySchedulerService {
-  execute(command: CrewvaneCommand): Promise<unknown>;
+  execute(command: AtteCommand): Promise<unknown>;
 }
 export type AutonomyDispatchResult =
   | { status: "accepted"; detail?: string }

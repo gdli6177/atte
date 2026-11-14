@@ -28,7 +28,7 @@ test("recovery channel keeps switch authority in the host and returns one privat
     { scene: { bindingId: "owned-binding" } });
   assert.equal(calls, 1);
   await assert.rejects(requestSessionRecovery({
-    ...channel.environment, CREWVANE_RECOVERY_TOKEN: "f".repeat(64),
+    ...channel.environment, ATTE_RECOVERY_TOKEN: "f".repeat(64),
   }, request), /未获授权/);
   assert.equal(calls, 1);
 });
@@ -46,7 +46,7 @@ test("an unavailable host cancels an unclaimed request rather than executing it 
   const directory = await mkdtemp(join(tmpdir(), "cv-host-offline-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await assert.rejects(requestSessionRecovery({
-    CREWVANE_RECOVERY_DIRECTORY: directory, CREWVANE_RECOVERY_TOKEN: "a".repeat(64),
+    ATTE_RECOVERY_DIRECTORY: directory, ATTE_RECOVERY_TOKEN: "a".repeat(64),
   }, request, 2_000), /未连接.*本请求未执行/);
   assert.deepEqual(await readdir(directory), []);
 });

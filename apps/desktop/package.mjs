@@ -22,11 +22,11 @@ const here = dirname(fileURLToPath(import.meta.url)),
   desktopPackage = JSON.parse(
     await readFile(join(here, "package.json"), "utf8"),
   ),
-  signingIdentity = process.env.CREWVANE_MACOS_SIGN_IDENTITY,
-  electronZipDir = process.env.CREWVANE_ELECTRON_ZIP_DIR
-    ? resolve(process.env.CREWVANE_ELECTRON_ZIP_DIR)
+  signingIdentity = process.env.ATTE_MACOS_SIGN_IDENTITY,
+  electronZipDir = process.env.ATTE_ELECTRON_ZIP_DIR
+    ? resolve(process.env.ATTE_ELECTRON_ZIP_DIR)
     : undefined,
-  stage = await mkdtemp(join(tmpdir(), "crewvane-package-"));
+  stage = await mkdtemp(join(tmpdir(), "atte-package-"));
 
 try {
   if (process.platform !== "darwin" || process.arch !== "arm64")
@@ -39,7 +39,6 @@ try {
   // Electron/main, preload, CLI and renderer are bundled by build.mjs.
   // Deploying the source package also copies its previous release directory,
   // recursively shipping old applications/installers with every new build.
-  await import("./scripts/build-icons.mjs");
   await cp(join(here, "dist"), join(stage, "dist"), { recursive: true });
   const nativePackage = dirname(createRequire(import.meta.url).resolve("node-pty/package.json"));
   await cp(nativePackage, join(stage, "node_modules/node-pty"), {
@@ -48,13 +47,13 @@ try {
   });
   const addonPackage = dirname(createRequire(join(nativePackage, "package.json")).resolve("node-addon-api/package.json"));
   await cp(addonPackage, join(stage, "node_modules/node-addon-api"), { recursive: true });
-  await cp(join(here, "assets/brand/crewvane-icon.png"), join(stage, "dist/assets/crewvane-icon.png"));
-  const bundledSkills = join(stage, "crewvane-skills");
+  await cp(join(here, "assets/brand/atte-app-icon-1024.png"), join(stage, "dist/assets/atte-app-icon.png"));
+  const bundledSkills = join(stage, "atte-skills");
   await mkdir(bundledSkills, { recursive: true });
-  await cp(join(here, "../../skills/crewvane"), join(bundledSkills, "crewvane"), { recursive: true });
+  await cp(join(here, "../../skills/atte"), join(bundledSkills, "atte"), { recursive: true });
   await cp(
-    join(here, "../../skills/crewvane-local-pack-author"),
-    join(bundledSkills, "crewvane-local-pack-author"),
+    join(here, "../../skills/atte-local-pack-author"),
+    join(bundledSkills, "atte-local-pack-author"),
     { recursive: true },
   );
   const cliNode = join(stage, "cli-node");
@@ -63,10 +62,10 @@ try {
   await writeFile(
     join(stage, "package.json"),
     JSON.stringify({
-      name: "crewvane",
+      name: "atte",
       version: desktopPackage.version,
       description: desktopPackage.description,
-      productName: "Crewvane",
+      productName: "Atte",
       main: "dist/main.cjs",
       dependencies: { "node-pty": createRequire(import.meta.url)("node-pty/package.json").version },
       private: false,
@@ -75,12 +74,12 @@ try {
   const paths = await packager({
     dir: stage,
     out: join(here, "release"),
-    name: "Crewvane",
+    name: "Atte",
     electronVersion,
-    appBundleId: "dev.crewvane.desktop",
+    appBundleId: "dev.atte.desktop",
     platform: "darwin",
     arch: "arm64",
-    icon: join(here, "assets/brand/crewvane-icon.icns"),
+    icon: join(here, "assets/brand/atte-app-icon.icns"),
     asar: { unpack: "{**/dist/cli/**,**/node_modules/node-pty/**}" },
     extraResource: [cliNode, join(here, "herdr-plugin"), bundledSkills, herdrBinary],
     ignore: [/^\/cli-node$/, /^\/dist\/.*\.map$/],
@@ -89,7 +88,7 @@ try {
     appCategoryType: "public.app-category.developer-tools",
     extendInfo: {
       NSAppleEventsUsageDescription:
-        "Crewvane uses the selected terminal to open and focus your current Herdr work scene.",
+        "Atte uses the selected terminal to open and focus your current Herdr work scene.",
     },
     ...(electronZipDir ? { electronZipDir } : {}),
     // Electron patches its binaries while packaging. Re-sign every nested

@@ -54,11 +54,11 @@ esac
   const environment = {
     PATH: `${join(root, "node_modules/.bin")}:${process.env.PATH}`,
     HOME: root,
-    CREWVANE_CONTROL_DIRECTORY: directory,
-    CREWVANE_CLI_DIRECTORY: join(root, "node_modules/.bin"),
-    CREWVANE_HERDR_BINARY: herdr,
-    CREWVANE_HERDR_SESSION: scene.locator.session,
-    CREWVANE_WORKSPACE: workspace,
+    ATTE_CONTROL_DIRECTORY: directory,
+    ATTE_CLI_DIRECTORY: join(root, "node_modules/.bin"),
+    ATTE_HERDR_BINARY: herdr,
+    ATTE_HERDR_SESSION: scene.locator.session,
+    ATTE_WORKSPACE: workspace,
   };
   await mkdir(join(root, "node_modules/.bin"), { recursive: true });
   await writeFile(join(root, "node_modules/.bin/tsx"), `#!/bin/sh\nexec ${process.execPath} ${join(process.cwd(), "node_modules/tsx/dist/cli.mjs")} "$@"`, { mode: 0o700 });
@@ -75,6 +75,6 @@ esac
   assert.doesNotMatch(calls, /pane focus w1:p1/,
     "Herdr 0.9.5 pane focus requires a direction; an already focused Tab needs no extra command.");
   await assert.rejects(exec(process.execPath, args, {
-    env: { ...environment, CREWVANE_AGENT_NAME: "concierge" }, timeout: 10_000,
+    env: { ...environment, ATTE_AGENT_NAME: "concierge" }, timeout: 10_000,
   }), /只能由人/);
 });

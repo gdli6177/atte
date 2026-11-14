@@ -16,7 +16,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-governance-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-governance-"));
   roots.push(root);
   return { root, service: new WorkspaceService(root) };
 }
@@ -136,12 +136,12 @@ test("decision ledger suppresses repeated approvals and rejections and writes re
   assert.equal(current.attention, null);
   assert.match(current.next, /拒绝/);
 
-  const approved = await readFile(join(root, ".crewvane", "decisions.md"), "utf8");
-  const rejected = await readFile(join(root, ".crewvane", "rejected.md"), "utf8");
+  const approved = await readFile(join(root, ".atte", "decisions.md"), "utf8");
+  const rejected = await readFile(join(root, ".atte", "rejected.md"), "utf8");
   assert.match(approved, /批准周六上线/);
   assert.match(approved, /Herdr 注意力面板/);
   assert.match(rejected, /拒绝删除旧数据/);
-  assert.match(rejected, /Crewvane 桌面/);
+  assert.match(rejected, /Atte 桌面/);
 });
 
 test("all mandatory high-risk actions escalate even when the project policy is automatic", async () => {

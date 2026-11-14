@@ -105,18 +105,18 @@ function isWecomWebhook(endpoint: string) {
 
 function humanText(body: Record<string, any>) {
   if (body.event === "notification.test")
-    return `Crewvane｜Webhook 测试\n工作区：${body.workspace?.name ?? "Crewvane"}\n配置已连通。`;
+    return `Atte｜Webhook 测试\n工作区：${body.workspace?.name ?? "Atte"}\n配置已连通。`;
   const goal = body.goal ?? {};
   if (body.event === "goal.status_changed")
     return [
-      "Crewvane｜目标状态更新",
+      "Atte｜目标状态更新",
       goal.title,
       `${statusLabels[goal.previousStatus as GoalStatus] ?? goal.previousStatus} → ${statusLabels[goal.status as GoalStatus] ?? goal.status}`,
       goal.waitingFor ? `正在等待：${goal.waitingFor}` : "",
       `下一步：${goal.next}`,
     ].filter(Boolean).join("\n");
   return [
-    "Crewvane｜需要你处理",
+    "Atte｜需要你处理",
     goal.title,
     goal.summary || goal.next,
     goal.waitingFor ? `正在等待：${goal.waitingFor}` : "",
@@ -236,9 +236,9 @@ export class WebhookNotifier {
           signal: controller.signal,
           headers: {
             "content-type": "application/json",
-            "user-agent": `Crewvane/${this.appVersion}`,
-            "x-crewvane-event": event.body.event,
-            "x-crewvane-delivery": event.id,
+            "user-agent": `Atte/${this.appVersion}`,
+            "x-atte-event": event.body.event,
+            "x-atte-delivery": event.id,
             ...(webhook.token ? { authorization: `Bearer ${webhook.token}` } : {}),
           },
           body: JSON.stringify(webhookPayload(webhook.url, event.body)),
@@ -298,9 +298,9 @@ export class WebhookNotifier {
           signal: controller.signal,
           headers: {
             "content-type": "application/json",
-            "user-agent": `Crewvane/${this.appVersion}`,
-            "x-crewvane-event": event.body.event,
-            "x-crewvane-delivery": event.id,
+            "user-agent": `Atte/${this.appVersion}`,
+            "x-atte-event": event.body.event,
+            "x-atte-delivery": event.id,
             ...(webhook.token ? { authorization: `Bearer ${webhook.token}` } : {}),
           },
           body: JSON.stringify(webhookPayload(webhook.url, event.body)),
@@ -333,7 +333,7 @@ export class WebhookNotifier {
     });
   }
 
-  test(workspaceName = "Crewvane"): Promise<WebhookSettings> {
+  test(workspaceName = "Atte"): Promise<WebhookSettings> {
     return this.serial(async () => {
       const data = await this.read(), webhook = data.webhook;
       if (!webhook?.url) throw new Error("请先保存 Webhook 配置");
@@ -346,18 +346,18 @@ export class WebhookNotifier {
           signal: controller.signal,
           headers: {
             "content-type": "application/json",
-            "user-agent": `Crewvane/${this.appVersion}`,
-            "x-crewvane-event": "notification.test",
-            "x-crewvane-delivery": createHash("sha256").update(`${now.toISOString()}:${webhook.url}`).digest("hex"),
+            "user-agent": `Atte/${this.appVersion}`,
+            "x-atte-event": "notification.test",
+            "x-atte-delivery": createHash("sha256").update(`${now.toISOString()}:${webhook.url}`).digest("hex"),
             ...(webhook.token ? { authorization: `Bearer ${webhook.token}` } : {}),
           },
           body: JSON.stringify(webhookPayload(webhook.url, {
-            schema: "crewvane.notification.v1",
+            schema: "atte.notification.v1",
             event: "notification.test",
             occurredAt: now.toISOString(),
             workspace: { name: workspaceName },
-            app: { name: "Crewvane", version: this.appVersion },
-            message: "这是一条 Crewvane Webhook 测试通知。",
+            app: { name: "Atte", version: this.appVersion },
+            message: "这是一条 Atte Webhook 测试通知。",
           })),
         });
         await assertWebhookResponse(response, webhook.url);
@@ -395,12 +395,12 @@ export class WebhookNotifier {
     return {
       id,
       body: {
-        schema: "crewvane.notification.v1",
+        schema: "atte.notification.v1",
         event: "attention.required",
         deliveryId: id,
         occurredAt,
         workspace: { name: workspace.name },
-        app: { name: "Crewvane", version: this.appVersion },
+        app: { name: "Atte", version: this.appVersion },
         goal: {
           id: goal.id,
           title: goal.title,
@@ -427,12 +427,12 @@ export class WebhookNotifier {
     return {
       id,
       body: {
-        schema: "crewvane.notification.v1",
+        schema: "atte.notification.v1",
         event: "goal.status_changed",
         deliveryId: id,
         occurredAt: goal.updatedAt,
         workspace: { name: workspace.name },
-        app: { name: "Crewvane", version: this.appVersion },
+        app: { name: "Atte", version: this.appVersion },
         goal: {
           id: goal.id,
           title: goal.title,

@@ -2,6 +2,20 @@ import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { existsSync } from "node:fs";
+import {
+  environmentValue,
+  isUsableDirectory,
+  LEGACY_LOCK_DIRECTORY,
+  LEGACY_STATE_DIRECTORY,
+  LOCK_DIRECTORY,
+  STATE_DIRECTORY,
+} from "./compatibility.js";
+import { prepareWorkspaceState } from "./state-migration.js";
+import { rewriteStoredCompatibility } from "./compatibility.js";
+
+const held = new AsyncLocalStorage<ReadonlySet<string>>();
 
 export interface LockOwner {
   pid: number;
@@ -15,7 +29,8 @@ export async function readEvents(
 ): Promise<Record<string, unknown>[]> {
   let raw: string;
   try {
-    raw = await readFile(join(root, ".crewvane", "events.jsonl"), "utf8");
+    const { directory } = await prepareWorkspaceState(root);
+    raw = await readFile(join(directory, "events.jsonl"), "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
@@ -27,12 +42,12 @@ export async function readEvents(
       const value: unknown = JSON.parse(line);
       if (!value || typeof value !== "object" || Array.isArray(value))
         throw new Error(`invalid event at line ${index + 1}`);
-      return value as Record<string, unknown>;
+      return rewriteStoredCompatibility(value) as Record<string, unknown>;
     });
 }
 
 function lockTimeoutMs(): number {
-  const raw = Number(process.env.CREWVANE_LOCK_TIMEOUT_MS ?? 5000);
+  const raw = Number(environmentValue(process.env, "LOCK_TIMEOUT_MS") ?? 5000);
   return Number.isFinite(raw) && raw >= 0 ? raw : 5000;
 }
 
@@ -96,39 +111,60 @@ export async function withLock<T>(
   directory: string,
   action: () => Promise<T>,
   timeoutMs = lockTimeoutMs(),
+  options: { workspaceCompatibility?: boolean } = {},
 ): Promise<T> {
   await mkdir(directory, { recursive: true });
-  const lock = join(await realpath(directory), ".crewvane-lock");
+  const root = await realpath(directory);
+  if (held.getStore()?.has(root)) return action();
+  const legacyCompatibility = options.workspaceCompatibility === true &&
+    (existsSync(join(root, LEGACY_LOCK_DIRECTORY)) ||
+      (!isUsableDirectory(join(root, STATE_DIRECTORY)) &&
+        isUsableDirectory(join(root, LEGACY_STATE_DIRECTORY))));
   const deadline = Date.now() + timeoutMs;
+  let current: string | undefined, legacy: string | undefined;
+  let currentOwned = false, legacyOwned = false;
   for (;;) {
+    current = join(root, LOCK_DIRECTORY);
+    legacy = legacyCompatibility ? join(root, LEGACY_LOCK_DIRECTORY) : undefined;
+    let pending = legacy ?? current;
     try {
-      await mkdir(lock);
-      await writeFile(
-        join(lock, "owner.json"),
-        `${JSON.stringify(lockOwner())}\n`,
-      );
+      if (legacy) {
+        await mkdir(legacy);
+        legacyOwned = true;
+        await writeFile(join(legacy, "owner.json"), `${JSON.stringify(lockOwner())}\n`);
+      }
+      pending = current;
+      await mkdir(current);
+      currentOwned = true;
+      await writeFile(join(current, "owner.json"), `${JSON.stringify(lockOwner())}\n`);
       break;
     } catch (error) {
+      if (currentOwned) await rm(current, { recursive: true, force: true });
+      if (legacyOwned) await rm(legacy!, { recursive: true, force: true });
+      currentOwned = false;
+      legacyOwned = false;
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const owner = await readLockOwner(lock);
+      const owner = await readLockOwner(pending);
       if (owner && owner.hostname === hostname() && !pidAlive(owner.pid)) {
-        await rm(lock, { recursive: true, force: true });
+        await rm(pending, { recursive: true, force: true });
         continue;
       }
-      if (Date.now() >= deadline) throw new Error(lockHeldMessage(lock, owner));
+      if (Date.now() >= deadline)
+        throw new Error(lockHeldMessage(pending, owner));
       await setTimeout(20);
     }
   }
   try {
-    return await action();
+    return await held.run(new Set([...held.getStore() ?? [], root]), action);
   } finally {
-    await rm(lock, { recursive: true });
+    if (currentOwned) await rm(current!, { recursive: true, force: true });
+    if (legacyOwned) await rm(legacy!, { recursive: true, force: true });
   }
 }
 
-/** Called while holding the shared state lock. `.crewvane/sequence` is the counter that orders events with equal timestamps. */
-export async function nextSequence(root: string): Promise<number> {
-  const file = join(root, ".crewvane", "sequence");
+/** Called while holding the shared state lock. The resolved state directory owns the counter that orders events with equal timestamps. */
+export async function nextSequence(directory: string): Promise<number> {
+  const file = join(directory, "sequence");
   let previous = 0;
   try {
     previous = Number(await readFile(file, "utf8"));

@@ -8,6 +8,7 @@ import {
   type AgentRuntimeAdapterId, type Goal, type ManagedSessionContext, type OwnerResume,
   type SceneLaunchIntent,
   type SceneReferenceV1, type SessionBackendId,
+  environmentValue, workspaceDataDirectory,
 } from "../../core/src/index.js";
 import { SessionControl } from "./control/control.js";
 import type { BackendControlV1, SwitchAuthority } from "./control/types.js";
@@ -34,7 +35,7 @@ function environmentContext(control: BackendControlV1, role: ManagedSessionConte
   } satisfies ManagedSessionContext;
 }
 export function managedSessionContext(environment: NodeJS.ProcessEnv): ManagedSessionContext | undefined {
-  const raw = environment.CREWVANE_SESSION_CONTEXT;
+  const raw = environmentValue(environment, "SESSION_CONTEXT");
   if (!raw) return;
   let value: ManagedSessionContext;
   try { value = JSON.parse(raw) as ManagedSessionContext; } catch { throw new Error("受管会话环境损坏。"); }
@@ -121,50 +122,64 @@ export class SessionRuntime {
     const executable = command.executable.startsWith("~/") ? join(home, command.executable.slice(2)) : command.executable;
     const project = goal && state.projects.find(item => item.id === goal.projectId);
     // Keep the global concierge in the workspace root. Orca registers every
-    // exact terminal cwd as a visible folder project; using .crewvane here
+    // exact terminal cwd as a visible folder project; using .atte here
     // created a second synthetic project beside each real workspace.
     const cwd = await realpath(project?.path || this.options.workspace);
     const context = environmentContext(control, input.role, goal?.id, intent.attemptId);
     const hookToken = randomBytes(32).toString("hex");
-    const environment: Record<string, string> = {
-      CREWVANE_WORKSPACE: this.options.workspace,
-      CREWVANE_AGENT_NAME: input.name, CREWVANE_ROLE: input.role,
-      CREWVANE_SESSION_CONTEXT: JSON.stringify(context),
-      CREWVANE_BACKEND: control.selected, CREWVANE_BACKEND_EPOCH: String(control.epoch),
-      CREWVANE_CONTROL_DIRECTORY: this.options.control.directory,
-      CREWVANE_CLI_DIRECTORY: this.options.cliDirectory,
+  const environment: Record<string, string> = {
+      ATTE_WORKSPACE: this.options.workspace,
+      ATTE_AGENT_NAME: input.name, ATTE_ROLE: input.role,
+      ATTE_SESSION_CONTEXT: JSON.stringify(context),
+      ATTE_BACKEND: control.selected, ATTE_BACKEND_EPOCH: String(control.epoch),
+      ATTE_CONTROL_DIRECTORY: this.options.control.directory,
+      ATTE_CLI_DIRECTORY: this.options.cliDirectory,
       PATH: this.options.cliDirectory,
       ...(input.role === "concierge" ? {
-        CREWVANE_COORDINATOR: "1",
-        CREWVANE_COORDINATOR_SCOPE_FILE: join(this.options.workspace, ".crewvane", "coordinator-scope.json"),
+        ATTE_COORDINATOR: "1",
+        ATTE_COORDINATOR_SCOPE_FILE: join(workspaceDataDirectory(this.options.workspace), "coordinator-scope.json"),
       } : {}),
       ...(goal ? {
-        CREWVANE_GOAL_ID: goal.id, CREWVANE_ATTEMPT_ID: intent.attemptId,
-        CREWVANE_HOOK_TOKEN: hookToken, CREWVANE_HOOK_SOCKET: agentRuntimeSocketPath(this.options.workspace),
-        CREWVANE_HOOK_SPOOL: join(this.options.workspace, ".crewvane", "runtime", "spool"),
+        ATTE_GOAL_ID: goal.id, ATTE_ATTEMPT_ID: intent.attemptId,
+        ATTE_HOOK_TOKEN: hookToken, ATTE_HOOK_SOCKET: agentRuntimeSocketPath(this.options.workspace),
+        ATTE_HOOK_SPOOL: join(workspaceDataDirectory(this.options.workspace), "runtime", "spool"),
       } : {}),
     };
+    for (const [key, value] of Object.entries({ ...environment }))
+      if (key.startsWith("ATTE_")) environment[`CREWVANE_${key.slice(5)}`] = value;
     // Keep test or explicit host configuration; never copy credentials or
     // inject CLI permission/model flags.
-    for (const key of ["HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "CODEX_HOME", "CREWVANE_HOST_SOCKET", "CREWVANE_HOST_TOKEN"]) {
-      const value = this.options.environment?.[key];
-      if (value) environment[key] = value;
+    for (const key of ["HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "CODEX_HOME", "HOST_SOCKET", "HOST_TOKEN"]) {
+      const value = ["HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "CODEX_HOME"].includes(key)
+        ? this.options.environment?.[key] : environmentValue(this.options.environment ?? {}, key);
+      const target = ["HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "CODEX_HOME"].includes(key) ? key : `ATTE_${key}`;
+      if (value) environment[target] = value;
+      if (value && target.startsWith("ATTE_")) {
+        environment[target] = value;
+        environment[`CREWVANE_${target.slice(5)}`] = value;
+      }
     }
     if (input.role === "concierge")
-      for (const key of ["CREWVANE_RECOVERY_DIRECTORY", "CREWVANE_RECOVERY_TOKEN"]) {
-        const value = this.options.environment?.[key];
-        if (value) environment[key] = value;
+      for (const key of ["RECOVERY_DIRECTORY", "RECOVERY_TOKEN"]) {
+        const value = environmentValue(this.options.environment ?? {}, key);
+        if (value) {
+          environment[`ATTE_${key}`] = value;
+          environment[`CREWVANE_${key}`] = value;
+        }
       }
     if (control.selected === "herdr") {
-      const binary = this.options.environment?.CREWVANE_HERDR_BINARY ??
+      const binary = environmentValue(this.options.environment ?? {}, "HERDR_BINARY") ??
         (await (await this.options.adapter("herdr", this.options.workspace)).detect()).path;
-      if (binary) environment.CREWVANE_HERDR_BINARY = binary;
+      if (binary) {
+        environment.ATTE_HERDR_BINARY = binary;
+        environment.CREWVANE_HERDR_BINARY = binary;
+      }
     }
     const files = await createLaunchFiles(this.options.control.directory, {
       ...intent, installationId: control.installationId, cwd, executable, args: command.args, environment,
     });
     const launch: StoredLaunch = {
-      intent, files, cwd, title: input.role === "concierge" ? "Crewvane · 管家" : `Crewvane · ${goal!.title.slice(0, 60)}`,
+      intent, files, cwd, title: input.role === "concierge" ? "Atte · 管家" : `Atte · ${goal!.title.slice(0, 60)}`,
       hookTokenHash: createHash("sha256").update(hookToken).digest("hex"), runtimeAdapter: adapterId(executable),
     };
     await atomicJSON(this.launchPath(intent.requestId), launch);
@@ -294,7 +309,7 @@ export class SessionRuntime {
     consultationOnly?: boolean }, authority?: SwitchAuthority) {
     if (!authority && this.options.managedContext && !this.options.hostExecution) {
       const environment = this.options.environment ?? process.env;
-      if (environment.CREWVANE_RECOVERY_DIRECTORY && !await this.options.control.canDispatch())
+      if (environmentValue(environment, "RECOVERY_DIRECTORY") && !await this.options.control.canDispatch())
         return await requestSessionRecovery(environment, {
           context: this.options.managedContext, operation: "launch", input,
         }) as { goalId: string; runtime: string; scene: SceneReferenceV1; receipt?: SendReceipt; warning?: string };
@@ -349,7 +364,7 @@ export class SessionRuntime {
   async send(scene: SceneReferenceV1, deliveryId: string, text: string, authority?: SwitchAuthority): Promise<SendReceipt> {
     if (!authority && this.options.managedContext && !this.options.hostExecution) {
       const environment = this.options.environment ?? process.env;
-      if (environment.CREWVANE_RECOVERY_DIRECTORY && !await this.options.control.canDispatch())
+      if (environmentValue(environment, "RECOVERY_DIRECTORY") && !await this.options.control.canDispatch())
         return await requestSessionRecovery(environment, {
           context: this.options.managedContext, operation: "send", input: { scene, deliveryId, text },
         }) as SendReceipt;

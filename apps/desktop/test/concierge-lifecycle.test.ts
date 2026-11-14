@@ -7,7 +7,7 @@ import {
 import { ConciergeBlockedError } from "../electron/herdr.ts";
 
 const reference = {
-  session: "crewvane-test",
+  session: "atte-test",
   workspaceId: "w1",
   tabId: "w1:t1",
   paneId: "w1:p1",

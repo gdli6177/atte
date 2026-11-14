@@ -1,6 +1,6 @@
 # Agent Runtime Hooks 与即时事件
 
-Crewvane 0.7 将 Agent 生命周期观测统一到一个受管的 Agent Runtime Adapter 层。它解决的是“会话发生了什么”的可见性问题，不替代 Crewvane 的目标语义协议。
+Atte 0.7 将 Agent 生命周期观测统一到一个受管的 Agent Runtime Adapter 层。它解决的是“会话发生了什么”的可见性问题，不替代 Atte 的目标语义协议。
 
 ## 边界
 
@@ -11,9 +11,9 @@ Hook 只证明如下事实：
 - Agent 正在等待输入、批准或其他阻塞；
 - Agent 原生 Hook 实际提供了本轮回复正文。
 
-Hook 不证明目标已完成、交付可验收、第三方正在等待、需要人决定或安全风险已经消失。这些业务事实仍只能由 `crewvane goal progress / wait / review / decide / risk / ship / accept / ...` 写入。
+Hook 不证明目标已完成、交付可验收、第三方正在等待、需要人决定或安全风险已经消失。这些业务事实仍只能由 `atte goal progress / wait / review / decide / risk / ship / accept / ...` 写入。
 
-Crewvane 不解析终端画面，不根据 `idle`、`done` 或自然语言猜测状态，也不把工具调用参数、工具结果或终端滚动全文存入目标。
+Atte 不解析终端画面，不根据 `idle`、`done` 或自然语言猜测状态，也不把工具调用参数、工具结果或终端滚动全文存入目标。
 
 ## 组件
 
@@ -24,7 +24,7 @@ Agent lifecycle event
 official Adapter Hook / OMP Extension
         |
         v
-crewvane hook ingest --adapter <id>
+atte hook ingest --adapter <id>
         |
         +--> local Socket (500 ms fail-open)
         |        |
@@ -37,7 +37,7 @@ crewvane hook ingest --adapter <id>
             drain on restart
 ```
 
-`AgentAttempt` 每次由 `crewvane owner launch` 启动、重启或恢复负责人时新建，绑定 `goalId`、`attemptId`、Agent 类型、Adapter、启动时间、当前 turn 和真实现场。负责人环境同时获得目标 ID、attempt ID、一次性 Hook token 与 Agent 名称。
+`AgentAttempt` 每次由 `atte owner launch` 启动、重启或恢复负责人时新建，绑定 `goalId`、`attemptId`、Agent 类型、Adapter、启动时间、当前 turn 和真实现场。负责人环境同时获得目标 ID、attempt ID、一次性 Hook token 与 Agent 名称。
 
 `AgentRuntimeEventV1` 只接受版本、事件 ID、单调序号、时间、来源、Agent、Adapter、目标、attempt、turn、类型和受限内容。事件 ID 与 `attemptId + sequence` 用于去重和排序。旧 attempt、旧 turn 和迟到事件只能进入诊断日志，不能覆盖当前目标。
 
@@ -45,15 +45,15 @@ crewvane hook ingest --adapter <id>
 
 | Agent | 接入方式 | 生命周期事件 | 配置位置 | 降级或信任 |
 | --- | --- | --- | --- | --- |
-| Codex | 官方 command Hooks | SessionStart、UserPromptSubmit、PermissionRequest、Stop、Interrupt、SessionEnd | `~/.codex/hooks.json` | 需要在 `/hooks` 中信任 Crewvane 条目 |
+| Codex | 官方 command Hooks | SessionStart、UserPromptSubmit、PermissionRequest、Stop、Interrupt、SessionEnd | `~/.codex/hooks.json` | 需要在 `/hooks` 中信任 Atte 条目 |
 | Claude Code | 官方 command Hooks | SessionStart、UserPromptSubmit、Notification、Stop、SessionEnd | `~/.claude/settings.json` | 保留用户已有 Hook；Stop 可提供回复正文 |
 | Cursor | 官方 v1 Hooks | sessionStart、beforeSubmitPrompt、afterAgentResponse、stop、sessionEnd | `~/.cursor/hooks.json` | v2 或未知格式显示“版本不支持” |
 | Qoder | 官方 command Hooks | SessionStart、UserPromptSubmit、Notification/Permission、Stop、SessionEnd | `~/.qoder/settings.json` | 兼容 Claude 式 grouped config |
-| OMP | 官方 Extension API | session、turn、agent、approval 生命周期 | `~/.omp/agent/extensions/crewvane.js` | 不覆盖同名用户 extension |
+| OMP | 官方 Extension API | session、turn、agent、approval 生命周期 | `~/.omp/agent/extensions/atte.js` | 不覆盖同名用户 extension |
 
 v1 不安装 PreToolUse / PostToolUse Hook。工具级事件每次启动进程并在高并发下重复写盘，对本版目标没有足够收益；Herdr 的工作心跳和 Hook 的 turn 生命周期已经覆盖主要需求。
 
-配置安装采用 marker、首次备份、JSON 解析合并与原子替换。重复安装幂等；“停用”和“卸载”只移除 Crewvane 管理条目。损坏 JSON、未来 schema、同名 OMP extension 或无法识别的版本会停止自动更新并保留原文件。
+配置安装采用 marker、首次备份、JSON 解析合并与原子替换。重复安装幂等；“停用”和“卸载”只移除 Atte 管理条目。损坏 JSON、未来 schema、同名 OMP extension 或无法识别的版本会停止自动更新并保留原文件。
 
 自动安装、手动安装、停用、卸载与信任记录按同一修改队列串行执行，临时文件使用唯一名称，避免首次启动与设置操作并发时相互覆盖。
 
@@ -63,7 +63,7 @@ Agent 启动停在 Hook 或目录信任提示时保留真实现场，不自动�
 
 状态解释使用固定优先级：
 
-1. 当前目标的结构化 Crewvane CLI 写回；
+1. 当前目标的结构化 Atte CLI 写回；
 2. 当前 attempt 的原生 Hook 事件；
 3. Herdr 生命周期；
 4. Watchdog。
@@ -89,7 +89,7 @@ OMP 的模型与工具循环共用一个用户逻辑回合，不把每次 `turn_
 
 ## 隐私、可靠性与性能
 
-- 只有具备完整 `CREWVANE_GOAL_ID / ATTEMPT_ID / HOOK_TOKEN / AGENT_NAME / WORKSPACE` 的进程才会被接收；普通 Agent 会话为 no-op。
+- 只有具备完整 `ATTE_GOAL_ID / ATTEMPT_ID / HOOK_TOKEN / AGENT_NAME / WORKSPACE` 的进程才会被接收；普通 Agent 会话为 no-op。
 - Prompt 和最新回复每项最多保存 12,000 个 Unicode 字符；截断时同时保存原文 SHA-256。
 - 工具参数、工具输出和终端全文不入库。
 - Socket 连接失败或 500 ms 内不可用时不阻塞 Agent，转为私有离线队列。

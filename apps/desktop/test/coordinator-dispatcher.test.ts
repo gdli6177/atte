@@ -12,7 +12,7 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-coordinator-dispatch-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-coordinator-dispatch-"));
   roots.push(root);
   const inbox = await CoordinatorInbox.open(root);
   const events: string[] = [];

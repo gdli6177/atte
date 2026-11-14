@@ -47,28 +47,28 @@ export async function createLaunchFiles(
   };
   const body = [
     "umask 077",
-    "crewvane_herdr_session=${HERDR_SESSION:-}; crewvane_herdr_workspace=${HERDR_WORKSPACE_ID:-}; crewvane_herdr_tab=${HERDR_TAB_ID:-}; crewvane_herdr_pane=${HERDR_PANE_ID:-}",
-    "unset CREWVANE_COORDINATOR CREWVANE_COORDINATOR_SCOPE_FILE CREWVANE_HERDR_BINARY HERDR_ENV HERDR_SESSION HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_PANE_ID",
+    "atte_herdr_session=${HERDR_SESSION:-}; atte_herdr_workspace=${HERDR_WORKSPACE_ID:-}; atte_herdr_tab=${HERDR_TAB_ID:-}; atte_herdr_pane=${HERDR_PANE_ID:-}",
+    "unset ATTE_COORDINATOR ATTE_COORDINATOR_SCOPE_FILE ATTE_HERDR_BINARY CREWVANE_COORDINATOR CREWVANE_COORDINATOR_SCOPE_FILE CREWVANE_HERDR_BINARY HERDR_ENV HERDR_SESSION HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_PANE_ID",
     ...Object.entries(input.environment).map(([key, value]) => {
       if (!/^[A-Z][A-Z0-9_]*$/.test(key)) throw new Error("无效的启动环境字段。");
       return `export ${key}=${quoteShell(value)}${key === "PATH" ? ":$PATH" : ""}`;
     }),
-    ...(input.environment.CREWVANE_BACKEND === "herdr" ? [
-      'export HERDR_ENV=1 HERDR_SESSION="$crewvane_herdr_session" HERDR_WORKSPACE_ID="$crewvane_herdr_workspace" HERDR_TAB_ID="$crewvane_herdr_tab" HERDR_PANE_ID="$crewvane_herdr_pane"',
+    ...(input.environment.ATTE_BACKEND === "herdr" ? [
+      'export HERDR_ENV=1 HERDR_SESSION="$atte_herdr_session" HERDR_WORKSPACE_ID="$atte_herdr_workspace" HERDR_TAB_ID="$atte_herdr_tab" HERDR_PANE_ID="$atte_herdr_pane"',
     ] : []),
     `cd ${quoteShell(input.cwd)} || exit 1`,
-    "crewvane_process_birth=$(LC_ALL=C /bin/ps -p $$ -o lstart= | /usr/bin/sed 's/^ *//;s/ *$//')",
-    "crewvane_terminal_handle=${ORCA_TERMINAL_HANDLE:-}",
+    "atte_process_birth=$(LC_ALL=C /bin/ps -p $$ -o lstart= | /usr/bin/sed 's/^ *//;s/ *$//')",
+    "atte_terminal_handle=${ORCA_TERMINAL_HANDLE:-}",
     // Handle and birth-time are OS-owned inputs, but still validate before
     // putting them into the tiny JSON receipt. No prompt or token is included.
-    '[[ "$crewvane_terminal_handle" =~ \'^[A-Za-z0-9_-]+$\' ]] || crewvane_terminal_handle=""',
+    '[[ "$atte_terminal_handle" =~ \'^[A-Za-z0-9_-]+$\' ]] || atte_terminal_handle=""',
     ...["session", "workspace", "tab", "pane"].map(key =>
-      `[[ "$crewvane_herdr_${key}" =~ '^[A-Za-z0-9_:-]+$' ]] || crewvane_herdr_${key}=""`),
-    `printf ${quoteShell(JSON.stringify(fixed).slice(0, -1) + ',"pid":%s,"bornAt":"%s","terminalHandle":"%s","herdr":{"session":"%s","workspaceId":"%s","tabId":"%s","paneId":"%s"}}\\n')} "$$" "$crewvane_process_birth" "$crewvane_terminal_handle" "$crewvane_herdr_session" "$crewvane_herdr_workspace" "$crewvane_herdr_tab" "$crewvane_herdr_pane" > ${quoteShell(receiptPath + ".tmp")}`,
+      `[[ "$atte_herdr_${key}" =~ '^[A-Za-z0-9_:-]+$' ]] || atte_herdr_${key}=""`),
+    `printf ${quoteShell(JSON.stringify(fixed).slice(0, -1) + ',"pid":%s,"bornAt":"%s","terminalHandle":"%s","herdr":{"session":"%s","workspaceId":"%s","tabId":"%s","paneId":"%s"}}\\n')} "$$" "$atte_process_birth" "$atte_terminal_handle" "$atte_herdr_session" "$atte_herdr_workspace" "$atte_herdr_tab" "$atte_herdr_pane" > ${quoteShell(receiptPath + ".tmp")}`,
     `/bin/mv ${quoteShell(receiptPath + ".tmp")} ${quoteShell(receiptPath)}`,
     command,
-    "crewvane_exit_status=$?",
-    "exit $crewvane_exit_status",
+    "atte_exit_status=$?",
+    "exit $atte_exit_status",
     "",
   ].join("\n");
   await writeFile(launcherPath, body, { mode: 0o600, flag: "wx" });
