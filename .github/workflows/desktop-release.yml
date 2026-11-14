@@ -44,6 +44,15 @@ jobs:
       - run: pnpm test:task-pool
       - run: pnpm test:installers
       - run: pnpm test:terminal
+        env:
+          ATTE_KEEP_TEST_ARTIFACTS: '1'
+      - name: Upload terminal diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-smoke-diagnostics
+          path: /tmp/cv-terminal-*/
+          if-no-files-found: ignore
       - name: Run packaged-app onboarding with authenticated Herdr download
         run: pnpm test:onboarding
         env:

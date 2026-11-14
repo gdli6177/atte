@@ -166,14 +166,6 @@ try {
     const pasteStartedAt = Date.now();
     await writeSystemClipboard(pasteCommand);
     await textarea.focus();
-    await page.evaluate(() => {
-      window.terminalPasteEvents = [];
-      for (const type of ["keydown", "paste"])
-        document.addEventListener(type, event => window.terminalPasteEvents.push({
-          type, key: event.key, metaKey: event.metaKey, ctrlKey: event.ctrlKey,
-          defaultPrevented: event.defaultPrevented, target: event.target?.className,
-        }), { capture: true, once: type === "paste" });
-    });
     if (mode === "paste-event") {
       await page.evaluate((value) => {
         const target = document.querySelector(".xterm-helper-textarea");
@@ -203,7 +195,6 @@ try {
         return {
           focused: document.hasFocus(), visibility: document.visibilityState,
           activeElement: active ? `${active.tagName}.${active.className}` : null,
-          events: window.terminalPasteEvents,
           notice: document.querySelector(".terminal-clipboard-status")?.textContent,
           accessibilityTail: document.querySelector(".xterm-accessibility-tree")?.textContent?.slice(-2000),
           terminalTail: snapshot?.data?.slice(-2000), terminalSequence: snapshot?.sequence,
@@ -345,7 +336,9 @@ try {
   ] }));
 } catch (error) {
   if (app) await (await app.firstWindow()).screenshot({ path: join(home, "failure.png") }).catch(() => {});
-  console.error(JSON.stringify({ home, session, errors, error: String(error) }));
+  const applicationLog = join(home, "application.log");
+  await appendFile(applicationLog, applicationLogs.join("\n"));
+  console.error(JSON.stringify({ home, session, errors, error: String(error), applicationLog }));
   throw error;
 } finally {
   if (app) {
