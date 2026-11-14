@@ -2,7 +2,8 @@
 
 > 本页前半部分保留**第一轮** `codex/atte-rebrand` 的历史结果；第二轮改名、迁移、
 > 首页尺寸修正和设计备选以本页末尾“第二轮验收”及 [升级说明](../upgrade-atte.md)
-> 为准。第一轮中“保留 crewvane 标识”的描述已被拍板结果取代。
+> 为准。第三轮提交收尾、Six Vectors 标识与最终打包结果以“第三轮实际验证”为准。
+> 第一轮中“保留 crewvane 标识”的描述已被拍板结果取代。
 
 日期：2026-11-14。分支：`codex/atte-rebrand`。基线：`origin/main` 的
 `005549b`。本记录只写实际执行结果，不把准备资产或待批准方向写成最终定稿。
@@ -143,7 +144,7 @@ README 的 `docs/assets/atte-overview.png` 已人工查看；画面中的定位�
 单语「注意力中心」，且没有第二轮 UI 冒烟证据，因此只作为历史概览图，不作为
 本轮首页尺寸、双语文案或 UI 验收通过证据。
 
-## 收尾状态
+## 第二轮收尾状态（历史）
 
 三组上一轮遗留改动已生成独立补丁并通过 `git apply --cached --check`：
 `/tmp/atte-handoff-round2/01-home-mascot.diff`、
@@ -155,3 +156,111 @@ README 的 `docs/assets/atte-overview.png` 已人工查看；画面中的定位�
 旧标识审计允许保留迁移读取、旧锁、旧资产文件名、历史发布记录和测试夹具。
 当前新写入路径、命令示例、包名、插件 ID、环境变量文档与下载链接已改用 Atte；
 `docs/releases.md` 作为历史发布记录保留旧名。
+
+以上是第二轮收官时的真实状态。第三轮已按这些补丁拆分提交，并在提交后完成
+品牌、打包和安装器验证。
+
+## 第三轮实际验证
+
+日期：2026-11-14。分支：`codex/atte-rebrand`。基线：`origin/main` 的
+`005549b`。第三轮把工作树中的改名、迁移与三组遗留改动拆成 6 个主体提交，
+另追加 1 个 renderer 修复提交和本 QA 记录提交。`origin/main..HEAD` 还包含
+第一轮的 6 个历史提交，二者合计为最终分支范围。
+
+| Commit | 范围 |
+| --- | --- |
+| `535096d` | 核心状态、Session 标识与 `.crewvane` 兼容迁移 |
+| `a94f19d` | CLI `atte` 入口、安装器所有权检查与旧配置读取 |
+| `c8c6b5d` | Electron、IPC、托盘、打包与 Herdr 插件改名 |
+| `a61b94d` | 文档、Skills、设计评审与升级说明 |
+| `bff2bdb` | 改名、迁移、锁、安装器与升级兼容回归测试 |
+| `386cc08` | Six Vectors 品牌资产、图标生成与运行时挂点 |
+| `dd04176` | renderer 隔离 Node-only core 模块，并增加 import 边界测试 |
+
+提交前执行 `git diff --check`，无空白错误。`release/`、`node_modules/`、临时
+zip 与打包产物均未入库。
+
+### Six Vectors 接入
+
+只读源目录：
+`/Users/ligd/Library/Application Support/Cindy/owners/338adfc1f9f2cec58c46/bots/cindy-default/workspace/documents/codex-logo/atte-logo/final/`。
+
+- 品牌资产放入 `apps/desktop/assets/brand/`，统一使用 `atte-mark*`、
+  `atte-app-icon*`、`atte-wordmark*` 命名；品牌规范复制为
+  `docs/brand/six-vectors.md`。
+- 标识为 **Six Vectors**，角色插画仍为像素吉祥物；`docs/brand/README.md`
+  与 `apps/desktop/assets/brand/README.md` 已写明二者分工。
+- 仅使用品牌指南色：墨 `#171A1E`、暖白 `#F3F1EA`、琥珀 `#F5A524`、
+  图标底 `#14181B`。品牌资产测试会拒绝额外颜色。
+- 复用 `apps/desktop/scripts/build-icons.mjs` 生成：
+  `atte-app-icon-{32,64,128,256,512,1024}.png`、`atte-app-icon.icns`、
+  `atte-favicon-{16,32}.png`、`atte-tray-{16,32}.png` 与
+  `atte-tray-reversed-{16,32}.png`；`atte-assets.json` 记录来源与 SHA-256。
+- 应用图标、Dock、菜单栏、favicon、侧栏、关于页与 README 均使用新标识。
+  托盘随浅色/深色外观切换正向与反白版本。
+- 保留 `crewvane-mage.png`、`atte-mascot-baseline-512.png` 等像素吉祥物，
+  继续用于首页、首启和管家卡片；只移除了过渡期的
+  `atte-icon-baseline.*` 导出，不删除角色资产。
+
+### 通过项
+
+- `scripts/workspace-verify full`：通过。CLI 64/64、Core 168/168、
+  Sessions 71/71、Desktop 193/193；四个 workspace typecheck 与
+  `desktop:build` 均通过。日志：`/tmp/atte-r3-final-full.log`。
+- `pnpm desktop:build`：通过。日志：
+  `/tmp/atte-r3-final-desktop-build.log`。
+- `pnpm test:atte-ui`：通过，覆盖品牌、验收消息、失败发送、设置显式保存、
+  响应式与 reduced-motion。日志：`/tmp/atte-r3-final-ui.log`；截图目录为
+  脚本输出的临时 `atte-ui-*` 目录。
+- `pnpm desktop:package`（离线）：通过，产物
+  `apps/desktop/release/Atte-darwin-arm64/Atte.app`，版本 0.11.0。
+  `CFBundleDisplayName`、`CFBundleName`、`CFBundleExecutable` 均为
+  `Atte`，`CFBundleIdentifier` 为 `dev.atte.desktop`；bundle ICNS 与
+  `atte-app-icon.icns` 字节一致（SHA-256 均为
+  `6e08b7269ae802724e56f84a3194711874155804fa5dd2b02a409c08be8f1ee8`）。
+  `codesign --verify --deep --strict` 与包内 Herdr 签名均通过。日志：
+  `/tmp/atte-r3-final-desktop-package.log`。
+- Packager 会提示找不到 `.icon`（Icon Composer 格式）；该提示不影响
+  `.icns`，包内图标字节比较与 `CFBundleIconFile` 已确认实际使用新图标。
+- `pnpm desktop:dist`（离线）：通过，hdiutil 本轮未受限。
+  产物：
+  `Atte-0.11.0-macOS-arm64.dmg` SHA-256
+  `5c109fd3538acc2b065c9e0064040f90b9b67b874335838b1c67a141a75d06cb`；
+  `Atte-0.11.0-macOS-arm64.zip` SHA-256
+  `14996505f09e9f849f5499a3c09d671a39584e61fe1a62e24910db146f884f86`。
+  `SHA256SUMS.txt` 校验、`hdiutil verify` 与 ZIP 完整性检查均通过。日志：
+  `/tmp/atte-r3-final-desktop-dist.log`。
+- `pnpm test:installers`：通过。ZIP 与 DMG 两条路径都验证了隔离属性下签名
+  仍完整、包内新图标一致、内置 CLI 可安装并写入目标。日志：
+  `/tmp/atte-r3-final-installers.log`。
+
+### 环境限制与修复
+
+- 沙箱内 `tsx` 仍无法建立本地 IPC。复现命令：
+  `pnpm --dir apps/desktop exec tsx --test test/renderer-import-boundary.test.ts`；
+  错误为 `listen EPERM .../tsx-501/58605.pipe`。同一命令在沙箱外通过；
+  `full`、UI 与安装器测试也均在沙箱外执行。
+- 沙箱内 `iconutil` 会把有效 iconset 判为 `Invalid Iconset`。用生成后的
+  32–1024px PNG 重建临时 iconset 后执行
+  `iconutil -c icns /tmp/atte-iconutil-check.9WeLD2/Atte.iconset -o …` 仍失败；
+  同一 iconset 在沙箱外退出码为 0。未修改图标生成流程绕过该限制。
+- 首次 UI 冒烟发现打包应用 renderer 报
+  `AsyncLocalStorage is not a constructor`：`GoalAutonomySummary` 从 core
+  barrel 导入，导致 `node:async_hooks` 进入浏览器包。改为直接导入
+  `model.js` 与 `autonomy.js` 后，UI 冒烟、重新打包与安装器测试均通过。
+- 首次安装器冒烟还暴露了测试预检仍在查找完整 `ATTE_TEST_HOME` 字面量；
+  环境变量实际经 `environmentValue(...,"TEST_HOME")` 读取，已改为检查
+  `TEST_HOME` 并重跑通过。
+
+### 升级风险
+
+- CLI 没有 `crewvane` 别名；旧脚本、旧 Hook 配置和旧 Skill 安装位置需要改用
+  `atte` 或重新安装受管入口。
+- `.crewvane/`、`.crewvane-lock/`、`~/.crewvane/` 与 `appData/Crewvane`
+  只读兼容并复制迁移，不自动合并或删除。迁移失败会继续使用旧目录；迁移后
+  在 Atte 中的新写入不应假定旧版可读。
+- `ATTE_*` 优先，读取时回退 `CREWVANE_*`；受管子进程仍镜像旧名供旧 Hook 使用。
+- 旧 Herdr 插件 `dev.crewvane` 不会自动删除，也不会再被写入；新插件为
+  `dev.atte`。旧 Session 按兼容身份恢复，已退出或已存在的场景不会因改名重开。
+- 当前产物是 ad-hoc 签名，不是 Developer ID 签名，也未公证；首次打开仍可能
+  需要系统“仍要打开”，分发前应完成正式签名与公证。
