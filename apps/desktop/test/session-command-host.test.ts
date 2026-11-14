@@ -80,11 +80,11 @@ test("the real owner-launch CLI works when the Agent cannot execute ps", { skip:
     "-p", policy, process.execPath, "--import", "tsx", "cli/src/main.ts",
     "owner", "launch", f.goal.id, "--name", "owner-sandbox", "--root", f.workspace, "--json",
   ], { cwd: new URL("../../../", import.meta.url), timeout: 10_000, env: {
-    ...process.env, HOME: f.root, CREWVANE_WORKSPACE: f.workspace,
-    CREWVANE_AGENT_NAME: "concierge", CREWVANE_COORDINATOR: "1",
-    CREWVANE_SESSION_CONTEXT: JSON.stringify(f.context),
-    CREWVANE_CONTROL_DIRECTORY: f.control.directory, CREWVANE_CLI_DIRECTORY: join(f.root, "bin"),
-    CREWVANE_COORDINATOR_SCOPE_FILE: join(f.workspace, ".crewvane", "coordinator-scope.json"),
+    ...process.env, HOME: f.root, ATTE_WORKSPACE: f.workspace,
+    ATTE_AGENT_NAME: "concierge", ATTE_COORDINATOR: "1",
+    ATTE_SESSION_CONTEXT: JSON.stringify(f.context),
+    ATTE_CONTROL_DIRECTORY: f.control.directory, ATTE_CLI_DIRECTORY: join(f.root, "bin"),
+    ATTE_COORDINATOR_SCOPE_FILE: join(f.workspace, ".atte", "coordinator-scope.json"),
   } });
   assert.equal(JSON.parse(result.stdout).goalId, f.goal.id);
   assert.equal(f.calls(), 1);

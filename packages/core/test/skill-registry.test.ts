@@ -6,6 +6,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -15,8 +16,22 @@ import { join } from "node:path";
 import {
   SkillRegistry,
   WorkspaceService,
+  parseSkillManifest,
+  prepareWorkspaceState,
   type Goal,
 } from "../src/index.js";
+
+test("a legacy minimumCrewvane manifest remains installable", () => {
+  const parsed = parseSkillManifest({
+    schemaVersion: 1, id: "acme.legacy", name: "旧能力包", description: "兼容旧版清单",
+    version: "1.0.0", minimumCrewvane: "0.10.0", kind: "process", roles: ["owner"],
+  }, "0.11.0");
+  assert.equal(parsed.minimumAtte, "0.10.0");
+  assert.throws(() => parseSkillManifest({
+    schemaVersion: 1, id: "acme.future", name: "未来能力包", description: "仍需拒绝过新版本",
+    version: "1.0.0", minimumCrewvane: "99.0.0", kind: "process", roles: ["owner"],
+  }, "0.11.0"), /需要 Atte 99\.0\.0/);
+});
 
 const fixtures: string[] = [];
 
@@ -25,7 +40,7 @@ afterEach(async () => {
     rm(root, { recursive: true, force: true })));
 });
 
-async function fixture(prefix = "crewvane-skill-") {
+async function fixture(prefix = "atte-skill-") {
   const root = await mkdtemp(join(tmpdir(), prefix));
   fixtures.push(root);
   return {
@@ -34,6 +49,23 @@ async function fixture(prefix = "crewvane-skill-") {
     registry: new SkillRegistry(root, "0.10.0"),
   };
 }
+
+test("migrated local methods retain their digest and legacy script approvals", async () => {
+  const { root, registry } = await fixture();
+  const source = await createPack(root, { script: "#!/bin/sh\nprintf approved\n" });
+  const installed = await registry.install(source, { approveScripts: ["inspect"] });
+  const pack = join(root, ".atte", "skills", installed.id);
+  await rename(join(pack, ".atte-install.json"), join(pack, ".crewvane-install.json"));
+  await rename(join(root, ".atte"), join(root, ".crewvane"));
+  await prepareWorkspaceState(root);
+  const migrated = await registry.show(installed.id);
+  assert.equal(migrated.status, "ready");
+  assert.equal(migrated.digest, installed.digest);
+  assert.equal(migrated.scripts[0]?.approved, true);
+  assert.equal((await registry.disable(installed.id)).status, "disabled");
+  assert.equal((await registry.disable(installed.id, false)).status, "ready");
+  assert.equal((await registry.approveScripts(installed.id, ["inspect"])).digest, installed.digest);
+});
 
 async function createPack(
   root: string,
@@ -83,7 +115,7 @@ async function createPack(
     name: "发布前评审",
     description: "发布前需要复核真实边界和证据时使用。",
     version,
-    minimumCrewvane: "0.10.0",
+    minimumAtte: "0.10.0",
     kind: "process",
     roles: options.roles ?? ["owner", "verifier"],
     entry: "SKILL.md",
@@ -120,7 +152,7 @@ test("built-in context is private from list output and resolves by role and goal
 
   const listed = await registry.list();
   assert.equal(JSON.stringify(listed).includes("Atte Core 约束"), false);
-  assert.equal((await registry.show("crewvane.concierge") as { content?: string }).content?.includes("控制面管家"), true);
+  assert.equal((await registry.show("atte.concierge") as { content?: string }).content?.includes("控制面管家"), true);
   const saved = (await service.read()).goals[0]!,
     owner = await registry.resolve(saved, "owner"),
     verifier = await registry.resolve(saved, "verifier");
@@ -131,12 +163,12 @@ test("built-in context is private from list output and resolves by role and goal
   assert.match(owner.text, /核对真实输入与可复现证据/);
   assert.deepEqual(
     owner.packs.map(pack => pack.id),
-    ["crewvane.owner", "crewvane.process.discovery", "acme.review"],
+    ["atte.owner", "atte.process.discovery", "acme.review"],
   );
   assert.doesNotMatch(verifier.text, /先检查真实输入/);
   assert.deepEqual(
     verifier.packs.map(pack => pack.id),
-    ["crewvane.verifier", "crewvane.process.discovery"],
+    ["atte.verifier", "atte.process.discovery"],
   );
 
   const concierge = await registry.resolve(saved, "concierge");
@@ -146,7 +178,7 @@ test("built-in context is private from list output and resolves by role and goal
   assert.doesNotMatch(concierge.text, /标准交付流程|探索研究流程/);
   assert.deepEqual(
     concierge.packs.map(pack => pack.id),
-    ["crewvane.concierge", "crewvane.agent-setup", "crewvane.herdr-recovery"],
+    ["atte.concierge", "atte.agent-setup", "atte.herdr-recovery"],
   );
   const preview = await registry.validate(source);
   assert.deepEqual(
@@ -255,7 +287,7 @@ test("script approval is bound to content, invalidates on upgrade, and never cha
 
 test("manifest validation rejects reserved names, traversal, mismatched scripts, symlinks and oversized packs", async () => {
   const { root, registry } = await fixture(),
-    reserved = await createPack(root, { id: "crewvane.custom" });
+    reserved = await createPack(root, { id: "atte.custom" });
   await assert.rejects(registry.validate(reserved), /保留/);
 
   await rm(reserved, { recursive: true, force: true });
@@ -266,24 +298,24 @@ test("manifest validation rejects reserved names, traversal, mismatched scripts,
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   await assert.rejects(registry.validate(traversal), /目录内/);
 
-  const mismatchRoot = await fixture("crewvane-skill-mismatch-"),
+  const mismatchRoot = await fixture("atte-skill-mismatch-"),
     mismatch = await createPack(mismatchRoot.root, {
       script: "#!/bin/sh\nprintf ok\n",
       scriptDigest: "0".repeat(64),
     });
   await assert.rejects(mismatchRoot.registry.validate(mismatch), /SHA-256/);
 
-  const linkRoot = await fixture("crewvane-skill-link-"),
+  const linkRoot = await fixture("atte-skill-link-"),
     linked = await createPack(linkRoot.root);
   await symlink("/tmp/outside", join(linked, "references/outside"));
   await assert.rejects(linkRoot.registry.validate(linked), /符号链接/);
 
-  const binaryRoot = await fixture("crewvane-skill-binary-"),
+  const binaryRoot = await fixture("atte-skill-binary-"),
     binary = await createPack(binaryRoot.root);
   await writeFile(join(binary, "references/checklist.md"), Buffer.from([0, 1, 2, 3]));
   await assert.rejects(binaryRoot.registry.validate(binary), /必须是文本/);
 
-  const oversizedRoot = await fixture("crewvane-skill-reference-size-"),
+  const oversizedRoot = await fixture("atte-skill-reference-size-"),
     oversized = await createPack(oversizedRoot.root);
   await writeFile(
     join(oversized, "references/checklist.md"),
@@ -291,7 +323,7 @@ test("manifest validation rejects reserved names, traversal, mismatched scripts,
   );
   await assert.rejects(oversizedRoot.registry.validate(oversized), /引用文件.*字符/);
 
-  const largeRoot = await fixture("crewvane-skill-large-"),
+  const largeRoot = await fixture("atte-skill-large-"),
     large = await createPack(largeRoot.root);
   await writeFile(join(large, "large.bin"), Buffer.alloc(5 * 1024 * 1024 + 1));
   await assert.rejects(largeRoot.registry.validate(large), /5 MB/);

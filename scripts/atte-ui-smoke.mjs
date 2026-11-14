@@ -22,11 +22,11 @@ const reviewed = await service.execute({
     checks: [{ name: "交互回归", command: "pnpm test:atte-ui", result: "passed" }],
   },
 });
-const appPath = resolve(process.env.CREWVANE_APP_PATH ??
+const appPath = resolve(process.env.ATTE_APP_PATH ??
   "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte");
 const application = await electron.launch({
   executablePath: appPath,
-  args: [...(process.env.CREWVANE_ATTE_UI_HOLD === "1"
+  args: [...(process.env.ATTE_ATTE_UI_HOLD === "1"
     ? ["--remote-debugging-port=9338"] : [])],
   env: {
     ...process.env,
@@ -34,11 +34,11 @@ const application = await electron.launch({
     XDG_CONFIG_HOME: join(home, ".config"),
     XDG_STATE_HOME: join(home, ".local/state"),
     PATH: "/usr/bin:/bin",
-    CREWVANE_TEST_HOME: home,
-    CREWVANE_TEST_USER_DATA: join(home, "userData"),
-    CREWVANE_TEST_WORKSPACE: workspace,
-    CREWVANE_TEST_ISOLATE_TOOLS: "1",
-    CREWVANE_TEST_SKIP_HERDR_SETUP: "1",
+    ATTE_TEST_HOME: home,
+    ATTE_TEST_USER_DATA: join(home, "userData"),
+    ATTE_TEST_WORKSPACE: workspace,
+    ATTE_TEST_ISOLATE_TOOLS: "1",
+    ATTE_TEST_SKIP_HERDR_SETUP: "1",
   },
   timeout: 60_000,
 });
@@ -63,7 +63,7 @@ try {
 
   async function theme(value) {
     await page.evaluate(next => {
-      localStorage.setItem("crewvane.theme", next);
+      localStorage.setItem("atte.theme", next);
     }, value);
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", value);
@@ -102,6 +102,8 @@ try {
       });
       assert.ok(layout.scrollWidth <= width + 1, JSON.stringify(layout));
       assert.equal(Boolean(layout.titleClipped), false);
+      assert.equal(layout.markVisible, width === 1440, JSON.stringify(layout));
+      if (layout.markVisible) assert.equal(layout.markWidth, 96, JSON.stringify(layout));
       assert.equal(layout.markClipped, false);
       assert.equal(layout.overlapsTitle, false);
       measurements.push({ theme: value, height, ...layout });
@@ -128,7 +130,7 @@ try {
     await expect(appearance.getByText("有未保存的更改", { exact: true })).toBeVisible();
     await appearance.getByRole("button", { name: "保存外观", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", next);
-    assert.equal(await page.evaluate(() => localStorage.getItem("crewvane.theme")), next);
+    assert.equal(await page.evaluate(() => localStorage.getItem("atte.theme")), next);
     await theme(value);
     await page.getByRole("button", { name: "设置", exact: true }).click();
     await capture(`settings-${value}`);
@@ -142,11 +144,11 @@ try {
     await scene.getByRole("button", { name: "内嵌轻现场", exact: true }).click();
     await expect(scene.getByRole("button", { name: "保存工作现场", exact: true })).toBeEnabled();
     await expect(scene.getByRole("button", { name: "测试打开现场", exact: true })).toBeDisabled();
-    const originalScene = await page.evaluate(() => window.crewvane.sceneSettings());
+    const originalScene = await page.evaluate(() => window.atte.sceneSettings());
     assert.notEqual(originalScene.settings.openWith, "embedded");
     await scene.getByRole("button", { name: "保存工作现场", exact: true }).click();
     await expect(scene.getByRole("button", { name: "保存工作现场", exact: true })).toBeDisabled();
-    assert.equal((await page.evaluate(() => window.crewvane.sceneSettings())).settings.openWith, "embedded");
+    assert.equal((await page.evaluate(() => window.atte.sceneSettings())).settings.openWith, "embedded");
     await scene.getByRole("button", { name: "外部终端（推荐）", exact: true }).click();
     await scene.getByRole("button", { name: "保存工作现场", exact: true }).click();
     await expect(scene.getByRole("button", { name: "保存工作现场", exact: true })).toBeDisabled();
@@ -180,7 +182,7 @@ try {
   assert.deepEqual(errors, []);
   await writeFile(join(artifacts, "results.json"), JSON.stringify({ native, measurements, errors }, null, 2));
   console.log(JSON.stringify({ result: "passed", artifacts, checks: ["branding", "review-message", "failed-send", "acceptance", "settings-save", "responsive", "reduced-motion"] }));
-  if (process.env.CREWVANE_ATTE_UI_HOLD === "1") {
+  if (process.env.ATTE_ATTE_UI_HOLD === "1") {
     console.log("Inspection ready on CDP 9338; send a newline to close.");
     await new Promise(resolveInput => process.stdin.once("data", resolveInput));
   }

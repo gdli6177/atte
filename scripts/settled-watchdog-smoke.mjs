@@ -16,7 +16,7 @@ await writeFile(join(workspace, "AGENTS.md"), `# 隔离验收
 管家只协调，不能自己执行目标。
 `);
 const service = new WorkspaceService(workspace);
-const agent = process.env.CREWVANE_TRIAL_AGENT ||
+const agent = process.env.ATTE_TRIAL_AGENT ||
   "omp";
 await service.execute({ type:"agents.configure", preferences:{ concierge:agent, owner:agent } });
 await service.execute({
@@ -26,9 +26,9 @@ await service.execute({
   actor: "你",
 });
 const app = await electron.launch({
-  executablePath:resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
-  env:{ ...process.env, CREWVANE_TEST_HOME:home, CREWVANE_TEST_USER_DATA:join(trial,"userData"),
-    CREWVANE_TEST_WORKSPACE:workspace, CREWVANE_HERDR_SESSION:session,
+  executablePath:resolve(process.env.ATTE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
+  env:{ ...process.env, ATTE_TEST_HOME:home, ATTE_TEST_USER_DATA:join(trial,"userData"),
+    ATTE_TEST_WORKSPACE:workspace, ATTE_HERDR_SESSION:session,
     PI_CODING_AGENT_DIR:process.env.PI_CODING_AGENT_DIR || join(homedir(),".omp/agent") },
   timeout:60_000,
 });
@@ -45,8 +45,8 @@ async function herdr(args, timeout=20_000) {
 }
 let goal;
 try {
-  await expect.poll(async () => (await page.evaluate(() => window.crewvane.environment())).workspace).toBe(workspace);
-  goal = await page.evaluate(() => window.crewvane.command({ type:"goal.intake", text:
+  await expect.poll(async () => (await page.evaluate(() => window.atte.environment())).workspace).toBe(workspace);
+  goal = await page.evaluate(() => window.atte.command({ type:"goal.intake", text:
     "隔离回归：请安排独立负责人处理一个方案选择。负责人第一轮必须先实际执行 shell 命令 `sleep 60`，模拟长时间处理；然后只在终端写出“阶段结果已产出”并结束回合，不要调用 goal progress、wait、decide 或 review，模拟遗漏写回。在收到管家关于空闲未汇报的核实时，不要重新执行 sleep；直接用 goal decide 提出一个具体问题“是否采用方案 A 继续？”，然后结束回合等待用户。",
   }));
   console.log(JSON.stringify({step:"delegated",trial,session,goalId:goal.id}));

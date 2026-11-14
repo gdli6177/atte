@@ -11,7 +11,7 @@ function digest(bytes: Buffer) {
 }
 
 test("version probing never mutates the supplied or cached Herdr binary", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-prepare-herdr-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-prepare-herdr-"));
   const source = join(root, "source-herdr");
   try {
     await writeFile(
@@ -22,8 +22,8 @@ test("version probing never mutates the supplied or cached Herdr binary", async 
     const expected = digest(await readFile(source));
 
     const cached = await prepareHerdr({
-      CREWVANE_HERDR_BINARY: source,
-      CREWVANE_HERDR_CACHE_DIR: join(root, "cache"),
+      ATTE_HERDR_BINARY: source,
+      ATTE_HERDR_CACHE_DIR: join(root, "cache"),
     });
 
     assert.equal(digest(await readFile(source)), expected);
@@ -35,7 +35,7 @@ test("version probing never mutates the supplied or cached Herdr binary", async 
 });
 
 test("authenticated release downloads keep digest and version verification", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-prepare-herdr-auth-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-prepare-herdr-auth-"));
   const originalFetch = globalThis.fetch;
   const target = process.platform === "darwin"
     ? `macos-${process.arch === "arm64" ? "aarch64" : "x86_64"}`
@@ -65,7 +65,7 @@ test("authenticated release downloads keep digest and version verification", asy
   try {
     const cached = await prepareHerdr({
       GITHUB_TOKEN: "test-token",
-      CREWVANE_HERDR_CACHE_DIR: join(root, "cache"),
+      ATTE_HERDR_CACHE_DIR: join(root, "cache"),
     });
 
     assert.deepEqual(await readFile(cached), bytes);

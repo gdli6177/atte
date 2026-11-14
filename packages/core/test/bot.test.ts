@@ -10,7 +10,7 @@ afterEach(async () => {
   await Promise.all(fixtures.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-bot-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-bot-"));
   fixtures.push(root);
   return { root, service: new WorkspaceService(root) };
 }
@@ -29,7 +29,7 @@ test("local initiator Bot uses the shared goal protocol idempotently and cannot 
     },
   });
   const envelope = {
-    schema: "crewvane.bot.v1" as const,
+    schema: "atte.bot.v1" as const,
     requestId: "req-1",
     operation: "goal.submit" as const,
     botId: "bot_demo",
@@ -49,7 +49,7 @@ test("local initiator Bot uses the shared goal protocol idempotently and cannot 
   assert.equal(duplicate.goal?.id, first.result.id);
   const read = await service.execute({
     type: "bot.request",
-    schema: "crewvane.bot.v1",
+    schema: "atte.bot.v1",
     requestId: "req-2",
     operation: "goal.read",
     botId: "bot_demo",
@@ -58,7 +58,7 @@ test("local initiator Bot uses the shared goal protocol idempotently and cannot 
   assert.equal(read.result.id, first.result.id);
   await assert.rejects(service.execute({
     type: "bot.request",
-    schema: "crewvane.bot.v1",
+    schema: "atte.bot.v1",
     requestId: "req-3",
     operation: "goal.checkpoint",
     botId: "bot_demo",
@@ -74,6 +74,23 @@ test("local initiator Bot uses the shared goal protocol idempotently and cannot 
     note: "Bot 自己批准",
     actor: "bot_demo",
   }), /由人/);
+});
+
+test("legacy Bot envelopes are accepted and answered using the new schema", async () => {
+  const { service } = await fixture();
+  await service.execute({
+    type: "bot.binding.set", actor: "你", binding: {
+      id: "bot_legacy", name: "Legacy Bot", role: "initiator", projectIds: ["personal"],
+      operations: ["goal.submit"], expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+    },
+  });
+  const response = await service.execute({
+    type: "bot.request", schema: "crewvane.bot.v1", requestId: "legacy-req",
+    operation: "goal.submit", botId: "bot_legacy",
+    payload: { text: "旧 Bot 协议目标", projectId: "personal" },
+  } as unknown as Parameters<WorkspaceService["execute"]>[0]) as { schema: string; result: Goal };
+  assert.equal(response.schema, "atte.bot.v1");
+  assert.equal(response.result.title, "旧 Bot 协议目标");
 });
 
 test("Bot bindings are human-created, initiator-only, project-scoped and revocable", async () => {
@@ -121,7 +138,7 @@ test("Bot bindings are human-created, initiator-only, project-scoped and revocab
   });
   await assert.rejects(service.execute({
     type: "bot.request",
-    schema: "crewvane.bot.v1",
+    schema: "atte.bot.v1",
     requestId: "req-revoked",
     operation: "goal.read",
     botId: "bot_read",
@@ -145,7 +162,7 @@ test("concurrent duplicate Bot requests reserve one receipt and create at most o
   });
   const request = {
     type: "bot.request" as const,
-    schema: "crewvane.bot.v1" as const,
+    schema: "atte.bot.v1" as const,
     requestId: "same-request",
     operation: "goal.submit" as const,
     botId: "bot_concurrent",

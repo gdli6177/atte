@@ -14,7 +14,7 @@ afterEach(async () => {
   await Promise.all(fixtures.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-release-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-release-"));
   fixtures.push(root);
   return { root, service: new WorkspaceService(root) };
 }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import {
   WorkspaceService, attentionGoals, attentionRequest, taskPoolGoals,
-  importAttachmentBytes, type Goal, type CrewvaneCommand,
+  importAttachmentBytes, type Goal, type AtteCommand,
 } from "../src/index.js";
 
 const roots: string[] = [];
@@ -39,7 +39,7 @@ test("notes and progress APIs cannot silently authorize a deferred goal", async 
   await service.execute({ type: "goal.message", goalId: item.id, text: "先把背景记录下来。" });
   await service.execute({ type: "goal.direct", goalId: item.id, text: "从终端继续记一条背景，不开始。" });
   await service.execute({ type: "goal.update", goalId: item.id, patch: { description: "保留这些补充背景" } });
-  const commands: CrewvaneCommand[] = [
+  const commands: AtteCommand[] = [
     { type: "goal.message", goalId: item.id, text: "普通补充", routeToConcierge: true },
     { type: "goal.progress", goalId: item.id, summary: "偷偷开始执行" },
     { type: "goal.update", goalId: item.id, patch: { status: "active" } },

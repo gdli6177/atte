@@ -21,20 +21,20 @@ function percentile(values: number[], target: number) {
 }
 
 async function workspace() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-hook-performance-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-hook-performance-"));
   roots.push(root);
   return root;
 }
 
 function environment(root: string, socket: string): NodeJS.ProcessEnv {
   return {
-    CREWVANE_GOAL_ID: "goal-performance",
-    CREWVANE_ATTEMPT_ID: "attempt-performance",
-    CREWVANE_HOOK_TOKEN: "performance-token",
-    CREWVANE_AGENT_NAME: "owner-performance",
-    CREWVANE_WORKSPACE: root,
-    CREWVANE_HOOK_SOCKET: socket,
-    CREWVANE_HOOK_SPOOL: join(root, ".crewvane", "runtime", "spool"),
+    ATTE_GOAL_ID: "goal-performance",
+    ATTE_ATTEMPT_ID: "attempt-performance",
+    ATTE_HOOK_TOKEN: "performance-token",
+    ATTE_AGENT_NAME: "owner-performance",
+    ATTE_WORKSPACE: root,
+    ATTE_HOOK_SOCKET: socket,
+    ATTE_HOOK_SPOOL: join(root, ".atte", "runtime", "spool"),
   };
 }
 

@@ -10,7 +10,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 async function waiting() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-waiting-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-waiting-"));
   roots.push(root);
   const service = new WorkspaceService(root);
   const goal = await service.execute({ type: "goal.create", input: {

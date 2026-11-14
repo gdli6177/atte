@@ -17,7 +17,7 @@ import { inspectWatchdog } from "../../../packages/core/src/watchdog.ts";
 import { pendingSceneReply } from "../../../packages/core/src/model.ts";
 
 async function fixture() {
-  return mkdtemp(join(tmpdir(), "crewvane-goal-presentation-"));
+  return mkdtemp(join(tmpdir(), "atte-goal-presentation-"));
 }
 
 test("dispatch failure is presented as contact failure, not owner intervention", async () => {

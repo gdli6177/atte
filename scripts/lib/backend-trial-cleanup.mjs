@@ -116,12 +116,12 @@ export async function cleanupBackendTrial(trial, executable, environment) {
     const profile = environment.ORCA_USER_DATA_PATH;
     if (!profile?.startsWith("/private/tmp/")) return;
     if (!await access(profile).then(() => true, () => false)) return;
-    const orcaApp = environment.CREWVANE_TEST_ORCA_APP || configuration?.orcaAppPath || "/Applications/Orca.app";
+    const orcaApp = environment.ATTE_TEST_ORCA_APP || configuration?.orcaAppPath || "/Applications/Orca.app";
     const orca = join(orcaApp, "Contents/Resources/bin/orca");
     const scope = {
       ...environment,
-      ...(environment.CREWVANE_ORCA_HOST_HOME
-        ? { HOME: environment.CREWVANE_ORCA_HOST_HOME }
+      ...(environment.ATTE_ORCA_HOST_HOME
+        ? { HOME: environment.ATTE_ORCA_HOST_HOME }
         : {}),
       ORCA_USER_DATA_PATH: profile,
     };

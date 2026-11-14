@@ -12,8 +12,8 @@ import { setTimeout as delay } from "node:timers/promises";
 const root = await realpath(await mkdtemp("/tmp/cv-hc-"));
 const cwd = join(root, "个人 事项"), zdotdir = join(root, "zsh");
 await Promise.all([mkdir(cwd), mkdir(zdotdir)]);
-const executable = process.env.CREWVANE_TEST_HERDR_BINARY;
-assert(executable, "Pass CREWVANE_TEST_HERDR_BINARY pointing to the tested Herdr binary.");
+const executable = process.env.ATTE_TEST_HERDR_BINARY;
+assert(executable, "Pass ATTE_TEST_HERDR_BINARY pointing to the tested Herdr binary.");
 const session = `cv-${randomUUID().slice(0, 8)}`;
 const environment = { ...process.env, HOME: root, XDG_CONFIG_HOME: join(root, "c"), XDG_STATE_HOME: join(root, "s") };
 const binary = join(root, "fixture.cjs"), inputFile = join(root, "input.bin"), factsFile = join(root, "facts.json");
@@ -21,7 +21,7 @@ await writeFile(binary, `
 const fs = require("node:fs");
 fs.writeFileSync(${JSON.stringify(inputFile)}, "");
 fs.writeFileSync(${JSON.stringify(factsFile)},JSON.stringify({
-  cwd:process.cwd(),args:process.argv.slice(2),goal:process.env.CREWVANE_GOAL_ID,pane:process.env.HERDR_PANE_ID
+  cwd:process.cwd(),args:process.argv.slice(2),goal:process.env.ATTE_GOAL_ID,pane:process.env.HERDR_PANE_ID
 }));
 process.stdin.setRawMode(true); process.stdin.resume();
 process.stdout.write("Fixture ready\\r\\n");
@@ -55,7 +55,7 @@ try {
   const files = await createLaunchFiles(join(root, "control"), {
     requestId, bindingId, attemptId, installationId: "contract-test", backendEpoch: 0,
     cwd, executable: "cursor-2", args: ["test 中文"],
-    environment: { CREWVANE_BACKEND: "herdr", CREWVANE_GOAL_ID: "test-goal" },
+    environment: { ATTE_BACKEND: "herdr", ATTE_GOAL_ID: "test-goal" },
   });
   const request = { requestId, bindingId, attemptId, installationId: "contract-test", backendEpoch: 0,
     role: "owner", cwd, title: "Atte private contract", ...files };

@@ -48,7 +48,7 @@ test("v3 migration backs up bytes before v4 and never invents runtime identity",
     })),
   };
   const raw = JSON.stringify(legacy);
-  await writeFile(join(root, ".crewvane/state.json"), raw);
+  await writeFile(join(root, ".atte/state.json"), raw);
   const migrated = await new WorkspaceStore(root).read();
   assert.equal(migrated.version, 4);
   assert.equal(migrated.backendEpoch, 0);
@@ -59,14 +59,14 @@ test("v3 migration backs up bytes before v4 and never invents runtime identity",
   assert.equal(migrated.goals[0]?.legacyScene?.verification, "unverified");
   assert.equal(migrated.goals[0]?.legacyScene?.reference.paneId, "w1:p1");
   assert.equal(migrated.goals[0]?.herdr, undefined);
-  assert.equal(await readFile(join(root, ".crewvane/state.v3.backup.json"), "utf8"), raw);
+  assert.equal(await readFile(join(root, ".atte/state.v3.backup.json"), "utf8"), raw);
   assert.deepEqual(await service.read(), migrated);
 });
 test("backup conflict or unsafe backup stops migration without overwriting the snapshot", async t => {
   const { root, service } = await fixture(t);
   const raw = JSON.stringify({ ...await service.read(), version: 3 });
-  const stateFile = join(root, ".crewvane/state.json");
-  const backup = join(root, ".crewvane/state.v3.backup.json");
+  const stateFile = join(root, ".atte/state.json");
+  const backup = join(root, ".atte/state.v3.backup.json");
   await writeFile(stateFile, raw);
   await writeFile(backup, "{}");
   await assert.rejects(service.read(), /备份/);

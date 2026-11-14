@@ -37,7 +37,7 @@ async function webhookServer() {
 }
 
 test("persists a private webhook config without returning its secret URL or token", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "crewvane-webhook-config-"));
+  const directory = await mkdtemp(join(tmpdir(), "atte-webhook-config-"));
   try {
     const notifier = new WebhookNotifier(directory, "0.5.0");
     const settings = await notifier.save({
@@ -59,7 +59,7 @@ test("persists a private webhook config without returning its secret URL or toke
 });
 
 test("rejects insecure remote endpoints", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "crewvane-webhook-config-"));
+  const directory = await mkdtemp(join(tmpdir(), "atte-webhook-config-"));
   try {
     const notifier = new WebhookNotifier(directory, "0.5.0");
     await assert.rejects(
@@ -72,7 +72,7 @@ test("rejects insecure remote endpoints", async () => {
 });
 
 test("delivers an attention event once, sends the configured bearer token, and retries failures after backoff", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "crewvane-webhook-delivery-")),
+  const directory = await mkdtemp(join(tmpdir(), "atte-webhook-delivery-")),
     hook = await webhookServer();
   try {
     let now = new Date("2026-11-04T10:00:00.000Z");
@@ -104,7 +104,7 @@ test("delivers an attention event once, sends the configured bearer token, and r
     assert.deepEqual(await notifier.deliver(notification), { sent: false, reason: "duplicate" });
     assert.equal(hook.received.length, 1);
     assert.equal(hook.received[0]?.headers.authorization, "Bearer test-token");
-    assert.equal(hook.received[0]?.headers["x-crewvane-event"], "attention.required");
+    assert.equal(hook.received[0]?.headers["x-atte-event"], "attention.required");
     assert.equal(hook.received[0]?.body.goal.id, "goal_webhook");
     assert.equal(hook.received[0]?.body.goal.summary, "定价负责人提交了两档方案");
     assert.equal(hook.received[0]?.body.action.goalId, "goal_webhook");
@@ -131,7 +131,7 @@ test("delivers an attention event once, sends the configured bearer token, and r
 });
 
 test("delivers deduplicated goal status changes with the previous and current state", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "crewvane-webhook-status-")),
+  const directory = await mkdtemp(join(tmpdir(), "atte-webhook-status-")),
     hook = await webhookServer();
   try {
     const notifier = new WebhookNotifier(directory, "0.5.1");
@@ -173,7 +173,7 @@ test("delivers deduplicated goal status changes with the previous and current st
     assert.deepEqual(await notifier.deliverStatusChange(notification), { sent: false, reason: "duplicate" });
     assert.equal(hook.received.length, 1);
     assert.equal(hook.received[0]?.headers.authorization, "Bearer status-token");
-    assert.equal(hook.received[0]?.headers["x-crewvane-event"], "goal.status_changed");
+    assert.equal(hook.received[0]?.headers["x-atte-event"], "goal.status_changed");
     assert.equal(hook.received[0]?.body.goal.previousStatus, "active");
     assert.equal(hook.received[0]?.body.goal.status, "waiting");
     assert.equal(hook.received[0]?.body.goal.waitingFor, "法务");
@@ -192,7 +192,7 @@ test("delivers deduplicated goal status changes with the previous and current st
 });
 
 test("uses Feishu's bot payload and treats a non-zero business code as a delivery failure", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "crewvane-webhook-feishu-"));
+  const directory = await mkdtemp(join(tmpdir(), "atte-webhook-feishu-"));
   try {
     const requests: Record<string, any>[] = [];
     let responseBody: Record<string, unknown> = { code: 0, msg: "success" };
@@ -265,7 +265,7 @@ test("uses Feishu's bot payload and treats a non-zero business code as a deliver
 });
 
 test("uses WeCom's robot payload and surfaces a non-zero errcode", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "crewvane-webhook-wecom-"));
+  const directory = await mkdtemp(join(tmpdir(), "atte-webhook-wecom-"));
   try {
     const requests: Record<string, any>[] = [];
     let responseBody = { errcode: 0, errmsg: "ok" };
@@ -328,8 +328,8 @@ test("uses WeCom's robot payload and surfaces a non-zero errcode", async () => {
 });
 
 test("a due follow-up posts once even after notification.sent stamps the attention time", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "crewvane-webhook-follow-up-")),
-    root = await mkdtemp(join(tmpdir(), "crewvane-webhook-follow-up-workspace-")),
+  const directory = await mkdtemp(join(tmpdir(), "atte-webhook-follow-up-")),
+    root = await mkdtemp(join(tmpdir(), "atte-webhook-follow-up-workspace-")),
     hook = await webhookServer();
   try {
     const service = new WorkspaceService(root),
@@ -380,7 +380,7 @@ test("a due follow-up posts once even after notification.sent stamps the attenti
 });
 
 test("a transition into review sends one WeCom message instead of duplicating status and attention", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "crewvane-webhook-wecom-dedup-"));
+  const directory = await mkdtemp(join(tmpdir(), "atte-webhook-wecom-dedup-"));
   try {
     const requests: Record<string, any>[] = [];
     const notifier = new WebhookNotifier(

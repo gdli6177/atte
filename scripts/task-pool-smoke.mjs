@@ -20,12 +20,12 @@ const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 const errors = [];
 async function launch() {
   const app = await electron.launch({
-    executablePath: resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
+    executablePath: resolve(process.env.ATTE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     args: [],
     env: {
-      ...process.env, CREWVANE_TEST_USER_DATA: join(home, "userData"),
-      CREWVANE_TEST_HOME: home, CREWVANE_TEST_WORKSPACE: workspace,
-      CREWVANE_TEST_ISOLATE_TOOLS: "1", CREWVANE_TEST_SKIP_HERDR_SETUP: "1",
+      ...process.env, ATTE_TEST_USER_DATA: join(home, "userData"),
+      ATTE_TEST_HOME: home, ATTE_TEST_WORKSPACE: workspace,
+      ATTE_TEST_ISOLATE_TOOLS: "1", ATTE_TEST_SKIP_HERDR_SETUP: "1",
       HOME: home, XDG_CONFIG_HOME: join(home, ".config"), XDG_STATE_HOME: join(home, ".local/state"),
       PATH: "/usr/bin:/bin",
     },
@@ -37,7 +37,7 @@ async function launch() {
   return { app, page };
 }
 async function snapshot(page) {
-  return page.evaluate(() => window.crewvane.command({ type: "snapshot" }));
+  return page.evaluate(() => window.atte.command({ type: "snapshot" }));
 }
 async function expectTaskPoolCount(page, count) {
   const entry = page.getByRole("button", { name: "待办池", exact: true, includeHidden: true });
@@ -62,11 +62,11 @@ try {
   assert.equal((await snapshot(page)).concierge.status, "not_ready");
   await expectTaskPoolCount(page, 1);
   // Both pool sections contribute, even when only one is currently open.
-  const extraPersonal = await page.evaluate(() => window.crewvane.command({
+  const extraPersonal = await page.evaluate(() => window.atte.command({
     type: "goal.intake", text: "临时的个人待办", handling: "self",
   }));
   await expectTaskPoolCount(page, 2);
-  await page.evaluate(goalId => window.crewvane.command({
+  await page.evaluate(goalId => window.atte.command({
     type: "goal.drop", goalId, note: "数量验证结束，移出临时待办。",
   }), extraPersonal.id);
   await expectTaskPoolCount(page, 1);
@@ -128,7 +128,7 @@ try {
   // The reminder crosses its due time while the app is otherwise idle.
   await page.getByRole("button", { name: "注意力", exact: true }).click();
   await page.evaluate(async goalId => {
-    await window.crewvane.command({ type: "goal.remind", goalId, at: new Date(Date.now() + 1000).toISOString() });
+    await window.atte.command({ type: "goal.remind", goalId, at: new Date(Date.now() + 1000).toISOString() });
   }, personal.id);
   await expect(page.locator(".attention-card").filter({ hasText: "我去银行办手续" })).toBeVisible({ timeout: 6000 });
   await page.locator(".attention-card").filter({ hasText: "我去银行办手续" }).click();
@@ -170,11 +170,11 @@ try {
   await page.getByRole("button", { name: "关闭", exact: true }).click();
 
   // Completed concierge goals can be resurrected with one plain-language note.
-  const restartable = await page.evaluate(() => window.crewvane.command({
+  const restartable = await page.evaluate(() => window.atte.command({
     type: "goal.direct",
     text: "重启后继续验收清单",
   }));
-  await page.evaluate(goalId => window.crewvane.command({
+  await page.evaluate(goalId => window.atte.command({
     type: "goal.complete",
     goalId,
     note: "这一轮先结束。",
@@ -203,7 +203,7 @@ try {
   await page.screenshot({ path: join(home, "pool-narrow-light.png"), animations: "disabled" });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 2), false);
   assert.deepEqual(errors, []);
-  await readFile(join(workspace, ".crewvane/state.json"), "utf8");
+  await readFile(join(workspace, ".atte/state.json"), "utf8");
   console.log(`Task pool packaged-app trial passed. Evidence: ${home}`);
 } finally {
   await app?.close();

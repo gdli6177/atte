@@ -11,7 +11,7 @@ import { presentGoal } from "../src/features/goals/goalPresentation.ts";
 import type { GoalDetailService } from "../src/features/goals/goalService.ts";
 
 test("review offers one message entry and independent acceptance in both detail surfaces", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-review-dock-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-review-dock-"));
   try {
     const service = new WorkspaceService(root);
     const created = await service.execute({ type: "goal.intake", text: "待验收页面" }) as Goal;

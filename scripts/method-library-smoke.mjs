@@ -53,7 +53,7 @@ async function createPack(directory, options) {
     name: options.name,
     description: options.description,
     version: "1.0.0",
-    minimumCrewvane: "0.10.0",
+    minimumAtte: "0.10.0",
     kind: "process",
     roles: options.roles,
     entry: "SKILL.md",
@@ -105,7 +105,7 @@ try {
 
   app = await electron.launch({
     executablePath: resolve(
-      process.env.CREWVANE_APP_PATH ||
+      process.env.ATTE_APP_PATH ||
         "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte",
     ),
     env: {
@@ -113,11 +113,11 @@ try {
       HOME: home,
       XDG_CONFIG_HOME: join(home, ".config"),
       XDG_STATE_HOME: join(home, ".local/state"),
-      CREWVANE_TEST_HOME: home,
-      CREWVANE_TEST_USER_DATA: userData,
-      CREWVANE_TEST_WORKSPACE: workspace,
-      CREWVANE_TEST_ISOLATE_TOOLS: "1",
-      CREWVANE_TEST_SKIP_HERDR_SETUP: "1",
+      ATTE_TEST_HOME: home,
+      ATTE_TEST_USER_DATA: userData,
+      ATTE_TEST_WORKSPACE: workspace,
+      ATTE_TEST_ISOLATE_TOOLS: "1",
+      ATTE_TEST_SKIP_HERDR_SETUP: "1",
       PATH: "/usr/bin:/bin",
     },
     timeout: 60_000,
@@ -151,7 +151,7 @@ try {
   await releaseCard.getByText("可用", { exact: true }).waitFor();
   assert.equal(
     await access(
-      join(workspace, ".crewvane", "skills", "acme.release-review", "SKILL.md"),
+      join(workspace, ".atte", "skills", "acme.release-review", "SKILL.md"),
     ).then(() => true),
     true,
   );
@@ -170,12 +170,12 @@ try {
   await scriptedCard.getByRole("button", { name: "授权当前版本", exact: true }).click();
   await scriptedCard.getByText("可用", { exact: true }).waitFor();
   assert.equal(
-    (await page.evaluate(() => window.crewvane.methodPacksStatus()))
+    (await page.evaluate(() => window.atte.methodPacksStatus()))
       .find(pack => pack.id === "acme.scripted-delivery")?.scripts[0]?.approved,
     true,
   );
 
-  const goal = await page.evaluate(() => window.crewvane.command({
+  const goal = await page.evaluate(() => window.atte.command({
     type: "goal.create",
     input: {
       title: "方法库目标",
@@ -257,7 +257,7 @@ try {
   }));
 } finally {
   await app?.close().catch(() => {});
-  const keep = process.env.CREWVANE_KEEP_TEST_ARTIFACTS === "1" || !passed;
+  const keep = process.env.ATTE_KEEP_TEST_ARTIFACTS === "1" || !passed;
   if (!keep) await rm(trial, { recursive: true, force: true });
   else console.log(`Method-library evidence: ${trial}`);
 }

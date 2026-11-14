@@ -25,19 +25,19 @@ async function fixture(prefix: string) {
 }
 
 test("imports images with a stable workspace-relative path and private file mode", async () => {
-  const root = await fixture("crewvane-attachment-import-"),
+  const root = await fixture("atte-attachment-import-"),
     [attachment] = await importAttachmentBytes(root, [{ name: "../../截图.png", bytes: png }]);
   assert.ok(attachment);
   assert.equal(attachment.name, "截图.png");
   assert.equal(attachment.mime, "image/png");
   assert.equal(attachment.size, png.length);
-  assert.match(attachment.path, /^\.crewvane\/attachments\/att_[a-f0-9]{16}\.png$/);
+  assert.match(attachment.path, /^\.atte\/attachments\/att_[a-f0-9]{16}\.png$/);
   assert.match(attachment.sha256, /^[a-f0-9]{64}$/);
   assert.equal((await stat(attachmentAbsolutePath(root, attachment))).mode & 0o777, 0o600);
 });
 
 test("rejects fake images, oversized files, and paths outside the attachment directory", async () => {
-  const root = await fixture("crewvane-attachment-reject-");
+  const root = await fixture("atte-attachment-reject-");
   await assert.rejects(
     importAttachmentBytes(root, [{ name: "fake.png", bytes: Buffer.from("not an image"), mime: "image/png" }]),
     /不是支持的/,
@@ -51,12 +51,12 @@ test("rejects fake images, oversized files, and paths outside the attachment dir
   await assert.rejects(service.execute({
     type: "goal.intake",
     text: "路径穿越",
-    attachments: [{ ...valid!, path: ".crewvane/attachments/../state.json" }],
+    attachments: [{ ...valid!, path: ".atte/attachments/../state.json" }],
   }), /附件路径无效/);
 });
 
 test("goal intake and terminal follow-ups retain image metadata without embedding bytes", async () => {
-  const root = await fixture("crewvane-attachment-goal-"),
+  const root = await fixture("atte-attachment-goal-"),
     service = new WorkspaceService(root),
     [first, second] = await importAttachmentBytes(root, [
       { name: "first.png", bytes: png },
@@ -94,12 +94,12 @@ test("goal intake and terminal follow-ups retain image metadata without embeddin
   }) as Goal;
   assert.deepEqual(messaged.attachments, [first, second, third]);
   assert.deepEqual(messaged.activities.at(-1)?.attachmentIds, [third!.id]);
-  const stateText = await readFile(join(root, ".crewvane", "state.json"), "utf8");
+  const stateText = await readFile(join(root, ".atte", "state.json"), "utf8");
   assert.doesNotMatch(stateText, /iVBORw0KGgo|data:image|base64/i);
 });
 
 test("expired ended-goal images are deleted while active and recent images remain", async () => {
-  const root = await fixture("crewvane-attachment-cleanup-"),
+  const root = await fixture("atte-attachment-cleanup-"),
     service = new WorkspaceService(root),
     [expired, active] = await importAttachmentBytes(root, [
       { name: "expired.png", bytes: png },
@@ -133,7 +133,7 @@ test("expired ended-goal images are deleted while active and recent images remai
 });
 
 test("a person can remove one image immediately and its metadata is removed atomically", async () => {
-  const root = await fixture("crewvane-attachment-remove-"),
+  const root = await fixture("atte-attachment-remove-"),
     service = new WorkspaceService(root),
     [attachment] = await importAttachmentBytes(root, [{ name: "remove.png", bytes: png }]),
     goal = await service.execute({
@@ -151,7 +151,7 @@ test("a person can remove one image immediately and its metadata is removed atom
 });
 
 test("only ended goals can be permanently deleted, including their image files", async () => {
-  const root = await fixture("crewvane-goal-delete-"),
+  const root = await fixture("atte-goal-delete-"),
     service = new WorkspaceService(root),
     [attachment] = await importAttachmentBytes(root, [{ name: "ended.png", bytes: png }]),
     goal = await service.execute({

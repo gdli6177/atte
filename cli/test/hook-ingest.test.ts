@@ -19,19 +19,19 @@ afterEach(async () => {
 });
 
 async function root() {
-  const value = await mkdtemp(join(tmpdir(), "crewvane-hook-ingest-"));
+  const value = await mkdtemp(join(tmpdir(), "atte-hook-ingest-"));
   roots.push(value);
   return value;
 }
 
 function environment(workspace: string): NodeJS.ProcessEnv {
   return {
-    CREWVANE_GOAL_ID: "goal_hook",
-    CREWVANE_ATTEMPT_ID: "attempt_hook",
-    CREWVANE_HOOK_TOKEN: "token",
-    CREWVANE_AGENT_NAME: "owner-a",
-    CREWVANE_WORKSPACE: workspace,
-    CREWVANE_HOOK_SPOOL: join(workspace, ".crewvane", "runtime", "spool"),
+    ATTE_GOAL_ID: "goal_hook",
+    ATTE_ATTEMPT_ID: "attempt_hook",
+    ATTE_HOOK_TOKEN: "token",
+    ATTE_AGENT_NAME: "owner-a",
+    ATTE_WORKSPACE: workspace,
+    ATTE_HOOK_SPOOL: join(workspace, ".atte", "runtime", "spool"),
   };
 }
 
@@ -177,7 +177,7 @@ test("events outside a managed Atte target are a no-op", async () => {
   let called = false;
   const result = await ingestAgentHook({
     adapter: "codex",
-    environment: { CREWVANE_WORKSPACE: workspace },
+    environment: { ATTE_WORKSPACE: workspace },
     stdin: async () => JSON.stringify({
       hook_event_name: "Stop",
       turn_id: "turn",
@@ -189,6 +189,29 @@ test("events outside a managed Atte target are a no-op", async () => {
   });
   assert.deepEqual(result, { accepted: false, reason: "not_managed" });
   assert.equal(called, false);
+});
+
+test("legacy Crewvane hook environment still reaches the managed target", async () => {
+  const workspace = await root();
+  let received: Array<{ attemptId: string; goalId: string }> | undefined;
+  const result = await ingestAgentHook({
+    adapter: "codex",
+    environment: {
+      CREWVANE_GOAL_ID: "goal_hook", CREWVANE_ATTEMPT_ID: "attempt_hook",
+      CREWVANE_HOOK_TOKEN: "token", CREWVANE_AGENT_NAME: "owner-a",
+      CREWVANE_WORKSPACE: workspace, CREWVANE_HOOK_SPOOL: join(workspace, ".crewvane/runtime/spool"),
+    },
+    stdin: async () => JSON.stringify({
+      hook_event_name: "SessionStart", session_id: "legacy-session", turn_id: "legacy-turn",
+    }),
+    send: async payload => {
+      received = payload;
+      return true;
+    },
+  });
+  assert.equal(result.accepted, true);
+  assert.equal(received?.[0]?.attemptId, "attempt_hook");
+  assert.equal(received?.[0]?.goalId, "goal_hook");
 });
 
 test("socket failures and thrown transports spool the exact token and events", async () => {
@@ -258,7 +281,7 @@ test("default spool files are private and readable as a complete offline event",
   });
   assert.equal(result.accepted, true);
   assert.equal(result.reason, "spooled");
-  const spool = env.CREWVANE_HOOK_SPOOL!;
+  const spool = env.ATTE_HOOK_SPOOL!;
   const info = await stat(spool);
   assert.equal(info.mode & 0o777, 0o700);
   const { readdir } = await import("node:fs/promises");

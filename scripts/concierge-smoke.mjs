@@ -19,13 +19,13 @@ async function writeSystemClipboard(value) {
 
 // Opt-in real-agent trial: no scripted worker creation or fabricated checks.
 // The sole agent input goes through the same embedded terminal used by a person.
-const resume = Boolean(process.env.CREWVANE_TRIAL_DIRECTORY);
-if (resume && !process.env.CREWVANE_TRIAL_SESSION) throw new Error("Resuming requires the exact isolated trial session");
+const resume = Boolean(process.env.ATTE_TRIAL_DIRECTORY);
+if (resume && !process.env.ATTE_TRIAL_SESSION) throw new Error("Resuming requires the exact isolated trial session");
 // Herdr's local Unix socket must remain below macOS' sun_path limit.
-const trial = process.env.CREWVANE_TRIAL_DIRECTORY || await mkdtemp("/tmp/cv-concierge-");
+const trial = process.env.ATTE_TRIAL_DIRECTORY || await mkdtemp("/tmp/cv-concierge-");
 const home = join(trial, "home"), workspace = join(trial, "workspace"), userData = join(trial, "userData");
-const session = process.env.CREWVANE_TRIAL_SESSION || `crewvane-trial-${randomUUID().slice(0, 8)}`;
-if (!/^crewvane-trial-[a-f0-9]{8}$/.test(session)) throw new Error("Only isolated trial sessions are allowed");
+const session = process.env.ATTE_TRIAL_SESSION || `atte-trial-${randomUUID().slice(0, 8)}`;
+if (!/^atte-trial-[a-f0-9]{8}$/.test(session)) throw new Error("Only isolated trial sessions are allowed");
 for (const directory of [home, workspace, userData, join(workspace, "alpha"), join(workspace, "beta")])
   await mkdir(directory, { recursive: true });
 if (!resume) {
@@ -41,10 +41,10 @@ await writeFile(join(workspace, "AGENTS.md"), `# 隔离产品验收工作区
 只可修改本工作区内文件。不得访问其他项目或用户数据，不执行发布、提交或外部消息。
 交付检查必须实际运行；不能把测试要求当作检查已通过的证据。
 `);
-const executablePath = resolve(process.env.CREWVANE_APP_PATH ||
+const executablePath = resolve(process.env.ATTE_APP_PATH ||
   "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte");
-const env = { ...process.env, CREWVANE_TEST_HOME: home, CREWVANE_TEST_USER_DATA: userData,
-  CREWVANE_TEST_WORKSPACE: workspace, CREWVANE_HERDR_SESSION: session };
+const env = { ...process.env, ATTE_TEST_HOME: home, ATTE_TEST_USER_DATA: userData,
+  ATTE_TEST_WORKSPACE: workspace, ATTE_HERDR_SESSION: session };
 let app, page;
 const errors = [];
 let autonomyInitialized = resume;
@@ -56,12 +56,12 @@ const launch = async () => {
     await completeAutonomySetup(page);
     autonomyInitialized = true;
   }
-  await expect.poll(async () => Boolean((await page.evaluate(() => window.crewvane.environment())).workspace)).toBe(true);
-  if (process.env.CREWVANE_TRIAL_AGENT)
-    await page.evaluate(agent => window.crewvane.command({ type: "agents.configure",
-      preferences: { concierge: agent, owner: agent, worker: agent } }), process.env.CREWVANE_TRIAL_AGENT);
+  await expect.poll(async () => Boolean((await page.evaluate(() => window.atte.environment())).workspace)).toBe(true);
+  if (process.env.ATTE_TRIAL_AGENT)
+    await page.evaluate(agent => window.atte.command({ type: "agents.configure",
+      preferences: { concierge: agent, owner: agent, worker: agent } }), process.env.ATTE_TRIAL_AGENT);
 };
-const state = async () => JSON.parse(await readFile(join(workspace, ".crewvane/state.json"), "utf8"));
+const state = async () => JSON.parse(await readFile(join(workspace, ".atte/state.json"), "utf8"));
 const captureAgents = async (label) => {
   const diagnostics = await app.evaluate(async (_electron, session) => {
     const { execFile } = process.getBuiltinModule("node:child_process");
@@ -98,8 +98,8 @@ try {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
     }, path);
     await page.evaluate(async (name) => {
-      const path = await window.crewvane.selectProject();
-      await window.crewvane.command({ type: "project.add", name, path });
+      const path = await window.atte.selectProject();
+      await window.atte.command({ type: "project.add", name, path });
     }, name);
   }
   const prepared = await state(),
@@ -137,7 +137,7 @@ try {
         text: "确认出行日期\n这个日期必须由我决定，给我「周四还是周五出行？」这个问题。",
       },
     ])
-      await page.evaluate(input => window.crewvane.command({ type: "goal.intake", ...input }), input);
+      await page.evaluate(input => window.atte.command({ type: "goal.intake", ...input }), input);
   }
   let current = await wait((state) => state.goals.length >= 3, "管家通过自然语言建立三个目标", 600_000);
   console.log(JSON.stringify({ step: "goals-created", goals: current.goals.map(({ id, title, status }) => ({ id, title, status })) }));
@@ -192,7 +192,7 @@ try {
   if (app) await captureAgents("failure").catch(() => {});
   if (page) await page.screenshot({ path: join(trial, "failure.png") }).catch(() => {});
   if (page) {
-    const snapshot = await page.evaluate(() => window.crewvane.terminalSnapshot()).catch(() => null);
+    const snapshot = await page.evaluate(() => window.atte.terminalSnapshot()).catch(() => null);
     if (snapshot) await writeFile(join(trial, "terminal-output.txt"), snapshot.data);
   }
   console.error(JSON.stringify({ trial, session, errors, error: String(error) }));
@@ -206,5 +206,5 @@ try {
     await app.close().catch(() => {});
   }
   if (originalClipboard !== undefined) await writeSystemClipboard(originalClipboard).catch(() => {});
-  if (process.env.CREWVANE_KEEP_TEST_ARTIFACTS !== "1") await rm(trial, { recursive: true, force: true });
+  if (process.env.ATTE_KEEP_TEST_ARTIFACTS !== "1") await rm(trial, { recursive: true, force: true });
 }

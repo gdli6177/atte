@@ -7,7 +7,7 @@ import type { Goal } from "../../core/src/index.js";
 import { goalNotificationPrompt } from "../src/prompts.js";
 
 test("a persisted scene reply instructs the concierge to resolve the exact decision", async () => {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-prompts-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-prompts-"));
   const at = "2030-01-01T08:00:00.000Z";
   const goal: Goal = {
     id: "goal_prompt",
@@ -40,7 +40,7 @@ test("a persisted scene reply instructs the concierge to resolve the exact decis
   try {
     const prompt = await goalNotificationPrompt(root, goal);
     assert.match(prompt, /不要再次调用 scene-reply/);
-    assert.match(prompt, /crewvane goal resolve goal_prompt/);
+    assert.match(prompt, /atte goal resolve goal_prompt/);
     assert.match(prompt, /--attention-id attention_prompt/);
     assert.match(prompt, /--scene-reply-id reply_prompt/);
     assert.match(prompt, /--note "采用方案 A，先确认最小范围。"/);

@@ -12,8 +12,8 @@ import { completeAutonomySetup } from "./lib/autonomy-setup.mjs";
 const exec = promisify(execFile);
 const trial = await realpath(await mkdtemp("/tmp/cv-delegate-"));
 const workspace = join(trial, "workspace"), home = join(trial, "home");
-const session = `crewvane-trial-${randomUUID().slice(0, 8)}`;
-const trialAgent = process.env.CREWVANE_TRIAL_AGENT ??
+const session = `atte-trial-${randomUUID().slice(0, 8)}`;
+const trialAgent = process.env.ATTE_TRIAL_AGENT ??
   "omp";
 await mkdir(workspace); await mkdir(home);
 await writeFile(join(workspace, "AGENTS.md"), `# 隔离产品验收
@@ -23,7 +23,7 @@ await writeFile(join(workspace, "AGENTS.md"), `# 隔离产品验收
 `);
 let app, page;
 const errors = [];
-async function snapshot() { return page.evaluate(() => window.crewvane.command({type:"snapshot"})); }
+async function snapshot() { return page.evaluate(() => window.atte.command({type:"snapshot"})); }
 async function capture(label) {
   const current = await snapshot();
   await writeFile(join(trial, `${label}-state.json`), JSON.stringify(current, null, 2));
@@ -45,21 +45,21 @@ async function capture(label) {
 }
 try {
   app = await electron.launch({
-    executablePath:resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
-    env:{...process.env,CREWVANE_TEST_HOME:home,CREWVANE_TEST_USER_DATA:join(trial,"userData"),
-      CREWVANE_TEST_WORKSPACE:workspace,CREWVANE_HERDR_SESSION:session},
+    executablePath:resolve(process.env.ATTE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
+    env:{...process.env,ATTE_TEST_HOME:home,ATTE_TEST_USER_DATA:join(trial,"userData"),
+      ATTE_TEST_WORKSPACE:workspace,ATTE_HERDR_SESSION:session},
     timeout:60_000,
   });
   page = await app.firstWindow();
   page.on("pageerror", error => errors.push(String(error)));
   await completeAutonomySetup(page);
-  await expect.poll(async () => (await page.evaluate(() => window.crewvane.environment())).workspace).toBe(workspace);
-  await page.evaluate(preferences => window.crewvane.command({type:"agents.configure",preferences}), {
+  await expect.poll(async () => (await page.evaluate(() => window.atte.environment())).workspace).toBe(workspace);
+  await page.evaluate(preferences => window.atte.command({type:"agents.configure",preferences}), {
     concierge:trialAgent, owner:trialAgent, worker:trialAgent,
   });
   const ids = [];
   for (const marker of ["ALPHA_READY","BETA_READY"]) {
-    const goal = await page.evaluate(({marker,workspace}) => window.crewvane.command({type:"goal.create",input:{
+    const goal = await page.evaluate(({marker,workspace}) => window.atte.command({type:"goal.create",input:{
       title:`交付 ${marker}`,projectId:"personal",mode:"concierge",
       description:`在 ${workspace}/${marker}.json 写入 JSON，包含 marker="${marker}" 和 executorPane（执行者进程环境中的真实 HERDR_PANE_ID）。${marker === "ALPHA_READY" ? "这个目标附带一张测试图片，实际读取案卷中 attachment 指定的原图，确认是 PNG，并在成果中附上它的 SHA-256；不得声称看过却没有读取。" : ""}实际运行一个读取此文件并断言 marker 与非空 executorPane 的命令，再提交成果位置和真实检查记录供我验收。不要只回复文字。只操作此隔离工作区，无需提交或发布。`,
     }}),{marker,workspace});
@@ -108,7 +108,7 @@ try {
       assert.match(JSON.stringify(goal.delivery), /[a-f0-9]{64}/);
     }
   }
-  await page.evaluate(()=>window.crewvane.openTerminal());
+  await page.evaluate(()=>window.atte.openTerminal());
   await page.getByRole("region",{name:"Herdr 工作现场"}).waitFor();
   const diagnostics = await capture("two-real-owners");
   const data = JSON.parse(diagnostics.listed.stdout), agents = data.result?.agents ?? data.agents;
@@ -146,8 +146,8 @@ try {
     return await new Promise(resolve => execFile("herdr", [
       "--session", session, "agent", "prompt", currentConciergePane,
       `这是用户通过 Herdr 终端直接发来的独立新任务。严格只执行下面两步，不创建负责人，不做其他任务：
-1. 运行 crewvane direct --new "直接终端新任务 ${newTaskMarker}" --json
-2. 从返回 JSON 读取 id，运行 crewvane goal progress <id> --summary "已直接受理终端新任务" --next "整理完成标准并创建负责人" --json
+1. 运行 atte direct --new "直接终端新任务 ${newTaskMarker}" --json
+2. 从返回 JSON 读取 id，运行 atte goal progress <id> --summary "已直接受理终端新任务" --next "整理完成标准并创建负责人" --json
 完成后简短回复。`,
       "--wait", "--timeout", "180000",
     ], {timeout:190_000,maxBuffer:512_000}, (error, stdout, stderr) =>
@@ -169,21 +169,21 @@ try {
   console.log(JSON.stringify({step:"direct-terminal-new-goal-synced",goalId:directNew.id,newTaskMarker}));
   await app.close();
   app = await electron.launch({
-    executablePath:resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
-    env:{...process.env,CREWVANE_TEST_HOME:home,CREWVANE_TEST_USER_DATA:join(trial,"userData"),
-      CREWVANE_TEST_WORKSPACE:workspace,CREWVANE_HERDR_SESSION:session},timeout:60_000,
+    executablePath:resolve(process.env.ATTE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
+    env:{...process.env,ATTE_TEST_HOME:home,ATTE_TEST_USER_DATA:join(trial,"userData"),
+      ATTE_TEST_WORKSPACE:workspace,ATTE_HERDR_SESSION:session},timeout:60_000,
   });
   page = await app.firstWindow();
   page.on("pageerror",error=>errors.push(String(error)));
-  await expect.poll(async()=> (await page.evaluate(()=>window.crewvane.environment())).workspace).toBe(workspace);
-  await page.evaluate(()=>window.crewvane.prepareConcierge());
+  await expect.poll(async()=> (await page.evaluate(()=>window.atte.environment())).workspace).toBe(workspace);
+  await page.evaluate(()=>window.atte.prepareConcierge());
   const restored = await snapshot();
   assert.equal(restored.concierge.scene.locator.paneId,current.concierge.scene.locator.paneId,"resuming refreshes the existing concierge without replacing it");
   assert.deepEqual(restored.goals.filter(goal=>ids.includes(goal.id)).map(goal=>goal.scene.locator),goals.map(goal=>goal.scene.locator));
   const resumed=await capture("resumed-roles");
   const resumedData=JSON.parse(resumed.listed.stdout);
   assert.equal((resumedData.result?.agents ?? resumedData.agents).length,3);
-  await page.evaluate(goalId => window.crewvane.command({
+  await page.evaluate(goalId => window.atte.command({
     type:"goal.accept",goalId,actor:"你",
   }),goals[0].id);
   await expect.poll(async()=> (await snapshot()).goals.find(goal=>goal.id===goals[0].id)?.scene)
@@ -193,12 +193,12 @@ try {
   assert.equal(remaining.length,2,"acceptance closes one owner, preserving the concierge and the other goal");
   assert.ok(remaining.some(agent=>agent.pane_id===current.concierge.scene.locator.paneId));
   assert.ok(remaining.some(agent=>agent.pane_id===goals[1].scene.locator.paneId));
-  await page.evaluate(goalId => window.crewvane.command({
+  await page.evaluate(goalId => window.atte.command({
     type:"goal.accept",goalId,actor:"你",
   }),goals[1].id);
   await expect.poll(async()=> (await snapshot()).goals.find(goal=>goal.id===goals[1].id)?.scene)
     .toBe(undefined);
-  await page.evaluate(goalId => window.crewvane.command({
+  await page.evaluate(goalId => window.atte.command({
     type:"goal.delete",goalId,actor:"你",
   }),goals[1].id);
   const afterDelete = await capture("second-owner-closed");
@@ -228,5 +228,5 @@ try {
     },session).catch(()=>{});
     await app.close().catch(()=>{});
   }
-  if (process.env.CREWVANE_KEEP_TEST_ARTIFACTS!=="1") await rm(trial,{recursive:true,force:true});
+  if (process.env.ATTE_KEEP_TEST_ARTIFACTS!=="1") await rm(trial,{recursive:true,force:true});
 }

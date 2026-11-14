@@ -16,17 +16,17 @@ export async function completeAutonomySetup(
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     const workspace = await page.evaluate(() =>
-      window.crewvane.environment().then(value => value.workspace),
+      window.atte.environment().then(value => value.workspace),
     );
     if (workspace) {
-      await page.evaluate(acceptance => window.crewvane.command({
+      await page.evaluate(acceptance => window.atte.command({
         type: "workspace.autonomy.set",
         acceptance,
         initialize: true,
         actor: "你",
       }), option);
       await page.waitForFunction(() =>
-        window.crewvane.command({ type: "snapshot" })
+        window.atte.command({ type: "snapshot" })
           .then(state => Boolean(state.autonomy.initializedAt)),
       );
       return;

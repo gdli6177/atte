@@ -18,7 +18,7 @@ await writeFile(join(workspace, "AGENTS.md"), `# 隔离验收
 `);
 const service = new WorkspaceService(workspace);
 const projectEntry = await service.execute({ type: "project.add", name: "隔离执行项目", path: project });
-const agent = process.env.CREWVANE_TRIAL_AGENT ||
+const agent = process.env.ATTE_TRIAL_AGENT ||
   "omp";
 await service.execute({ type: "agents.configure", preferences: { concierge: agent, owner: agent } });
 await service.execute({
@@ -28,9 +28,9 @@ await service.execute({
   actor: "你",
 });
 const app = await electron.launch({
-  executablePath: resolve(process.env.CREWVANE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
-  env: { ...process.env, CREWVANE_TEST_HOME: home, CREWVANE_TEST_USER_DATA: join(trial, "userData"),
-    CREWVANE_TEST_WORKSPACE: workspace, CREWVANE_HERDR_SESSION: session,
+  executablePath: resolve(process.env.ATTE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
+  env: { ...process.env, ATTE_TEST_HOME: home, ATTE_TEST_USER_DATA: join(trial, "userData"),
+    ATTE_TEST_WORKSPACE: workspace, ATTE_HERDR_SESSION: session,
     // The CLI uses its own existing authentication without copying credentials.
     PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR || join(homedir(), ".omp/agent") },
   timeout: 60_000,
@@ -49,8 +49,8 @@ async function herdr(args, timeout = 20_000) {
 }
 let goal;
 try {
-  await expect.poll(async () => (await page.evaluate(() => window.crewvane.environment())).workspace).toBe(workspace);
-  goal = await page.evaluate(projectId => window.crewvane.command({
+  await expect.poll(async () => (await page.evaluate(() => window.atte.environment())).workspace).toBe(workspace);
+  goal = await page.evaluate(projectId => window.atte.command({
     type: "goal.intake",
     handling: "later",
     projectId,
@@ -59,8 +59,8 @@ try {
   assert.equal(goal.status, "backlog");
   assert.equal(goal.dispatch, undefined, "capturing must not start the real model");
   assert.equal((await state()).concierge.status, "not_ready");
-  const firstHandoff = await page.evaluate(id => window.crewvane.command({ type: "goal.delegate", goalId: id }), goal.id);
-  const repeatedHandoff = await page.evaluate(id => window.crewvane.command({ type: "goal.delegate", goalId: id }), goal.id);
+  const firstHandoff = await page.evaluate(id => window.atte.command({ type: "goal.delegate", goalId: id }), goal.id);
+  const repeatedHandoff = await page.evaluate(id => window.atte.command({ type: "goal.delegate", goalId: id }), goal.id);
   assert.equal(firstHandoff.dispatch.id, repeatedHandoff.dispatch.id, "repeated delegation must not create another request");
   console.log(JSON.stringify({ step: "captured-then-delegated", trial, session, goalId: goal.id }));
   await expect.poll(async () => {
@@ -71,7 +71,7 @@ try {
     return Boolean(item?.scene?.locator.paneId && item.attention?.kind === "decision");
   }, { timeout: 240_000, intervals: [1000] }).toBe(true);
   const before = (await state()).goals.find(item => item.id === goal.id);
-  await page.evaluate(id => window.crewvane.openHerdr(id), goal.id);
+  await page.evaluate(id => window.atte.openHerdr(id), goal.id);
   await page.getByRole("region", { name: "Herdr 工作现场" }).waitFor();
   assert.equal((await state()).goals.find(item => item.id === goal.id).attention.id, before.attention.id,
     "merely opening the scene must keep the question");

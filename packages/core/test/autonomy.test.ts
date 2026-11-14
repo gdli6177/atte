@@ -16,7 +16,7 @@ afterEach(async () => {
   await Promise.all(fixtures.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "crewvane-autonomy-"));
+  const root = await mkdtemp(join(tmpdir(), "atte-autonomy-"));
   fixtures.push(root);
   return { root, service: new WorkspaceService(root) };
 }
@@ -938,10 +938,10 @@ test("v2 workspaces migrate in place with a backup and conservative autonomy def
       updatedAt: "2026-01-01T00:00:00.000Z",
     }],
     decisions: [],
-    concierge: { session: "crewvane", status: "not_ready" },
+    concierge: { session: "atte", status: "not_ready" },
   };
-  await mkdir(join(root, ".crewvane"), { recursive: true });
-  await writeFile(join(root, ".crewvane/state.json"), JSON.stringify(legacy));
+  await mkdir(join(root, ".atte"), { recursive: true });
+  await writeFile(join(root, ".atte/state.json"), JSON.stringify(legacy));
   const state = await service.read();
   assert.equal(state.version, 4);
   assert.equal(state.goals[0]?.kind, "delivery");
@@ -951,7 +951,7 @@ test("v2 workspaces migrate in place with a backup and conservative autonomy def
   assert.equal(state.projects[0]?.autonomy?.acceptance, "inherit");
   assert.equal(state.projects[0]?.releaseOnMerge, "unknown");
   const backup = JSON.parse(await readFile(
-    join(root, ".crewvane/state.v2.backup.json"),
+    join(root, ".atte/state.v2.backup.json"),
     "utf8",
   ));
   assert.equal(backup.version, 2);

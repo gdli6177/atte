@@ -17,7 +17,7 @@ const stem = `Atte-${version}-macOS-arm64`;
 // Keep the isolated HOME and Herdr socket paths below macOS's AF_UNIX
 // sun_path limit. CI's TMPDIR is otherwise long enough to make Herdr's own
 // plugin subcommand fail before the installed UI can be exercised.
-const trial = await mkdtemp("/tmp/crewvane-install-test-");
+const trial = await mkdtemp("/tmp/atte-install-test-");
 await exec("shasum", ["-a", "256", "-c", "SHA256SUMS.txt"], { cwd: installers });
 await exec("hdiutil", ["verify", join(installers, `${stem}.dmg`)]);
 async function verifyDownloadedApp(appPath, label) {
@@ -43,7 +43,7 @@ async function verifyDownloadedApp(appPath, label) {
   await exec("codesign", ["--verify", "--strict", "--verbose=2", bundledHerdr]);
   assert.match(
     await readFile(join(appPath, "Contents/Resources/herdr-plugin/herdr-plugin.toml"), "utf8"),
-    /id = "dev\.crewvane"/,
+    /id = "dev\.atte"/,
     `${label}: downloaded app must contain the bundled Herdr plugin`,
   );
   // A browser-downloaded app carries the quarantine marker when extracted.
@@ -60,7 +60,7 @@ async function launchInstalled(appPath, label) {
   await verifyDownloadedApp(appPath, label);
   assert.ok(
     (await readFile(join(appPath, "Contents/Resources/app.asar"))).includes(
-      Buffer.from("CREWVANE_TEST_HOME"),
+      Buffer.from("ATTE_TEST_HOME"),
     ),
     "Installer predates isolated CLI testing; rebuild with pnpm desktop:dist before running",
   );
@@ -74,9 +74,9 @@ async function launchInstalled(appPath, label) {
   const app = await electron.launch({
     executablePath: join(appPath, "Contents/MacOS/Atte"),
     args: [],
-    env: { ...process.env, CREWVANE_TEST_HOME: home,
-      CREWVANE_TEST_USER_DATA: join(trial, `${label}-userData`),
-      CREWVANE_TEST_WORKSPACE: workspace, CREWVANE_HERDR_SESSION: `crewvane-installer-${label}` },
+    env: { ...process.env, ATTE_TEST_HOME: home,
+      ATTE_TEST_USER_DATA: join(trial, `${label}-userData`),
+      ATTE_TEST_WORKSPACE: workspace, ATTE_HERDR_SESSION: `atte-installer-${label}` },
     timeout: 60_000,
   });
   try {
@@ -87,12 +87,12 @@ async function launchInstalled(appPath, label) {
     await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
     assert.equal(await app.evaluate(({ app }) => app.getVersion()), version);
     assert.equal(await page.evaluate(() => typeof window.require), "undefined");
-    await page.waitForFunction(() => window.crewvane.cliStatus().then(status => status.installed), null, {
+    await page.waitForFunction(() => window.atte.cliStatus().then(status => status.installed), null, {
       timeout: 30_000,
     });
     await page.getByRole("button", { name: "设置", exact: true }).click();
     await page.getByRole("button", { name: "重新安装", exact: true }).waitFor();
-    const cli = join(home, ".local/bin/crewvane");
+    const cli = join(home, ".local/bin/atte");
     const installedState = JSON.parse(
       (await exec(cli, ["status", "--root", workspace, "--json"])).stdout,
     );

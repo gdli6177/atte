@@ -8,13 +8,13 @@ import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { HerdrAdapter, OrcaAdapter, createLaunchFiles } from "../packages/sessions/src/index.ts";
 
-const backend = process.env.CREWVANE_OMP_DELIVERY_BACKEND ?? "herdr";
+const backend = process.env.ATTE_OMP_DELIVERY_BACKEND ?? "herdr";
 assert(["herdr", "orca"].includes(backend));
-const profile = process.env.CREWVANE_TEST_ORCA_PROFILE;
+const profile = process.env.ATTE_TEST_ORCA_PROFILE;
 if (backend === "orca") assert(profile?.startsWith("/private/tmp/"), "Use an isolated Orca profile.");
-const executable = resolve(process.env.CREWVANE_TEST_HERDR_BINARY ||
+const executable = resolve(process.env.ATTE_TEST_HERDR_BINARY ||
   "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/Resources/herdr");
-const agent = process.env.CREWVANE_TRIAL_AGENT;
+const agent = process.env.ATTE_TRIAL_AGENT;
 assert(agent?.startsWith("/"), "Choose a real installed OMP executable or wrapper.");
 const root = await realpath(await mkdtemp("/tmp/cv-omp-transport-"));
 const cwd = join(root, "工作 区");
@@ -80,7 +80,7 @@ try {
   const requestId = randomUUID(), bindingId = randomUUID(), attemptId = randomUUID();
   const files = await createLaunchFiles(join(root, "control"), {
     requestId, bindingId, attemptId, installationId: "omp-transport-trial", backendEpoch: 0,
-    executable: agent, args: [], cwd, environment: { CREWVANE_BACKEND: backend },
+    executable: agent, args: [], cwd, environment: { ATTE_BACKEND: backend },
   });
   const created = await adapter.create({
     requestId, bindingId, attemptId, installationId: "omp-transport-trial", backendEpoch: 0,
@@ -96,7 +96,7 @@ try {
   }
   assert(nativeAgentShapes.length, "Real Herdr must recognize OMP before sending.");
   const proof = join(cwd, "proof.txt"), marker = randomUUID();
-  const scenario = process.env.CREWVANE_OMP_DELIVERY_SCENARIO ?? "multiline";
+  const scenario = process.env.ATTE_OMP_DELIVERY_SCENARIO ?? "multiline";
   const background = scenario === "long"
     ? `背景：${"需要保留的单一案卷背景。".repeat(700)}`
     : Array.from({ length: 120 }, (_, index) =>

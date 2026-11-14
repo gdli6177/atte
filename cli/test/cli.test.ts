@@ -14,12 +14,12 @@ const png = Buffer.from(
   "base64",
 );
 const inheritedProcessKeys = [
-  "CREWVANE_AGENT_NAME",
-  "CREWVANE_COORDINATOR",
-  "CREWVANE_COORDINATOR_SCOPE_FILE",
-  "CREWVANE_GOAL_ID",
-  "CREWVANE_ROLE",
-  "CREWVANE_WORKSPACE",
+  "ATTE_AGENT_NAME",
+  "ATTE_COORDINATOR",
+  "ATTE_COORDINATOR_SCOPE_FILE",
+  "ATTE_GOAL_ID",
+  "ATTE_ROLE",
+  "ATTE_WORKSPACE",
   "HERDR_ENV",
   "HERDR_PANE_ID",
   "HERDR_PLUGIN_EVENT_JSON",
@@ -38,7 +38,7 @@ test("owner send treats a rejected scene receipt as a hard CLI failure", () => {
       version: 1, backend: "herdr", installationId: "installation", backendEpoch: 1,
       bindingId: "binding", attemptId: "attempt", runtimeId: "runtime",
       runtimeGeneration: "generation",
-      locator: { kind: "herdr", session: "crewvane-test", workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      locator: { kind: "herdr", session: "atte-test", workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
     },
     at: new Date().toISOString(),
     detail: "现场身份、空闲或前台 Agent 无法确认，未发送。",
@@ -49,7 +49,7 @@ async function call(root: string, argv: string[]) {
   const code = await run([...argv, "--root", root, "--json"], { out: (text) => { stdout += text; }, error: (text) => { stderr += text; } });
   return { code, stdout, stderr, json: stdout ? JSON.parse(stdout) : undefined };
 }
-test("the executable presents Atte while keeping the public crewvane command", async () => {
+test("the executable presents Atte while keeping the public atte command", async () => {
   const { stdout, stderr } = await promisify(execFile)(
     "pnpm",
     ["--dir", "cli", "exec", "tsx", "src/main.ts", "--help"],
@@ -57,8 +57,8 @@ test("the executable presents Atte while keeping the public crewvane command", a
   );
   assert.equal(stderr, "");
   assert.match(stdout, /^Atte — 注意力中心/);
-  assert.match(stdout, /crewvane goal message ID --text TEXT/);
-  assert.doesNotMatch(stdout, /Crewvane/);
+  assert.match(stdout, /atte goal message ID --text TEXT/);
+  assert.doesNotMatch(stdout, /\bcrewvane (?:status|attention|board|goal|owner|skill)\b/);
 });
 async function callProcess(
   root: string,
@@ -80,22 +80,22 @@ async function callProcess(
   return { stdout, stderr, json: JSON.parse(stdout) };
 }
 async function coordinator<T>(root: string, goalId: string, task: () => Promise<T>) {
-  const scope = join(root, ".crewvane", "coordinator-scope.json");
+  const scope = join(root, ".atte", "coordinator-scope.json");
   await writeFile(scope, JSON.stringify({ goalId, requestId: "test", setAt: new Date().toISOString() }));
-  const previousCoordinator = process.env.CREWVANE_COORDINATOR,
-    previousScope = process.env.CREWVANE_COORDINATOR_SCOPE_FILE,
-    previousActor = process.env.CREWVANE_AGENT_NAME;
-  process.env.CREWVANE_COORDINATOR = "1";
-  process.env.CREWVANE_COORDINATOR_SCOPE_FILE = scope;
-  process.env.CREWVANE_AGENT_NAME = "concierge";
+  const previousCoordinator = process.env.ATTE_COORDINATOR,
+    previousScope = process.env.ATTE_COORDINATOR_SCOPE_FILE,
+    previousActor = process.env.ATTE_AGENT_NAME;
+  process.env.ATTE_COORDINATOR = "1";
+  process.env.ATTE_COORDINATOR_SCOPE_FILE = scope;
+  process.env.ATTE_AGENT_NAME = "concierge";
   try { return await task(); }
   finally {
-    if (previousCoordinator === undefined) delete process.env.CREWVANE_COORDINATOR;
-    else process.env.CREWVANE_COORDINATOR = previousCoordinator;
-    if (previousScope === undefined) delete process.env.CREWVANE_COORDINATOR_SCOPE_FILE;
-    else process.env.CREWVANE_COORDINATOR_SCOPE_FILE = previousScope;
-    if (previousActor === undefined) delete process.env.CREWVANE_AGENT_NAME;
-    else process.env.CREWVANE_AGENT_NAME = previousActor;
+    if (previousCoordinator === undefined) delete process.env.ATTE_COORDINATOR;
+    else process.env.ATTE_COORDINATOR = previousCoordinator;
+    if (previousScope === undefined) delete process.env.ATTE_COORDINATOR_SCOPE_FILE;
+    else process.env.ATTE_COORDINATOR_SCOPE_FILE = previousScope;
+    if (previousActor === undefined) delete process.env.ATTE_AGENT_NAME;
+    else process.env.ATTE_AGENT_NAME = previousActor;
   }
 }
 test("capture records future or personal work and explicit start reuses the same record", async () => {
@@ -125,7 +125,7 @@ test("capture records future or personal work and explicit start reuses the same
   assert.equal((await call(root, ["goal", "list", "--all"])).json.length, 2);
 });
 test("real CLI writes goals that desktop service can read", async () => {
-  const root = await fixture("crewvane-cli-");
+  const root = await fixture("atte-cli-");
   const created = await call(root, ["goal", "create", "--title", "从 CLI 交给管家", "--project", "personal"]);
   assert.equal(created.code, 0, created.stderr);
   const item = created.json as Goal;
@@ -142,7 +142,7 @@ test("real CLI writes goals that desktop service can read", async () => {
   assert.equal((await call(root, ["goal", "show", item.id])).json.activities.length, 7);
 });
 test("real owner CLI receipts and concierge scope bind resolution to the latest human answer", async () => {
-  const root = await fixture("crewvane-cli-scene-");
+  const root = await fixture("atte-cli-scene-");
   const service = new WorkspaceService(root);
   const goal = (await call(root, ["ask", "现场决定"])).json as Goal;
   await call(root, ["session", "set", goal.id, "--agent", "owner-a", "--pane", "w1:p2"]);
@@ -153,7 +153,7 @@ test("real owner CLI receipts and concierge scope bind resolution to the latest 
   assert.equal(receipt.code, 0, receipt.stderr);
   const first = receipt.json.sceneReply;
   await coordinator(root, goal.id, async () => {
-    const scope = join(root, ".crewvane/coordinator-scope.json");
+    const scope = join(root, ".atte/coordinator-scope.json");
     await writeFile(scope, JSON.stringify({ goalId: goal.id, attentionId: question.id, sceneReplyId: first.id }));
     const fabricated = await call(root, ["goal", "resolve", goal.id, "--note", "Agent 自己决定"]);
     assert.equal(fabricated.code, 1);
@@ -168,9 +168,9 @@ test("real owner CLI receipts and concierge scope bind resolution to the latest 
   assert.equal((await service.read()).decisions[0]!.source, "Herdr 负责人现场");
 });
 test("CLI reports an automatically protected legacy workspace", async () => {
-  const root = await fixture("crewvane-cli-recovery-");
-  await mkdir(join(root, ".crewvane"), { recursive: true });
-  await writeFile(join(root, ".crewvane/state.json"), JSON.stringify({ version: 1, tasks: [] }));
+  const root = await fixture("atte-cli-recovery-");
+  await mkdir(join(root, ".atte"), { recursive: true });
+  await writeFile(join(root, ".atte/state.json"), JSON.stringify({ version: 1, tasks: [] }));
   let stdout = "";
   const code = await run(["status", "--root", root], {
     out: text => { stdout += text; },
@@ -178,19 +178,19 @@ test("CLI reports an automatically protected legacy workspace", async () => {
   });
   assert.equal(code, 0);
   assert.match(stdout, /旧版工作区已自动保护/);
-  assert.match(stdout, /\.crewvane\.backup-/);
-  const next = JSON.parse(await readFile(join(root, ".crewvane/state.json"), "utf8"));
+  assert.match(stdout, /\.atte\.backup-/);
+  const next = JSON.parse(await readFile(join(root, ".atte/state.json"), "utf8"));
   assert.equal(next.version, 4);
   assert.equal(next.recovery.reason, "unsupported-version");
 });
 test("CLI rejects incomplete or fabricated review records", async () => {
-  const root = await fixture("crewvane-cli-invalid-");
+  const root = await fixture("atte-cli-invalid-");
   const created = await call(root, ["goal", "create", "--title", "检查证据", "--project", "personal"]);
   const result = await call(root, ["goal", "review", created.json.id, "--summary", "声称完成"]);
   assert.equal(result.code, 1); assert.match(result.stderr, /至少提供一个/);
 });
 test("CLI records a custom terminal transport and rejects missing process identity", async () => {
-  const root = await fixture("crewvane-cli-custom-");
+  const root = await fixture("atte-cli-custom-");
   const created = await call(root, ["goal", "create", "--title", "自定义 CLI", "--project", "personal"]);
   const noTarget = await call(root, ["session", "set", "--pane", "w1:p0", "--agent", "owner"]);
   assert.equal(noTarget.code, 1);
@@ -205,10 +205,10 @@ test("CLI records a custom terminal transport and rejects missing process identi
   assert.equal(invalid.code, 1);
 });
 test("owner names from the managed pane are attributed without manual flags", async () => {
-  const root = await fixture("crewvane-cli-owner-name-");
+  const root = await fixture("atte-cli-owner-name-");
   const created = (await call(root, ["goal", "create", "--title", "负责人署名"])).json as Goal;
-  const previous = process.env.CREWVANE_AGENT_NAME;
-  process.env.CREWVANE_AGENT_NAME = "trial-owner";
+  const previous = process.env.ATTE_AGENT_NAME;
+  process.env.ATTE_AGENT_NAME = "trial-owner";
   try {
     const reviewed = await call(root, ["goal", "review", created.id,
       "--summary", "真实成果", "--check", "检查::true::passed::通过"]);
@@ -219,12 +219,12 @@ test("owner names from the managed pane are attributed without manual flags", as
     assert.equal(accepted.code, 1);
     assert.match(accepted.stderr, /只能由人/);
   } finally {
-    if (previous === undefined) delete process.env.CREWVANE_AGENT_NAME;
-    else process.env.CREWVANE_AGENT_NAME = previous;
+    if (previous === undefined) delete process.env.ATTE_AGENT_NAME;
+    else process.env.ATTE_AGENT_NAME = previous;
   }
 });
 test("real CLI classifies discovery goals, sets a goal acceptance override, and schedules wait-due", async () => {
-  const root = await fixture("crewvane-cli-autonomy-");
+  const root = await fixture("atte-cli-autonomy-");
   const created = await call(root, [
     "goal", "create",
     "--title", "先探索再决定",
@@ -246,8 +246,8 @@ test("real CLI classifies discovery goals, sets a goal acceptance override, and 
   assert.equal(overridden.code, 0, overridden.stderr);
   assert.equal(overridden.json.autonomy.override, "auto-with-verification");
 
-  const previousActor = process.env.CREWVANE_AGENT_NAME;
-  process.env.CREWVANE_AGENT_NAME = "managed-owner";
+  const previousActor = process.env.ATTE_AGENT_NAME;
+  process.env.ATTE_AGENT_NAME = "managed-owner";
   try {
     const blocked = await call(root, [
       "goal", "autonomy", "acceptance", created.json.id,
@@ -256,8 +256,8 @@ test("real CLI classifies discovery goals, sets a goal acceptance override, and 
     assert.equal(blocked.code, 1);
     assert.match(blocked.stderr, /只能由人/);
   } finally {
-    if (previousActor === undefined) delete process.env.CREWVANE_AGENT_NAME;
-    else process.env.CREWVANE_AGENT_NAME = previousActor;
+    if (previousActor === undefined) delete process.env.ATTE_AGENT_NAME;
+    else process.env.ATTE_AGENT_NAME = previousActor;
   }
 
   const activityId = created.json.activities[0].id,
@@ -303,7 +303,7 @@ test("real CLI classifies discovery goals, sets a goal acceptance override, and 
   assert.deepEqual(inspected.json.map((candidate: { trigger: string }) => candidate.trigger), ["wait-due"]);
 });
 test("goal verify records the managed Herdr pane as reviewer evidence", async () => {
-  const root = await fixture("crewvane-cli-reviewer-site-"),
+  const root = await fixture("atte-cli-reviewer-site-"),
     service = new WorkspaceService(root),
     goal = await service.execute({
       type: "goal.create",
@@ -356,7 +356,7 @@ test("goal verify records the managed Herdr pane as reviewer evidence", async ()
     HERDR_WORKSPACE_ID: process.env.HERDR_WORKSPACE_ID,
     HERDR_TAB_ID: process.env.HERDR_TAB_ID,
     HERDR_PANE_ID: process.env.HERDR_PANE_ID,
-    CREWVANE_AGENT_NAME: process.env.CREWVANE_AGENT_NAME,
+    ATTE_AGENT_NAME: process.env.ATTE_AGENT_NAME,
   };
   Object.assign(process.env, {
     HERDR_ENV: "1",
@@ -364,7 +364,7 @@ test("goal verify records the managed Herdr pane as reviewer evidence", async ()
     HERDR_WORKSPACE_ID: "w2",
     HERDR_TAB_ID: "w2:t2",
     HERDR_PANE_ID: "w2:p2",
-    CREWVANE_AGENT_NAME: "reviewer-cli",
+    ATTE_AGENT_NAME: "reviewer-cli",
   });
   try {
     const verified = await call(root, [
@@ -392,7 +392,7 @@ test("goal verify records the managed Herdr pane as reviewer evidence", async ()
   });
 });
 test("a spawned verifier can only read its goal and submit its own verification", async () => {
-  const root = await fixture("crewvane-cli-verifier-scope-"),
+  const root = await fixture("atte-cli-verifier-scope-"),
     service = new WorkspaceService(root),
     goal = await service.execute({
       type: "goal.create",
@@ -446,9 +446,9 @@ test("a spawned verifier can only read its goal and submit its own verification"
     },
   }) as Goal;
   const environment = {
-    CREWVANE_AGENT_NAME: "reviewer-proc",
-    CREWVANE_GOAL_ID: goal.id,
-    CREWVANE_ROLE: "verifier",
+    ATTE_AGENT_NAME: "reviewer-proc",
+    ATTE_GOAL_ID: goal.id,
+    ATTE_ROLE: "verifier",
     HERDR_ENV: "1",
     HERDR_PANE_ID: "w9:p2",
     HERDR_SESSION: "verifier-session",
@@ -498,12 +498,12 @@ test("a spawned verifier can only read its goal and submit its own verification"
   });
 });
 test("owner launch is routed through the current concierge case", async () => {
-  const root = await fixture("crewvane-cli-owner-launch-");
+  const root = await fixture("atte-cli-owner-launch-");
   const created = (await call(root, ["goal", "create", "--title", "启动负责人"])).json as Goal;
   const previousEnv = process.env.HERDR_ENV;
   const previousSession = process.env.HERDR_SESSION;
   delete process.env.HERDR_ENV;
-  process.env.HERDR_SESSION = "crewvane-test";
+  process.env.HERDR_SESSION = "atte-test";
   try {
     const result = await coordinator(root, created.id, () =>
       call(root, [
@@ -526,7 +526,7 @@ test("owner launch is routed through the current concierge case", async () => {
   }
 });
 test("Herdr plugin events update only their real owner pane and record exits", async () => {
-  const root = await fixture("crewvane-cli-live-event-");
+  const root = await fixture("atte-cli-live-event-");
   const created = (await call(root, ["goal", "create", "--title", "同步现场状态"])).json as Goal;
   await call(root, ["session", "set", created.id, "--workspace", "w1", "--tab", "w1:t2",
     "--pane", "w1:p2", "--agent", "owner"]);
@@ -570,7 +570,7 @@ test("Herdr plugin events update only their real owner pane and record exits", a
   assert.deepEqual(moved.json, { matched: 1 });
   goal = (await new WorkspaceService(root).read()).goals[0]!;
   assert.deepEqual(goal.herdr, {
-    session: "crewvane",
+    session: "atte",
     workspaceId: "w3",
     tabId: "w3:t1",
     paneId: "w3:p1",
@@ -616,14 +616,14 @@ test("Herdr plugin events update only their real owner pane and record exits", a
   }, { state: "unknown", reachable: false });
 });
 test("CLI creates a goal without requiring a project", async () => {
-  const root=await fixture("crewvane-cli-no-project-");
+  const root=await fixture("atte-cli-no-project-");
   const result=await call(root,["goal","create","--title","直接交代一件事"]);
   assert.equal(result.code,0);
   assert.equal(result.json.projectId,"personal");
   assert.equal(result.json.owner,"待分配负责人");
 });
 test("CLI governs high-risk actions and ship decisions through the shared ledger", async () => {
-  const root = await fixture("crewvane-cli-governance-");
+  const root = await fixture("atte-cli-governance-");
   const policyMutation = await call(root, ["project", "policy", "set", "personal", "--ship-policy", "auto"]);
   assert.equal(policyMutation.code, 1, "CLI must not expose a way for an Agent to modify ship policy");
   const item = (await call(root, ["ask", "执行高风险变更"])).json as Goal;
@@ -638,10 +638,10 @@ test("CLI governs high-risk actions and ship decisions through the shared ledger
   assert.equal(ship.code, 0, ship.stderr);
   assert.equal(ship.json.allowed, false);
   assert.equal(ship.json.requiresHuman, true);
-  assert.match(await readFile(join(root, ".crewvane", "rejected.md"), "utf8"), /拒绝删除生产数据库/);
+  assert.match(await readFile(join(root, ".atte", "rejected.md"), "utf8"), /拒绝删除生产数据库/);
 });
 test("ask creates a persisted concierge handoff and message appends feedback without changing state", async () => {
-  const root = await fixture("crewvane-cli-ask-");
+  const root = await fixture("atte-cli-ask-");
   const created = await call(root, ["ask", "检查发布流程", "并补齐证据"]);
   assert.equal(created.code, 0, created.stderr);
   assert.equal(created.json.title, "检查发布流程 并补齐证据");
@@ -666,7 +666,7 @@ test("ask creates a persisted concierge handoff and message appends feedback wit
 });
 
 test("ask and direct copy repeated image attachments into the shared workspace", async () => {
-  const root = await fixture("crewvane-cli-attachments-"),
+  const root = await fixture("atte-cli-attachments-"),
     first = join(root, "第一张截图.png"),
     second = join(root, "second.png");
   await writeFile(first, png);
@@ -694,7 +694,7 @@ test("ask and direct copy repeated image attachments into the shared workspace",
 });
 
 test("CLI rejects missing or fake attachments before creating a goal", async () => {
-  const root = await fixture("crewvane-cli-attachment-invalid-"),
+  const root = await fixture("atte-cli-attachment-invalid-"),
     missing = await call(root, ["ask", "缺失图片", "--attachment", join(root, "missing.png")]);
   assert.equal(missing.code, 1);
   assert.match(missing.stderr, /找不到图片/);
@@ -707,7 +707,7 @@ test("CLI rejects missing or fake attachments before creating a goal", async () 
 });
 
 test("direct terminal messages sync once and never create a duplicate handoff", async () => {
-  const root = await fixture("crewvane-cli-direct-");
+  const root = await fixture("atte-cli-direct-");
   const created = (await call(root, ["ask", "已有目标"])).json as Goal;
   await coordinator(root, created.id, async () => {
     const rejectedProgressAlias = await call(root, ["direct", "追加下一步：补充回滚验证", "--next", "补充回滚验证"]);
@@ -732,7 +732,7 @@ test("direct terminal messages sync once and never create a duplicate handoff", 
       "--summary", "管家已直接受理新目标", "--next", "创建负责人"]);
     assert.equal(advanced.code, 0, advanced.stderr);
     assert.equal(advanced.json.next, "创建负责人");
-    assert.equal(JSON.parse(await readFile(join(root, ".crewvane", "coordinator-scope.json"), "utf8")).goalId,
+    assert.equal(JSON.parse(await readFile(join(root, ".atte", "coordinator-scope.json"), "utf8")).goalId,
       newGoal.json.id);
   });
   const state = await new WorkspaceService(root).read();
@@ -742,12 +742,12 @@ test("direct terminal messages sync once and never create a duplicate handoff", 
 });
 
 test("a scoped concierge with no active case can still record a direct new task", async () => {
-  const root = await fixture("crewvane-cli-direct-new-");
-  const scope = join(root, ".crewvane", "coordinator-scope.json");
-  const previousCoordinator = process.env.CREWVANE_COORDINATOR,
-    previousScope = process.env.CREWVANE_COORDINATOR_SCOPE_FILE;
-  process.env.CREWVANE_COORDINATOR = "1";
-  process.env.CREWVANE_COORDINATOR_SCOPE_FILE = scope;
+  const root = await fixture("atte-cli-direct-new-");
+  const scope = join(root, ".atte", "coordinator-scope.json");
+  const previousCoordinator = process.env.ATTE_COORDINATOR,
+    previousScope = process.env.ATTE_COORDINATOR_SCOPE_FILE;
+  process.env.ATTE_COORDINATOR = "1";
+  process.env.ATTE_COORDINATOR_SCOPE_FILE = scope;
   try {
     const denied = await call(root, ["status"]);
     assert.equal(denied.code, 1);
@@ -758,10 +758,10 @@ test("a scoped concierge with no active case can still record a direct new task"
     assert.equal(created.json.description, "从终端交办的新事项");
     assert.equal(created.json.dispatch.status, "sent");
   } finally {
-    if (previousCoordinator === undefined) delete process.env.CREWVANE_COORDINATOR;
-    else process.env.CREWVANE_COORDINATOR = previousCoordinator;
-    if (previousScope === undefined) delete process.env.CREWVANE_COORDINATOR_SCOPE_FILE;
-    else process.env.CREWVANE_COORDINATOR_SCOPE_FILE = previousScope;
+    if (previousCoordinator === undefined) delete process.env.ATTE_COORDINATOR;
+    else process.env.ATTE_COORDINATOR = previousCoordinator;
+    if (previousScope === undefined) delete process.env.ATTE_COORDINATOR_SCOPE_FILE;
+    else process.env.ATTE_COORDINATOR_SCOPE_FILE = previousScope;
   }
 });
 
@@ -789,7 +789,7 @@ test("a managed concierge preserves explicit future and human-only intake withou
 });
 
 test("Herdr board renders actionable attention without terminal escape codes", async () => {
-  const root = await fixture("crewvane-cli-board-");
+  const root = await fixture("atte-cli-board-");
   const service = new WorkspaceService(root);
   const decision = await service.execute({ type: "goal.intake", text: "确认周末是否上线" }) as Goal;
   await service.execute({
@@ -841,7 +841,7 @@ test("Herdr board renders actionable attention without terminal escape codes", a
   assert.match(riskyBoard, /高风险动作必须由你确认/);
 });
 test("review feedback through the executable keeps delivery and attention until an explicit concierge update", async () => {
-  const root = await fixture("crewvane-review-feedback-");
+  const root = await fixture("atte-review-feedback-");
   const created = await call(root, ["ask", "交付一个可以验收的页面"]);
   const goalId = created.json.id;
   const reviewed = await call(root, [
@@ -865,7 +865,7 @@ test("review feedback through the executable keeps delivery and attention until 
 });
 
 test("coordinator CLI is limited to the current case and cannot read or mutate another goal", async () => {
-  const root = await fixture("crewvane-cli-scope-");
+  const root = await fixture("atte-cli-scope-");
   const first = (await call(root, ["ask", "目标 A"])).json as Goal;
   const second = (await call(root, ["ask", "目标 B"])).json as Goal;
   await coordinator(root, first.id, async () => {
@@ -907,7 +907,7 @@ test("coordinator CLI is limited to the current case and cannot read or mutate a
 });
 
 test("coordinator can turn an explicit user message into an audited current-case state change", async () => {
-  const root = await fixture("crewvane-cli-concierge-state-");
+  const root = await fixture("atte-cli-concierge-state-");
   const first = (await call(root, ["ask", "方案讨论完成，等我确认后结束"])).json as Goal;
   const second = (await call(root, ["ask", "另一个不能串案的目标"])).json as Goal;
   await coordinator(root, first.id, async () => {
@@ -929,7 +929,7 @@ test("coordinator can turn an explicit user message into an audited current-case
 });
 
 test("spawned CLI updates an item and rejects a late update after cancellation", async () => {
-  const root = await fixture("crewvane-cli-process-");
+  const root = await fixture("atte-cli-process-");
   const cli = (...args: string[]) => promisify(execFile)("pnpm", ["--dir", "cli", "exec", "tsx", "src/main.ts",
     ...args, "--root", root, "--json"], { cwd: new URL("../../", import.meta.url), timeout: 30_000 });
   const goal = JSON.parse((await cli("goal", "create", "--title", "真实进程调用", "--project", "personal")).stdout);
