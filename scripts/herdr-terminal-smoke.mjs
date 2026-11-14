@@ -1,5 +1,5 @@
 import { _electron as electron, expect } from "@playwright/test";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
@@ -33,6 +33,7 @@ async function writeSystemClipboard(value) {
 const originalClipboard = await readSystemClipboard().catch(() => undefined);
 // Keep the isolated Herdr socket below macOS AF_UNIX's sun_path limit.
 const home = await mkdtemp("/tmp/cv-terminal-");
+const diagnosticLog = join(home, "terminal-smoke.log");
 const workspace = join(home, "workspace"), session = `atte-tty-${randomUUID().slice(0, 8)}`;
 const herdrEnvironment = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"),
   XDG_STATE_HOME: join(home, ".local/state"), XDG_DATA_HOME: join(home, ".local/share"),
@@ -54,6 +55,9 @@ try {
   });
   const page = await app.firstWindow();
   page.on("pageerror", (error) => errors.push(error.message));
+  const applicationLogs = [];
+  for (const stream of [app.process().stdout, app.process().stderr])
+    stream?.on("data", chunk => applicationLogs.push(...chunk.toString().split("\n")));
   await page.waitForFunction(() => !!window.atte);
   await completeAutonomySetup(page);
   await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
@@ -159,8 +163,17 @@ try {
     const pasteMarker = `paste_${randomUUID().replaceAll("-", "")}`;
     const pasteFile = join(workspace, `terminal-paste-${pasteMarker}.txt`);
     const pasteCommand = `/usr/bin/printf '%s' '${pasteMarker}' > '${pasteFile}'`;
+    const pasteStartedAt = Date.now();
     await writeSystemClipboard(pasteCommand);
     await textarea.focus();
+    await page.evaluate(() => {
+      window.terminalPasteEvents = [];
+      for (const type of ["keydown", "paste"])
+        document.addEventListener(type, event => window.terminalPasteEvents.push({
+          type, key: event.key, metaKey: event.metaKey, ctrlKey: event.ctrlKey,
+          defaultPrevented: event.defaultPrevented, target: event.target?.className,
+        }), { capture: true, once: type === "paste" });
+    });
     if (mode === "paste-event") {
       await page.evaluate((value) => {
         const target = document.querySelector(".xterm-helper-textarea");
@@ -179,9 +192,38 @@ try {
     } else {
       await page.keyboard.press(shortcut);
     }
-    await page.waitForFunction((value) =>
-      document.querySelector(".xterm-accessibility-tree")?.textContent?.includes(value),
-    pasteMarker, { timeout: 10_000 });
+    try {
+      await page.waitForFunction((value) =>
+        document.querySelector(".xterm-accessibility-tree")?.textContent?.includes(value),
+      pasteMarker, { timeout: 10_000 });
+    } catch (error) {
+      const renderer = await page.evaluate(async () => {
+        const snapshot = await window.atte.terminalSnapshot();
+        const active = document.activeElement;
+        return {
+          focused: document.hasFocus(), visibility: document.visibilityState,
+          activeElement: active ? `${active.tagName}.${active.className}` : null,
+          events: window.terminalPasteEvents,
+          notice: document.querySelector(".terminal-clipboard-status")?.textContent,
+          accessibilityTail: document.querySelector(".xterm-accessibility-tree")?.textContent?.slice(-2000),
+          terminalTail: snapshot?.data?.slice(-2000), terminalSequence: snapshot?.sequence,
+          clipboardLength: (await window.atte.readClipboardContent()).text?.length,
+        };
+      });
+      const main = await app.evaluate(async ({ app, BrowserWindow, clipboard }) => ({
+        focused: BrowserWindow.getAllWindows().map(window => window.isFocused()),
+        clipboardLength: (await clipboard.readText()).length,
+        logsPath: app.getPath("logs"),
+      }));
+      const diagnostic = {
+        mode, elapsedMs: Date.now() - pasteStartedAt, renderer, main,
+        systemClipboardLength: (await readSystemClipboard()).length,
+        applicationLogs: applicationLogs.slice(-30), pageErrors: errors,
+      };
+      await appendFile(diagnosticLog, `${JSON.stringify(diagnostic)}\n`);
+      console.error("Terminal paste diagnostics:", JSON.stringify(diagnostic));
+      throw error;
+    }
     await page.keyboard.press("Enter");
     await expect.poll(() => readFile(pasteFile, "utf8").catch(() => ""), { timeout: 30_000 }).toBe(pasteMarker);
   }
