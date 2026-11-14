@@ -1,14 +1,14 @@
 {
-  "name": "@crewvane/cli",
+  "name": "@atte/cli",
   "version": "0.11.0",
   "description": "Atte — 注意力中心 CLI",
   "license": "MIT",
   "type": "module",
   "files": ["bin", "dist"],
-  "bin": { "crewvane": "./bin/crewvane.js" },
+  "bin": { "atte": "./bin/atte.js" },
   "dependencies": {
     "string-argv": "^0.3.2"
   },
-  "scripts": { "crewvane": "tsx src/main.ts", "build": "esbuild src/main.ts --bundle --platform=node --format=cjs --target=node20 --outfile=dist/crewvane.cjs", "prepack": "pnpm build", "test": "tsx --test test/*.test.ts", "typecheck": "tsc --noEmit" },
+  "scripts": { "atte": "tsx src/main.ts", "build": "esbuild src/main.ts --bundle --platform=node --format=cjs --target=node20 --outfile=dist/atte.cjs", "prepack": "pnpm build", "test": "tsx --test test/*.test.ts", "typecheck": "tsc --noEmit" },
   "devDependencies": { "@types/node": "^22.20.0", "typescript": "^5.9.3", "esbuild": "^0.25.0" }
 }

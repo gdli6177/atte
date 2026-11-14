@@ -4,7 +4,7 @@ import {
   attentionGoals,
   attentionRequest,
   importAttachmentFiles,
-  type CrewvaneCommand,
+  type AtteCommand,
   type GoalAttachment,
   type HerdrReference,
   type IntakeHandling,
@@ -26,15 +26,16 @@ import {
   managedSessionContext,
   type SendReceipt,
 } from "../../packages/sessions/src/index.js";
+import { environmentValue } from "../../packages/core/src/index.js";
 const exec = promisify(execFile);
 async function managedRuntime(workspace: string, managedContext: ReturnType<typeof managedSessionContext>) {
-  const directory = process.env.CREWVANE_CONTROL_DIRECTORY?.trim();
+  const directory = environmentValue(process.env, "CONTROL_DIRECTORY")?.trim();
   if (!directory) throw new Error("受管 CLI 缺少 Atte 后端控制目录；请从 Atte 桌面或已接入的负责人现场运行。");
   const control = new SessionControl(directory);
   // A managed Agent may be unable to inspect OS processes. The desktop owns
   // admission/identity checks; its current descriptor is discovered below.
   if (!managedContext) await control.initialize();
-  const cliDirectory = process.env.CREWVANE_CLI_DIRECTORY?.trim();
+  const cliDirectory = environmentValue(process.env, "CLI_DIRECTORY")?.trim();
   if (!cliDirectory) throw new Error("受管 CLI 缺少可执行的 Atte 命令目录。");
   return new SessionRuntime({
     control,
@@ -47,118 +48,119 @@ async function managedRuntime(workspace: string, managedContext: ReturnType<type
       workspace: adapterWorkspace,
       control: await control.status(),
       directory,
-      herdrExecutable: process.env.CREWVANE_HERDR_BINARY,
+      herdrExecutable: environmentValue(process.env, "HERDR_BINARY"),
       environment: process.env,
+      state: await new WorkspaceService(adapterWorkspace).read(),
     }),
   });
 }
 const usage = `Atte — 注意力中心
 
 人的消息入口（保存原话，不从文本推断批准或完成）：
-  crewvane status [--json]
-  crewvane attention [--json]
-  crewvane board [--new] [--once]
-  crewvane scene focus [GOAL_ID]（只定位已登记现场；省略 ID 回到管家）
-  crewvane ask TEXT [--project ID] [--attachment PATH ...]
-  crewvane capture TEXT [--self] [--project ID] [--remind-at ISO]
+  atte status [--json]
+  atte attention [--json]
+  atte board [--new] [--once]
+  atte scene focus [GOAL_ID]（只定位已登记现场；省略 ID 回到管家）
+  atte ask TEXT [--project ID] [--attachment PATH ...]
+  atte capture TEXT [--self] [--project ID] [--remind-at ISO]
     [--attachment PATH ...]（只记录；--self 表示由你执行）
-  crewvane goal start ID --by self|concierge
-  crewvane goal restore ID（将移出的个人事项恢复到待办池）
-  crewvane direct TEXT [--new] [--goal ID] [--project ID]
+  atte goal start ID --by self|concierge
+  atte goal restore ID（将移出的个人事项恢复到待办池）
+  atte direct TEXT [--new] [--goal ID] [--project ID]
     [--handling concierge|later|self]（只适用于新事项）
     [--attachment PATH ...]
-  crewvane goal list [--all] [--json]
-  crewvane goal show ID [--json]
-  crewvane goal message ID --text TEXT [--attachment PATH ...]
-  crewvane goal scene-reply ID --attention-id ID --quote "用户现场原话"
+  atte goal list [--all] [--json]
+  atte goal show ID [--json]
+  atte goal message ID --text TEXT [--attachment PATH ...]
+  atte goal scene-reply ID --attention-id ID --quote "用户现场原话"
     --summary "现场已如何处理" [--json]
 
 Agent 状态协议（仅在明确事实发生后使用）：
-  crewvane hook ingest --adapter codex|claude-code|cursor|qoder|omp
+  atte hook ingest --adapter codex|claude-code|cursor|qoder|omp
     （由受管 Agent Hook 调用；普通 Agent 会话无目标环境时 no-op）
-  crewvane event herdr [--json]
-  crewvane goal create --title TEXT [--project ID] [--description TEXT]
+  atte event herdr [--json]
+  atte goal create --title TEXT [--project ID] [--description TEXT]
     [--kind delivery|discovery] [--mode concierge|manual]
-  crewvane goal kind ID --kind delivery|discovery
-  crewvane goal update ID [--title TEXT] [--description TEXT] [--next TEXT]
+  atte goal kind ID --kind delivery|discovery
+  atte goal update ID [--title TEXT] [--description TEXT] [--next TEXT]
     [--owner TEXT] [--status active|waiting] [--waiting-for 外部第三方] [--remind-at ISO]
-  crewvane goal progress ID --summary TEXT [--next TEXT] [--owner NAME]
-  crewvane goal wait ID --reason TEXT --owner 外部第三方 [--remind-at ISO]
-  crewvane goal decide ID --question TEXT [--next TEXT] [--key KEY]
-  crewvane goal risk ID --category CATEGORY --summary TEXT [--key KEY]
-  crewvane goal ship ID --operation merge|deploy --checks passed|failed
-  crewvane goal brief ID --file PATH [--expected-revision N]
-  crewvane goal checkpoint ID --summary TEXT --next TEXT [--due-at ISO]
-  crewvane goal verify ID --delivery ID --outcome passed|failed
+  atte goal progress ID --summary TEXT [--next TEXT] [--owner NAME]
+  atte goal wait ID --reason TEXT --owner 外部第三方 [--remind-at ISO]
+  atte goal decide ID --question TEXT [--next TEXT] [--key KEY]
+  atte goal risk ID --category CATEGORY --summary TEXT [--key KEY]
+  atte goal ship ID --operation merge|deploy --checks passed|failed
+  atte goal brief ID --file PATH [--expected-revision N]
+  atte goal checkpoint ID --summary TEXT --next TEXT [--due-at ISO]
+  atte goal verify ID --delivery ID --outcome passed|failed
     --summary TEXT --criterion ID::passed|failed::EVIDENCE_ID
     [--criterion ... | --criteria-file PATH] [--reviewer NAME]
-  crewvane goal boundary ID --file PATH
-  crewvane goal review ID --summary TEXT [--location TEXT] [--url URL]
+  atte goal boundary ID --file PATH
+  atte goal review ID --summary TEXT [--location TEXT] [--url URL]
     --check "名称::命令或操作::passed::说明"（可重复）
     [--candidate-revision REV] [--candidate-digest SHA256] [--evidence-file PATH]
-  crewvane goal accept ID [--note TEXT]
-  crewvane goal complete ID --note "用户明确确认完成的原话"
-  crewvane goal rework ID --note TEXT
-  crewvane goal resolve ID --note TEXT [--outcome approved|rejected]
-  crewvane goal drop ID --reason TEXT
-  crewvane goal remind ID --at ISO [--note TEXT]
+  atte goal accept ID [--note TEXT]
+  atte goal complete ID --note "用户明确确认完成的原话"
+  atte goal rework ID --note TEXT
+  atte goal resolve ID --note TEXT [--outcome approved|rejected]
+  atte goal drop ID --reason TEXT
+  atte goal remind ID --at ISO [--note TEXT]
     状态命令可用 --attention-id ID --scene-reply-id ID 防止旧回执覆盖新问题
-  crewvane session set ID [--workspace ID] [--tab ID] [--pane ID] [--agent NAME]
+  atte session set ID [--workspace ID] [--tab ID] [--pane ID] [--agent NAME]
     [--transport pane --process-id PID]（自定义 CLI）
-  crewvane owner launch ID --name NAME [--task TEXT | --task-file FILE]
+  atte owner launch ID --name NAME [--task TEXT | --task-file FILE]
     创建隔离的负责人现场；省略任务内容时读取目标详情与下一步
-  crewvane owner send ID --text TEXT
+  atte owner send ID --text TEXT
     向当前目标已核实的原负责人现场发送一条协调消息
-  crewvane owner attach ID --name NAME --session SESSION
+  atte owner attach ID --name NAME --session SESSION
     --workspace ID --tab ID --pane ID [--agent NAME] [--recovery-id ID]
     在核对 Herdr 真实现场后，恢复并绑定 owner launch 未确认的负责人
-  crewvane verifier launch ID --name NAME [--task TEXT]
+  atte verifier launch ID --name NAME [--task TEXT]
     为待复核交付创建不复用负责人现场的独立复核者
 
 本地工作方法（能力包）：
-  crewvane skill list|show [PACK_ID] [--json]
-  crewvane skill draft DIRECTORY --id ID --name NAME
+  atte skill list|show [PACK_ID] [--json]
+  atte skill draft DIRECTORY --id ID --name NAME
     [--description TEXT] [--role owner|verifier ...]
-  crewvane skill validate DIRECTORY [--json]
-  crewvane skill install DIRECTORY [--approve-script ID ...] [--json]
-  crewvane skill approve PACK_ID --approve-script ID [...]
-  crewvane skill disable|enable|remove PACK_ID
-  crewvane skill attach GOAL_ID PACK_ID [--json]
-  crewvane skill detach GOAL_ID PACK_ID [--json]
-  crewvane skill resolve GOAL_ID --role concierge|owner|verifier [--json]
-  crewvane skill run PACK_ID SCRIPT_ID --goal GOAL_ID [--arg VALUE ...]
+  atte skill validate DIRECTORY [--json]
+  atte skill install DIRECTORY [--approve-script ID ...] [--json]
+  atte skill approve PACK_ID --approve-script ID [...]
+  atte skill disable|enable|remove PACK_ID
+  atte skill attach GOAL_ID PACK_ID [--json]
+  atte skill detach GOAL_ID PACK_ID [--json]
+  atte skill resolve GOAL_ID --role concierge|owner|verifier [--json]
+  atte skill run PACK_ID SCRIPT_ID --goal GOAL_ID [--arg VALUE ...]
 
 人用自主目标与发布协议：
-  crewvane autonomy set [--acceptance human-review|auto-with-verification]
+  atte autonomy set [--acceptance human-review|auto-with-verification]
     [--paused yes|no] [--max-recovery-attempts N] [--no-progress-minutes N]
     [--initialize]
-  crewvane project autonomy PROJECT_ID [--acceptance inherit|human-review|auto-with-verification]
+  atte project autonomy PROJECT_ID [--acceptance inherit|human-review|auto-with-verification]
     [--release-on-merge never|production|unknown]
-  crewvane goal autonomy pause|resume ID
-  crewvane goal autonomy acceptance ID
+  atte goal autonomy pause|resume ID
+  atte goal autonomy acceptance ID
     --acceptance inherit|human-review|auto-with-verification
-  crewvane goal boundary-resolve ID --boundary ID --outcome approved|rejected --note TEXT
-  crewvane goal reopen ID --note TEXT
-  crewvane release create --from GOAL_ID [--from GOAL_ID ...] --environment production
+  atte goal boundary-resolve ID --boundary ID --outcome approved|rejected --note TEXT
+  atte goal reopen ID --note TEXT
+  atte release create --from GOAL_ID [--from GOAL_ID ...] --environment production
     --revision REV [--digest SHA256] [--version VERSION]
-  crewvane release approve ID --note TEXT
-  crewvane release reject ID --note TEXT
-  crewvane release result ID --outcome succeeded|failed
+  atte release approve ID --note TEXT
+  atte release reject ID --note TEXT
+  atte release result ID --outcome succeeded|failed
     --evidence "真实结果"（可重复）| --evidence-file PATH
 
 本地 Bot 发起方协议：
-  crewvane bot call --file ENVELOPE.json
-  crewvane bot bind --id ID --name NAME --role initiator
+  atte bot call --file ENVELOPE.json
+  atte bot bind --id ID --name NAME --role initiator
     --project ID（可重复）--operation OPERATION（可重复）--expires-at ISO
-  crewvane bot revoke ID
+  atte bot revoke ID
 
 内部续跑调度（应用主进程使用）：
-  crewvane autonomy inspect [--at ISO]
-  crewvane autonomy claim ID --continuation ID [--at ISO]
-  crewvane autonomy report ID --continuation ID --outcome sent|failed|settled
+  atte autonomy inspect [--at ISO]
+  atte autonomy claim ID --continuation ID [--at ISO]
+  atte autonomy report ID --continuation ID --outcome sent|failed|settled
     [--lease LEASE_ID] [--detail TEXT] [--at ISO]
 
-使用 --root DIR 或 CREWVANE_WORKSPACE 指定工作区。所有读写与桌面共用状态。
+使用 --root DIR 或 ATTE_WORKSPACE 指定工作区（兼容读取 CREWVANE_WORKSPACE）。所有读写与桌面共用状态。
 goal message 与 direct 不按正文推断状态。交给管家处理的外部等待会恢复 active，待管家重新核定；next 保留。
 waiting 只表示等待用户和所有 Agent 之外的具名外部第三方。需要用户处理请用 decide；内部协调保持 active。remind 不改变生命周期。
 高风险动作类别：delete-data、stop-service、spend-money、external-message、
@@ -195,8 +197,8 @@ async function createSkillDraft(
   const root = resolve(directory),
     id = options.id.trim(),
     name = options.name.trim();
-  if (!/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)+$/.test(id) || id.startsWith("crewvane."))
-    throw new Error("能力包 ID 必须带命名空间，例如 acme.design-review；crewvane. 前缀保留");
+  if (!/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)+$/.test(id) || id.startsWith("atte."))
+    throw new Error("能力包 ID 必须带命名空间，例如 acme.design-review；atte. 前缀保留");
   if (!name || name.length > 120) throw new Error("请输入有效的能力包名称");
   const roles = [...new Set(options.roles.length ? options.roles : ["owner"])];
   if (roles.some(role => role !== "owner" && role !== "verifier"))
@@ -218,7 +220,7 @@ async function createSkillDraft(
     name,
     description,
     version: "1.0.0",
-    minimumCrewvane: "0.11.0",
+    minimumAtte: "0.11.0",
     kind: "process",
     roles,
     entry: "SKILL.md",
@@ -310,13 +312,13 @@ async function verificationCriteria(values: string[], file?: string) {
   });
 }
 async function coordinatorCaseId(allowMissing = false) {
-  if (process.env.CREWVANE_COORDINATOR !== "1") return;
-  const file = process.env.CREWVANE_COORDINATOR_SCOPE_FILE;
+  if (environmentValue(process.env, "COORDINATOR") !== "1") return;
+  const file = environmentValue(process.env, "COORDINATOR_SCOPE_FILE");
   if (!file) throw new Error("管家缺少当前案卷范围，请重新准备管家");
   const raw = await readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
     if (allowMissing && error.code === "ENOENT") return;
     if (error.code === "ENOENT")
-      throw new Error("管家当前没有案卷范围；只有 crewvane direct --new 可以直接建立新目标");
+      throw new Error("管家当前没有案卷范围；只有 atte direct --new 可以直接建立新目标");
     throw error;
   });
   if (!raw) return;
@@ -330,7 +332,7 @@ async function coordinatorCaseId(allowMissing = false) {
   return context;
 }
 async function advanceCoordinatorCase(goal: { id: string; dispatch?: { id?: string } }) {
-  const file = process.env.CREWVANE_COORDINATOR_SCOPE_FILE;
+  const file = environmentValue(process.env, "COORDINATOR_SCOPE_FILE");
   if (!file) throw new Error("管家缺少案卷范围文件，无法继续直接新建的目标");
   const temporary = `${file}.${process.pid}.tmp`;
   await writeFile(temporary, `${JSON.stringify({
@@ -437,11 +439,11 @@ function herdrLiveEvent() {
   throw new Error(`不支持的 Herdr 插件事件：${kind}`);
 }
 async function currentHerdrAgent(paneId: string) {
-  const injected = process.env.CREWVANE_HERDR_PLUGIN_AGENT?.trim();
+  const injected = environmentValue(process.env, "HERDR_PLUGIN_AGENT")?.trim();
   if (injected) return injected;
   const session = process.env.HERDR_SESSION?.trim();
   if (!session) return undefined;
-  const binary = process.env.CREWVANE_HERDR_BINARY?.trim() ||
+  const binary = environmentValue(process.env, "HERDR_BINARY")?.trim() ||
     process.env.HERDR_BIN_PATH?.trim() || "herdr";
   try {
     const { stdout } = await exec(binary, ["--session", session, "agent", "list"], {
@@ -493,12 +495,12 @@ export async function run(argv: string[], io = { out: console.log, error: consol
       // must never prevent the Agent from starting, running or stopping.
       return 0;
     }
-    const managedAgentName = process.env.CREWVANE_AGENT_NAME?.trim(),
-      verifierMode = process.env.CREWVANE_ROLE?.trim() === "verifier",
-      verifierGoalId = process.env.CREWVANE_GOAL_ID?.trim(),
-      workspaceRoot = args.one("root") ?? (process.env.CREWVANE_WORKSPACE?.trim() || process.cwd()),
+    const managedAgentName = environmentValue(process.env, "AGENT_NAME")?.trim(),
+      verifierMode = environmentValue(process.env, "ROLE")?.trim() === "verifier",
+      verifierGoalId = environmentValue(process.env, "GOAL_ID")?.trim(),
+      workspaceRoot = args.one("root") ?? (environmentValue(process.env, "WORKSPACE")?.trim() || process.cwd()),
       sessionContext = managedSessionContext(process.env),
-      coordinatorMode = process.env.CREWVANE_COORDINATOR === "1",
+      coordinatorMode = environmentValue(process.env, "COORDINATOR") === "1",
       coordinatorContext = await coordinatorCaseId(group === "direct" && args.has("new")),
       coordinatorCase = coordinatorContext?.goalId,
       managedContext = sessionContext?.role === "concierge"
@@ -535,7 +537,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
       if (group === "goal" && action === "verify" && target !== verifierGoalId)
         throw new Error("独立复核者只能提交当前复核目标的复核结果");
     }
-    let command: CrewvaneCommand | undefined, result: unknown, coordinatorRead = false,
+    let command: AtteCommand | undefined, result: unknown, coordinatorRead = false,
       verifierRead = false,
       ownerLaunch: {
         name: string;
@@ -578,7 +580,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
     }
     if (coordinatorMode && !coordinatorCase) {
       if (group !== "direct" || !args.has("new"))
-        throw new Error("管家当前没有案卷范围；只有 crewvane direct --new 可以直接建立新目标");
+        throw new Error("管家当前没有案卷范围；只有 atte direct --new 可以直接建立新目标");
     } else if (coordinatorCase) {
       if (group === "status") {
         const state = await service.read(), goal = state.goals.find(item => item.id === coordinatorCase);
@@ -760,7 +762,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
           type: "goal.boundary",
           goalId: target!,
           change: change as Extract<
-            CrewvaneCommand,
+            AtteCommand,
             { type: "goal.boundary" }
           >["change"],
           actor,
@@ -1035,7 +1037,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
         const value = envelope as Record<string, unknown>;
         command = {
           type: "bot.request",
-          schema: value.schema as "crewvane.bot.v1",
+          schema: value.schema as "atte.bot.v1",
           requestId: value.requestId as string,
           operation: value.operation as import("../../packages/core/src/index.js").BotOperation,
           botId: value.botId as string,
@@ -1051,7 +1053,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
       else if (group === "session" && action === "set") {
         if (!target)
           throw new Error("session set 必须指定目标 ID；全局管家现场由桌面应用管理。");
-        command = { type: "session.set", goalId: target, reference: { session: args.one("session") ?? process.env.HERDR_SESSION ?? "crewvane", workspaceId: args.one("workspace"), tabId: args.one("tab"), paneId: args.one("pane"), agent: args.one("agent"),
+        command = { type: "session.set", goalId: target, reference: { session: args.one("session") ?? process.env.HERDR_SESSION ?? "atte", workspaceId: args.one("workspace"), tabId: args.one("tab"), paneId: args.one("pane"), agent: args.one("agent"),
           ...(args.has("transport") ? { transport: args.one("transport") as "pane", processId: Number(args.one("process-id")) } : {}) } };
       }
       else if (group === "skill" && action === "list") {
@@ -1146,7 +1148,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
           goalId = args.one("goal");
         if (!scriptId || !goalId) throw new Error("skill run 需要 SCRIPT_ID 与 --goal GOAL_ID");
         if (managedAgent) {
-          const currentGoal = process.env.CREWVANE_GOAL_ID?.trim();
+          const currentGoal = environmentValue(process.env, "GOAL_ID")?.trim();
           if (!currentGoal || currentGoal !== goalId)
             throw new Error("受管 Agent 只能运行当前目标挂载的能力包脚本");
         }
@@ -1162,8 +1164,11 @@ export async function run(argv: string[], io = { out: console.log, error: consol
           PATH: process.env.PATH,
           TMPDIR: process.env.TMPDIR,
           LANG: process.env.LANG,
+          ATTE_GOAL_ID: item.id,
           CREWVANE_GOAL_ID: item.id,
+          ATTE_SKILL_PACK: target,
           CREWVANE_SKILL_PACK: target,
+          ATTE_SKILL_SCRIPT: scriptId,
           CREWVANE_SKILL_SCRIPT: scriptId,
         };
         const execution = await new Promise<{
@@ -1322,5 +1327,5 @@ export async function run(argv: string[], io = { out: console.log, error: consol
     }
     else { const goal = result as import("../../packages/core/src/index.js").Goal; io.out(goal?.id ? `${goal.id} · ${goal.status}\n${goal.next}` : JSON.stringify(result)); }
     return 0;
-  } catch (error) { io.error(`crewvane: ${error instanceof Error ? error.message : String(error)}`); return 1; }
+  } catch (error) { io.error(`atte: ${error instanceof Error ? error.message : String(error)}`); return 1; }
 }

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # LEGACY: 0.2-era manual-contract skill installer. The current 0.6 app installs
-# its CLI and the crewvane skill from Settings; this script and the ship-*
+# its CLI and the atte skill from Settings; this script and the ship-*
 # skills are kept for historical reference and are not part of the 0.6 flow.
-# One-command install for crewvane. No git clone and no sudo.
-#   curl -fsSL https://raw.githubusercontent.com/gdli6177/crewvane/main/install.sh | bash
+# One-command install for atte. No git clone and no sudo.
+#   curl -fsSL https://raw.githubusercontent.com/gdli6177/atte/main/install.sh | bash
 # Pin a tag:  curl -fsSL .../install.sh | bash -s -- --ref v0.1.0
-# Tests can set CREWVANE_TARBALL to a local .tar.gz instead of downloading.
+# Tests can set ATTE_TARBALL to a local .tar.gz instead of downloading.
 set -euo pipefail
 
-REPO="gdli6177/crewvane"
+REPO="gdli6177/atte"
 DEFAULT_REF="main"
 SKILLS=(
   ship-setup
@@ -19,29 +19,30 @@ SKILLS=(
   ship-notify
   ship-e2e
 )
-SHIM_MARKER="crewvane-shim"
+SHIM_MARKER="atte-shim"
 
-REF="${CREWVANE_REF:-$DEFAULT_REF}"
-KIT_HOME="${CREWVANE_HOME:-$HOME/.crewvane}"
-BIN_DIR="${CREWVANE_BIN_DIR:-$HOME/.local/bin}"
+REF="${ATTE_REF:-$DEFAULT_REF}"
+KIT_HOME="${ATTE_HOME:-$HOME/.atte}"
+LEGACY_KIT_HOME="${CREWVANE_HOME:-$HOME/.crewvane}"
+BIN_DIR="${ATTE_BIN_DIR:-$HOME/.local/bin}"
 TARGETS=()
 AGENTS=()
 UNINSTALL=0
 
 usage() {
   cat <<'EOF'
-Install crewvane without cloning.
+Install atte without cloning.
 
-  curl -fsSL https://raw.githubusercontent.com/gdli6177/crewvane/main/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/gdli6177/atte/main/install.sh | bash
 
 Options:
-  --ref <name>     Branch or tag to install (default: main, or CREWVANE_REF).
+  --ref <name>     Branch or tag to install (default: main, or ATTE_REF).
                    Slashes are allowed, as in feature/foo. The directory name
                    uses __ in place of /.
   --agent <name>   cursor, claude, codex, qoder, kiro, omp, agents, or all. Repeatable.
   --target <dir>   Copy skills into this directory instead of detecting agents.
   --uninstall      Remove the shim, the skill directories this installer
-                   recorded, and the whole ~/.crewvane directory
+                   recorded, and the whole ~/.atte directory
                    (every ref and the current symlink).
   -h, --help       Show this help.
 
@@ -108,10 +109,10 @@ require_node() {
   fi
   local major
   if ! major="$(node -p 'process.versions.node.split(".")[0]')"; then
-    die "could not read the Node.js version. crewvane needs Node.js 20 or newer."
+    die "could not read the Node.js version. atte needs Node.js 20 or newer."
   fi
   if [[ ! "$major" =~ ^[0-9]+$ ]] || [[ "$major" -lt 20 ]]; then
-    die "Node.js $(node -v 2>/dev/null || echo "$major") is too old. crewvane needs Node.js 20 or newer."
+    die "Node.js $(node -v 2>/dev/null || echo "$major") is too old. atte needs Node.js 20 or newer."
   fi
 }
 
@@ -218,16 +219,29 @@ copy_skills() {
   done
 }
 
+verify_shim_target() {
+  local shim="$BIN_DIR/atte"
+  [[ -e "$shim" || -L "$shim" ]] || return 0
+  [[ -f "$shim" && ! -L "$shim" ]] || die "refused to replace unowned CLI entry: $shim"
+  [[ "$(head -n 2 "$shim" 2>/dev/null)" == $'#!/bin/sh\n# atte-shim' ]] &&
+    grep -q -E '^exec .+/cli/bin/atte\.js "\$@"$' "$shim" ||
+    die "refused to replace unowned CLI entry: $shim"
+}
+
 write_shim() {
   local bin_js="$1"
+  verify_shim_target
   mkdir -p "$BIN_DIR"
-  SHIM_PATH="$BIN_DIR/crewvane"
+  SHIM_PATH="$BIN_DIR/atte"
+  local temporary
+  temporary="$(mktemp "$BIN_DIR/.atte-shim.XXXXXX")"
   {
     printf '%s\n' "#!/bin/sh"
     printf '%s\n' "# $SHIM_MARKER"
     printf 'exec %q "$@"\n' "$bin_js"
-  } >"$SHIM_PATH"
-  chmod 755 "$SHIM_PATH"
+  } >"$temporary"
+  chmod 755 "$temporary"
+  mv -f "$temporary" "$SHIM_PATH"
 }
 
 write_manifest() {
@@ -235,7 +249,7 @@ write_manifest() {
   local line
   MANIFEST="$KIT_HOME/manifest"
   {
-    printf '%s\n' "# crewvane-manifest"
+    printf '%s\n' "# atte-manifest"
     printf 'ref=%s\n' "$REF"
     printf 'dir=%s\n' "$(ref_dir_name "$REF")"
     printf 'kit=%s\n' "$kit"
@@ -274,6 +288,76 @@ remove_kit_dir() {
   fi
 }
 
+migrate_legacy_home() {
+  [[ "$KIT_HOME" != "$LEGACY_KIT_HOME" ]] || return 0
+  [[ ! -e "$KIT_HOME" && -d "$LEGACY_KIT_HOME" && ! -L "$LEGACY_KIT_HOME" ]] || return 0
+  if node - "$LEGACY_KIT_HOME" "$KIT_HOME" <<'NODE'
+const { cp, lstat, mkdir, readFile, readlink, readdir, rename, rm, writeFile } = require("node:fs/promises");
+const { createHash, randomUUID } = require("node:crypto");
+const { dirname, join } = require("node:path");
+
+async function filesUnder(root, prefix = "") {
+  const files = [];
+  for (const entry of await readdir(join(root, prefix), { withFileTypes: true })) {
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isSymbolicLink()) files.push({ path, type: "symlink" });
+    else if (entry.isDirectory()) files.push(...await filesUnder(root, path));
+    else if (entry.isFile()) files.push({ path, type: "file" });
+    else throw new Error(`only regular files can be migrated: ${path}`);
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+(async () => {
+  const [legacy, current] = process.argv.slice(2);
+  const temporary = join(dirname(current), `.atte-migration-${process.pid}-${randomUUID()}`);
+  try {
+    await mkdir(dirname(current), { recursive: true });
+    await cp(legacy, temporary, {
+      recursive: true, force: false, errorOnExist: true, dereference: false, verbatimSymlinks: true,
+    });
+    const expected = await filesUnder(legacy), actual = await filesUnder(temporary);
+    if (JSON.stringify(expected) !== JSON.stringify(actual)) throw new Error("file list mismatch");
+    for (const { path, type } of expected) {
+      if (type === "symlink") {
+        if (await readlink(join(legacy, path)) !== await readlink(join(temporary, path)))
+          throw new Error(`symbolic link mismatch: ${path}`);
+        continue;
+      }
+      const [before, after] = await Promise.all([readFile(join(legacy, path)), readFile(join(temporary, path))]);
+      if (createHash("sha256").update(before).digest("hex") !== createHash("sha256").update(after).digest("hex"))
+        throw new Error(`digest mismatch: ${path}`);
+    }
+    await writeFile(join(temporary, ".atte-migration.json"), `${JSON.stringify({
+      version: 1, source: legacy, migratedAt: new Date().toISOString(), verified: true,
+    }, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+    await rename(temporary, current);
+  } catch (error) {
+    await rm(temporary, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+})().catch(error => { console.error(error.message); process.exitCode = 1; });
+NODE
+  then
+    echo "migrated $LEGACY_KIT_HOME to $KIT_HOME; the original remains in place"
+  else
+    echo "warning: could not migrate $LEGACY_KIT_HOME; continuing to use the old directory" >&2
+    KIT_HOME="$LEGACY_KIT_HOME"
+  fi
+}
+
+remove_legacy_shim() {
+  local shim="$BIN_DIR/crewvane"
+  [[ -f "$shim" && ! -L "$shim" ]] || return 0
+  if [[ "$(head -n 2 "$shim" 2>/dev/null)" == $'#!/bin/sh\n# crewvane-shim' ]] &&
+    grep -q -E '^exec .+/cli/bin/crewvane\.js "\$@"$' "$shim"; then
+    rm -f "$shim"
+    echo "removed old managed shim $shim"
+  else
+    echo "warning: left $shim in place because it is not a verified old Atte/Crewvane shim" >&2
+  fi
+}
+
 remove_recorded_kits() {
   local keep="$1" manifest="$KIT_HOME/manifest" line kit
   [[ -f "$manifest" ]] || return 0
@@ -305,10 +389,10 @@ kit_home_is_ours() {
     *"/.."*|*"../"*) return 1 ;;
   esac
   [[ -d "$KIT_HOME" ]] || return 1
-  if [[ "$(basename "$KIT_HOME")" == ".crewvane" ]]; then
+  if [[ "$(basename "$KIT_HOME")" == ".atte" ]]; then
     return 0
   fi
-  [[ -f "$KIT_HOME/manifest" ]] && grep -q -F "crewvane-manifest" "$KIT_HOME/manifest"
+  [[ -f "$KIT_HOME/manifest" ]] && grep -q -F "atte-manifest" "$KIT_HOME/manifest"
 }
 
 on_path() {
@@ -346,22 +430,24 @@ cleanup_install() {
 
 install_kit() {
   valid_ref "$REF" || die "ref must be a branch or tag (for example main, v0.1.0, or feature/foo)"
+  verify_shim_target
   require_node
+  migrate_legacy_home
   command -v tar >/dev/null 2>&1 || die "tar is required"
   trap cleanup_install EXIT
   local extract src dest
   TMP_DIR="$(mktemp -d)"
   extract="$TMP_DIR/extract"
   mkdir -p "$extract"
-  if [[ -n "${CREWVANE_TARBALL:-}" ]]; then
-    [[ -f "$CREWVANE_TARBALL" ]] || die "CREWVANE_TARBALL is not a file: $CREWVANE_TARBALL"
-    echo "Installing crewvane from $CREWVANE_TARBALL ($REF)"
-    tar -xzf "$CREWVANE_TARBALL" -C "$extract"
+  if [[ -n "${ATTE_TARBALL:-}" ]]; then
+    [[ -f "$ATTE_TARBALL" ]] || die "ATTE_TARBALL is not a file: $ATTE_TARBALL"
+    echo "Installing atte from $ATTE_TARBALL ($REF)"
+    tar -xzf "$ATTE_TARBALL" -C "$extract"
   else
     command -v curl >/dev/null 2>&1 || die "curl is required"
     local url
     url="$(codeload_url "$REF")"
-    echo "Downloading crewvane ($REF)"
+    echo "Downloading atte ($REF)"
     curl -fsSL "$url" | tar -xz -C "$extract"
   fi
 
@@ -377,7 +463,7 @@ install_kit() {
       fi
     done
   fi
-  [[ -n "$src" ]] || die "downloaded archive does not look like crewvane"
+  [[ -n "$src" ]] || die "downloaded archive does not look like atte"
 
   resolve_targets
   [[ ${#TARGETS[@]} -gt 0 ]] || die "no skill directory to install into"
@@ -392,12 +478,12 @@ install_kit() {
   mkdir -p "$STAGE_DIR"
   cp -a "$src"/. "$STAGE_DIR"/
   rm -rf "$STAGE_DIR/node_modules" "$STAGE_DIR/cli/node_modules"
-  echo "Installing the crewvane CLI (Node $(node -v))"
+  echo "Installing the atte CLI (Node $(node -v))"
   (
     cd "$STAGE_DIR" &&
       npm install --omit=dev --no-update-notifier --no-fund --no-audit --silent </dev/null
   ) || die "npm install failed"
-  chmod 755 "$STAGE_DIR/cli/bin/crewvane.js"
+  chmod 755 "$STAGE_DIR/cli/bin/atte.js"
   rm -rf "$dest"
   mv "$STAGE_DIR" "$dest"
   STAGE_DIR=""
@@ -406,7 +492,8 @@ install_kit() {
 
   remove_recorded_kits "$dest"
   link_current "$dest"
-  write_shim "$KIT_HOME/current/cli/bin/crewvane.js"
+  write_shim "$KIT_HOME/current/cli/bin/atte.js"
+  remove_legacy_shim
   copy_skills "$KIT_HOME/current"
   write_manifest "$dest"
 
@@ -416,7 +503,7 @@ install_kit() {
   fi
 
   echo
-  echo "crewvane installed"
+  echo "atte installed"
   echo "  ref:     $REF"
   echo "  kit:     $dest"
   echo "  current: $KIT_HOME/current"
@@ -436,7 +523,7 @@ remove_shim() {
     rm -f "$shim"
     echo "removed shim $shim"
   else
-    echo "warning: left $shim in place because it was not installed by crewvane" >&2
+    echo "warning: left $shim in place because it was not installed by atte" >&2
   fi
 }
 
@@ -453,7 +540,7 @@ remove_skill() {
 
 uninstall_kit() {
   local manifest="$KIT_HOME/manifest"
-  local shim="$BIN_DIR/crewvane"
+  local shim="$BIN_DIR/atte"
   local skills=()
   local line skill
   if [[ -f "$manifest" ]]; then
@@ -479,7 +566,7 @@ uninstall_kit() {
     echo "warning: refused to delete $KIT_HOME" >&2
   fi
   echo
-  echo "crewvane removed"
+  echo "atte removed"
   echo
   echo "Next: nothing remains on PATH from this installer. Project repositories were not modified."
 }
