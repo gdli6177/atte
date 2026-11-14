@@ -915,6 +915,15 @@ try {
   // the persisted snapshot so the row and action card cannot disagree when
   // FSEvents arrives after the direct state read.
   await page.reload();
+  // Wait for the renderer to rehydrate from the persisted snapshot before
+  // navigating: clicking straight after reload can reach a store that has not
+  // loaded the dispatch failure yet, which reads as a missing attention card.
+  await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
+  await page.waitForFunction(async goalId => {
+    const snapshot = await window.atte.command({ type: "snapshot" });
+    const current = snapshot.goals.find(goal => goal.id === goalId);
+    return current?.attention?.source === "dispatch" && current.dispatch?.status === "failed";
+  }, offline.id);
   await page.getByRole("button", { name: "全部目标", exact: true }).click();
   const offlineRow = page.locator(".goal-row").filter({ hasText: "联系管家失败界面" });
   await offlineRow.getByText("恢复联系", { exact: true }).waitFor();
