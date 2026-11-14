@@ -816,9 +816,6 @@ function App() {
                   </p>
                 </div>
                 <div className="pixel-scene" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
                   <BrandMark decorative />
                 </div>
               </section>

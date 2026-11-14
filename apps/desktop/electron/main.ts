@@ -95,7 +95,7 @@ let cacheMaintenanceQueue: Promise<unknown> = Promise.resolve();
 const here = __dirname;
 // Native window chrome needs a startup color before renderer CSS is available.
 // Keep this synchronized with the dark `--bg` design token and DESIGN.md.
-const WINDOW_BACKGROUND = "#111520";
+const WINDOW_BACKGROUND = "#0d1214";
 const terminals = new TerminalHost((event) => {
   if (window && !window.isDestroyed()) window.webContents.send("crewvane:event", event);
 }, process.env);

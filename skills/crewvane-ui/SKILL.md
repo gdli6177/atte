@@ -5,7 +5,7 @@ description: Use when changing Atte desktop UI: layout, styles, buttons, cards, 
 
 # Atte UI
 
-桌面界面只有一套设计语言：`DESIGN.md` 定义 token 与语义，`apps/desktop/src/ui/`
+桌面界面只有一套设计语言：`DESIGN.md` 定义语义，`apps/desktop/src/tokens.css` 集中六类 token，`apps/desktop/src/ui/`
 提供绑定 token 的 React 原语。改 UI 前先读这两处，再读
 `docs/design/brand-ui.md`；不要凭截图或记忆另起一套样式。
 
@@ -50,6 +50,8 @@ description: Use when changing Atte desktop UI: layout, styles, buttons, cards, 
 - 间距：`--space-1`(4) `--space-2`(8) `--space-3`(12) `--space-4`(16)
   `--space-5`(20) `--space-6`(24) `--space-8`(32)
 - 圆角：`--r-sm`(6) `--r-md`(10) `--r-lg`(14) `--r-xl`(20)，药丸用 `999px`
+- 阴影、动效读取 `--shadow`、`--shadow-card`、`--duration-*`、`--ease-*`；
+  品牌图形使用 `BrandMark`，不在页面绑定具体资产或决定新 logo 方向。
 - 颜色混合只允许 `color-mix(in srgb, var(--token) N%, var(--token))`；
   不要混入字面 hex。
 
@@ -76,6 +78,8 @@ description: Use when changing Atte desktop UI: layout, styles, buttons, cards, 
 - 状态色与 `DESIGN.md` 语义一致，且始终有文字。
 - 窄窗口（≤980px）下设置卡片单列、表单单列、空态动作换行。
 - 无新增 hex / px 字号；`git diff` 中样式改动可指到 token 或原语。
+
+新增与修改场景的 eval 见 [references/atte-eval.md](references/atte-eval.md)。
 
 ## 验证命令
 

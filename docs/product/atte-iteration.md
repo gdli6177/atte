@@ -65,3 +65,14 @@ CLI 的 `goal rework` 是保留的显式状态协议，不是交互按钮或命�
 记录在 `apps/desktop/assets/brand/atte-assets.json`；原图完整保留。
 本轮没有创造新图形，输出状态为 `baseline-preparation`。
 这满足本轮缩小后的资产准备范围，最终 logo 升级与“全新图形已验收”尚未完成。
+
+## 简约界面与 token（VI-1、VI-2）
+
+首页去除轨道与光点，详情去除网格与光晕，侧栏和顶栏使用纯色，
+普通卡片取消装饰阴影与悬停抬升。正文调整为 14px，元信息最低 12px；
+深浅主题继续使用已有语义色。首页、详情、设置共用同一套原语和 token。
+
+`tokens.css` 提供 primitive / semantic / component 三层与六类 token；
+原有布局尺寸集中管理，媒体查询保留必要断点。终端颜色、字体、字号从 token
+读取，减弱动态效果时关闭光标闪烁。实现规范见 `DESIGN.md` 与
+[token 文档](../design/tokens.md)，Skill 与 eval 同步更新。
