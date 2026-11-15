@@ -68,7 +68,7 @@ test("corrupt or oversize downloads never open an installer and remove temporary
     assert.deepEqual(await readdir(f.directory), []);
   }
 });
-test("offline checks preserve usable installation; unverified upstream versions do not change the pinned update", async t => {
+test("offline checks preserve installation and upstream versions do not change installer pinning", async t => {
   const f = await fixture(t, { fetch: async () => { throw new Error("offline"); } });
   const failed = await f.installer.check();
   assert.equal(failed.phase, "error");
@@ -77,7 +77,25 @@ test("offline checks preserve usable installation; unverified upstream versions 
   const checked = await g.installer.check();
   assert.equal(checked.latestVersion, "2.0.0");
   assert.equal(checked.verifiedVersion, release.version);
-  assert.match(checked.detail!, /尚未经本版验证/);
+  assert.match(checked.detail!, /可安装经过校验/);
+  assert.doesNotMatch(checked.detail!, /尚未经本版验证/);
+});
+test("a newer compatible installation is usable independently of the recommended installer version", async t => {
+  const f = await fixture(t, {
+    detect: async (): Promise<BackendDetection> => ({
+      id: "orca", version: "2.0.0", status: "compatible",
+      capabilities: { create: true, inspect: true, send: true, focus: true, close: true, discover: true, nativeResume: false },
+    }),
+    fetch: async () => Response.json({ tag_name: "v2.0.0" }),
+  });
+  const status = await f.installer.check();
+  assert.equal(status.detection.status, "compatible");
+  assert.equal(status.updateAvailable, false);
+  assert.equal(status.verifiedVersion, release.version);
+  assert.match(status.detail!, /已安装 Orca 2\.0\.0/);
+  assert.doesNotMatch(status.detail!, /未验证|未经本版验证|不兼容/);
+  assert.match((await f.installer.install()).detail!, /不自动降级/);
+  assert.equal(f.opened(), 0);
 });
 test("cancelling an in-flight download keeps the old backend independent and deletes partial files", async t => {
   let started!: () => void;

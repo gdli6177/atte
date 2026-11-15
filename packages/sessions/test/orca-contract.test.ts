@@ -15,6 +15,7 @@ function envelope(result: unknown, runtimeId = "runtime-one") {
 async function fixture(t: test.TestContext, options: {
   lostCreate?: boolean; malformedSend?: boolean; unverifiableClose?: boolean;
   unsupportedObserver?: boolean; afterSendState?: string; orphaned?: boolean;
+  missingRuntimeCapability?: string;
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), "cv-orca-parser-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -54,7 +55,7 @@ async function fixture(t: test.TestContext, options: {
         app: { pid: 100 },
         runtime: { reachable: true, runtimeId, appVersion: "1.4.258", capabilities: [
           "terminal.prompt-delivery.v1", "terminal.create-idempotency.v2", "workspace-selector.folder-match.v1",
-        ] },
+        ].filter(capability => capability !== options.missingRuntimeCapability) },
         graph: { state: "ready" },
       }, runtimeId);
       if (command === "worktree show") return envelope({ worktree: { id: terminal().worktreeId, path: input.cwd } }, runtimeId);
@@ -118,6 +119,12 @@ test("unknown or mixed JSON is never accepted as success", () => {
   assert.throws(() => orcaEnvelope('{"ok":false,"error":{"code":"permission","message":"blocked"}}'), /permission/);
 });
 sessionContract("Orca", fixture);
+test("a reachable runtime must still provide every required capability", async t => {
+  for (const capability of ["terminal.prompt-delivery.v1", "terminal.create-idempotency.v2", "workspace-selector.folder-match.v1"]) {
+    await assert.rejects(fixture(t, { missingRuntimeCapability: capability }), error =>
+      error instanceof Error && error.message.includes(capability));
+  }
+});
 test("start-if-missing launches an isolated profile as a new Orca instance", async t => {
   const root = await mkdtemp(join(tmpdir(), "cv-orca-start-"));
   t.after(() => rm(root, { recursive: true, force: true }));

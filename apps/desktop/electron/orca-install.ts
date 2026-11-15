@@ -14,6 +14,7 @@ import {
 const exec = promisify(execFile);
 export interface OrcaInstallationStatus {
   detection: BackendDetection;
+  /** Version of the pinned, checksum-verified installer; not a runtime allowlist. */
   verifiedVersion: string;
   latestVersion?: string;
   updateAvailable: boolean;
@@ -116,7 +117,7 @@ export class OrcaInstallation {
       detection, updateAvailable,
       phase: waiting ? "awaiting_installation" : "idle",
       detail: waiting ? "安装卷已打开，尚未检测到兼容版本。请完成安装后再点击“重新检测”。"
-        : detection.status === "compatible" ? "已通过本版兼容检测。" : detection.detail,
+        : detection.status === "compatible" ? detection.detail ?? "应用身份和命令行接口检查通过。" : detection.detail,
     });
   }
   check() {
@@ -136,16 +137,12 @@ export class OrcaInstallation {
       const tag = value && typeof value === "object" && "tag_name" in value ? value.tag_name : undefined;
       const latestVersion = typeof tag === "string" ? /^v?(\d+\.\d+\.\d+)$/.exec(tag)?.[1] : undefined;
       if (!latestVersion) throw new Error("官方版本清单无效");
-      return this.publish({
-        phase: "idle", latestVersion,
-        detail: compare(latestVersion, this.dependencies.release.version) > 0
-          ? `官方已发布 ${latestVersion}，尚未经本版验证；更新入口仍提供已验证的 ${this.dependencies.release.version}。`
-          : this.current.updateAvailable
-            ? `可更新到已验证的 Orca ${this.dependencies.release.version}。`
-            : this.current.detection.status === "compatible"
-              ? `已安装本版验证的 Orca ${this.dependencies.release.version}。`
-              : `可安装已验证的 Orca ${this.dependencies.release.version}。${this.current.detection.detail ?? ""}`,
-      });
+      const detection = this.current.detection;
+      const detail = detection.status === "compatible"
+        ? `已安装 Orca ${detection.version}，应用身份和命令行接口检查通过。${this.current.updateAvailable
+          ? `可更新到推荐安装包 ${this.dependencies.release.version}。` : ""}`
+        : `可安装经过校验的 Orca ${this.dependencies.release.version}。${detection.detail ?? "请重新检测应用接口。"}`;
+      return this.publish({ phase: "idle", latestVersion, detail });
     } catch (error) {
       return this.publish({ phase: "error",
         detail: `检查更新未完成：${error instanceof Error ? error.message : String(error)}。现有后端与目标保持不变，可重试或下载已验证安装包。` });
@@ -176,7 +173,7 @@ export class OrcaInstallation {
     await this.detectNow();
     // Never turn an "update" into a silent downgrade.
     if (this.current.detection.version && compare(this.current.detection.version, this.dependencies.release.version) > 0)
-      return this.publish({ phase: "error", detail: "已安装更新的 Orca，不自动降级。请选择本版支持的独立应用或等待兼容更新。" });
+      return this.publish({ phase: "error", detail: "已安装更新的 Orca，不自动降级。可重新检测当前应用接口，或选择其他官方 Orca 应用。" });
     this.abort = new AbortController();
     const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(300_000)]);
     let temporary: string | undefined;

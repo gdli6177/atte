@@ -1,6 +1,6 @@
 {
   "name": "atte",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "description": "Atte — The attention layer",
   "license": "MIT",
   "type": "module",
@@ -35,6 +35,7 @@
     "test:session-contract": "tsx --test packages/sessions/test/herdr-contract.test.ts packages/sessions/test/orca-contract.test.ts",
     "test:backend-switch": "tsx --test packages/sessions/test/backend-switch.test.ts packages/sessions/test/recovery-channel.test.ts",
     "test:orca": "tsx scripts/orca-contract-smoke.mjs",
+    "test:orca-selection": "tsx scripts/orca-selection-smoke.mjs",
     "test:backend-e2e": "tsx scripts/backend-e2e-smoke.mjs",
     "desktop": "pnpm --dir apps/desktop dev",
     "build": "pnpm --dir apps/desktop build",

@@ -1,12 +1,12 @@
-// Run with tsx. Uses an explicitly isolated Orca profile that the test runner
-// has started; it never scans or closes a user's normal Orca resources.
+// Run with tsx. Starts or reuses an explicitly isolated Orca profile;
+// it never scans or closes a user's normal Orca resources.
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, realpath, writeFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { OrcaAdapter, createLaunchFiles } from "../packages/sessions/src/index.ts";
+import { OrcaAdapter, createLaunchFiles, detectOrcaApplication } from "../packages/sessions/src/index.ts";
 
 const profile = process.env.ATTE_TEST_ORCA_PROFILE;
 assert(profile && profile.startsWith("/private/tmp/"), "Pass an isolated ATTE_TEST_ORCA_PROFILE, never a normal user profile.");
@@ -35,14 +35,17 @@ await writeFile(join(shell, ".zshrc"), [
   "",
 ].join("\n"));
 const appPath = process.env.ATTE_TEST_ORCA_APP ?? "/Applications/Orca.app";
+const detection = await detectOrcaApplication(appPath);
+assert.equal(detection.status, "compatible", detection.detail);
+const expectedVersion = process.env.ATTE_TEST_ORCA_VERSION;
+if (expectedVersion) assert.equal(detection.version, expectedVersion);
 const adapter = new OrcaAdapter({
   appPath, directory: join(root, "control"),
   environment: { ...process.env, ORCA_USER_DATA_PATH: profile },
   shellEnvironment: { ZDOTDIR: shell },
+  detect: async () => detection,
 });
-const detection = await adapter.detect();
-assert.equal(detection.status, "compatible", detection.detail);
-const runtime = await adapter.connect({ installationId: "cv-test-installation", cwd });
+const runtime = await adapter.connect({ installationId: "cv-test-installation", cwd, startIfMissing: true });
 const requestId = randomUUID(), attemptId = randomUUID(), bindingId = randomUUID();
 const files = await createLaunchFiles(join(root, "control"), {
   requestId, attemptId, bindingId, installationId: "cv-test-installation", backendEpoch: 0,
@@ -98,7 +101,9 @@ try {
   assert.equal(closed.status, "stopped", closed.detail);
   const summary = {
     version: "v1", test: "orca-contract-smoke", appVersion: detection.version,
-    runtime: runtime.id, passed: true, alias: true, unicodeCwd: true,
+    runtime: runtime.id, runtimeProcess: runtime.process, profile,
+    detectionBasis: "application-identity-and-cli-contract",
+    passed: true, alias: true, unicodeCwd: true,
     longPATH: facts.pathEntries, receivedBytes: received.length, exactlyOnce: true,
     focused: 20, closed, nativeResume: await adapter.captureResume(scene),
   };

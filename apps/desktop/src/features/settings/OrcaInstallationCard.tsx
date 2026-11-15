@@ -41,15 +41,15 @@ export function OrcaInstallationCard() {
           <span className={`settings-status ${compatible ? "ready" : ""}`}>
             <i />{installed ? `已安装 ${status.detection.version}` : "尚未安装"}
           </span>
-          <span className="muted">本版已验证 {status.verifiedVersion}</span>
+          <span className="muted">推荐安装包 {status.verifiedVersion}</span>
           {status.latestVersion && status.latestVersion !== status.verifiedVersion &&
-            <span className="muted">官方最新 {status.latestVersion} · 待兼容验证</span>}
+            <span className="muted">官方最新 {status.latestVersion}</span>}
         </div>
         {status.detection.appPath && <div className="settings-facts"><code>{status.detection.appPath}</code></div>}
         <p className={status.phase === "error" ? "ui-field__error" : "muted"}
           role={status.phase === "error" ? "alert" : "status"} aria-live="polite">{status.detail}</p>
         {newer && !compatible && <p className="muted">
-          当前版本比本版已验证版本更新，不会自动降级。请重新检测，或通过“选择已有 Orca”使用独立安装的已验证版本。
+          请点击“重新检测”检查当前应用与接口，具体原因见上方。也可通过“选择已有 Orca”使用其他官方应用。
         </p>}
         {downloading && <progress aria-label="Orca 安装包下载进度"
           max={status.totalBytes || 1} value={status.receivedBytes || 0} className="orca-download-progress" />}

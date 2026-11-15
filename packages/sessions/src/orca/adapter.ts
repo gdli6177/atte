@@ -15,6 +15,7 @@ import { atomicJSON, claimJSON, childPath, readJSON, record, string } from "../i
 import { launcherCommand, readLaunchReceipt, receiptProcess, type LaunchReceipt } from "../launcher.js";
 import { localProcesses, type ProcessInspector } from "../process.js";
 import { detectOrcaApplication } from "./detection.js";
+import { ORCA_REQUIRED_RUNTIME_CAPABILITIES } from "./compatibility.js";
 import { orcaEnvelope, orcaPrograms, orcaTerminal, terminalPaneKey, OrcaCommandError, type OrcaEnvelope, type OrcaTerminal } from "./parser.js";
 
 const exec = promisify(execFile);
@@ -78,7 +79,7 @@ export class OrcaAdapter implements SessionAdapter {
       !runtimeId || runtimeId === "none" || runtime.runtimeId !== runtimeId)
       throw new SessionError("backend_unreachable", "Orca 本机运行时尚未就绪。");
     const capabilities = Array.isArray(runtime.capabilities) ? runtime.capabilities : [];
-    for (const required of ["terminal.prompt-delivery.v1", "terminal.create-idempotency.v2", "workspace-selector.folder-match.v1"])
+    for (const required of ORCA_REQUIRED_RUNTIME_CAPABILITIES)
       if (!capabilities.includes(required))
         throw new SessionError("backend_incompatible", `Orca 缺少必要能力 ${required}。`);
     const process = Number.isSafeInteger(app.pid) ? await this.processes.identity(app.pid as number) : undefined;

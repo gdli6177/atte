@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  SessionControl, type SessionAdapter, type SwitchHooks, type SwitchJournal, type SceneObservation,
+  SessionControl, SessionError, type SessionAdapter, type SwitchHooks, type SwitchJournal, type SceneObservation,
 } from "../src/index.js";
 import { WorkspaceService, type Goal, type SceneReferenceV1 } from "../../core/src/index.js";
 
@@ -137,6 +137,26 @@ test("missing target or cancelled preparation keeps old backend and never closes
   assert.equal(result?.phase, "cancelled");
   assert.equal((await f.control.status()).selected, "herdr");
   assert.equal(f.calls.length, 0);
+});
+test("a target runtime capability failure preserves the old backend and its scenes", async t => {
+  const f = await fixture(t);
+  const result = await f.control.switchTo("orca", {
+    ...f.hooks,
+    adapter: async (backend, workspace) => {
+      const adapter = await f.hooks.adapter(backend, workspace);
+      return backend !== "orca" ? adapter : {
+        ...adapter,
+        connect: async () => { throw new SessionError("backend_incompatible", "Orca 缺少必要能力 terminal.prompt-delivery.v1。"); },
+      };
+    },
+  });
+  assert.equal(result?.phase, "cancelled");
+  assert.match(result?.detail ?? "", /terminal\.prompt-delivery\.v1/);
+  assert.equal((await f.control.status()).selected, "herdr");
+  assert.equal((await f.control.status()).epoch, 0);
+  assert.equal((await f.services[0]!.read()).backendEpoch, 0);
+  assert.deepEqual(f.calls, []);
+  assert([...f.resources.values()].every(resource => !resource.closed));
 });
 test("working, blocked and unknown cannot be silently killed during a switch", async t => {
   for (const state of ["working", "blocked", "unknown"] as const) {

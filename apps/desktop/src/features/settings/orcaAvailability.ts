@@ -3,7 +3,7 @@ import type { BackendControlStatus } from "../../api.js";
 export function orcaAvailability(detection: BackendControlStatus["orca"]["detection"]) {
   switch (detection.status) {
     case "compatible":
-      return { available: true, label: "可切换", detail: "已通过本版兼容检测。" };
+      return { available: true, label: "可切换", detail: detection.detail ?? "应用与接口检查通过。" };
     case "missing":
       return {
         available: false,
@@ -13,14 +13,14 @@ export function orcaAvailability(detection: BackendControlStatus["orca"]["detect
     case "unverified":
       return {
         available: false,
-        label: "已安装 · 待验证",
-        detail: `Orca ${detection.version ?? "当前版本"} 已安装，尚未通过本版兼容验证。请在下方重新检测，或选择已验证版本。`,
+        label: "已安装 · 待检测",
+        detail: detection.detail ?? "Orca 已安装，尚未完成命令行接口检测，请点击“重新检测”后重试。",
       };
     case "incompatible":
       return {
         available: false,
-        label: "安装需修复",
-        detail: `Orca 安装需要修复。${detection.detail ?? "请在下方重新检测或选择已有应用。"}`,
+        label: "检测未通过",
+        detail: detection.detail ?? "Orca 应用或接口检查未通过，请重新检测或选择其他官方应用。",
       };
   }
 }
