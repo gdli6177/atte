@@ -93,11 +93,23 @@ try {
         status,
         version,
         appPath: status === "missing" ? undefined : "/Applications/Orca.app",
-        detail: status === "unverified" ? `Orca ${version} 尚未通过兼容验证。` :
+        detail: status === "unverified" ? `Orca ${version} 命令行接口检测尚未完成。` :
           status === "incompatible" ? "Orca CLI 校验失败。" : undefined,
       },
     };
     await app.evaluate(({ BrowserWindow, ipcMain }, next) => {
+      // Keep this fixture authoritative even when an asynchronous real status
+      // refresh finishes after the test has published its simulated state.
+      const contents = BrowserWindow.getAllWindows()[0].webContents;
+      const originalSend = contents.__atteFixtureOriginalSend ?? contents.send.bind(contents);
+      contents.__atteFixtureOriginalSend = originalSend;
+      contents.send = (channel, event, ...rest) => {
+        if (channel === "atte:event" && event?.type === "backend-control")
+          return originalSend(channel, { ...event, status: next }, ...rest);
+        if (channel === "atte:event" && event?.type === "orca-installation")
+          return originalSend(channel, { ...event, status: next.orca }, ...rest);
+        return originalSend(channel, event, ...rest);
+      };
       for (const channel of ["atte:backend-status", "atte:orca-status", "atte:orca-action"])
         ipcMain.removeHandler(channel);
       ipcMain.handle("atte:backend-status", () => next);
@@ -115,15 +127,15 @@ try {
   await publishOrca("missing");
   await expect(choice.locator(".backend-choice__state")).toHaveText("先安装");
   await publishOrca("unverified", "1.4.259");
-  await expect(choice.locator(".backend-choice__state")).toHaveText("已安装 · 待验证");
+  await expect(choice.locator(".backend-choice__state")).toHaveText("已安装 · 待检测");
   await expect(page.getByText("已安装 1.4.259", { exact: true })).toBeVisible();
   await choice.click();
   await expect(page.locator(".backend-error")).toContainText("1.4.259");
-  await expect(page.locator(".backend-error")).toContainText("兼容验证");
+  await expect(page.locator(".backend-error")).toContainText("接口检测");
   await expect(page.locator(".backend-error")).not.toContainText("先安装");
   await page.screenshot({ path: join(home, "orca-installed-unverified.png"), animations: "disabled" });
   await publishOrca("incompatible", "1.4.259");
-  await expect(choice.locator(".backend-choice__state")).toHaveText("安装需修复");
+  await expect(choice.locator(".backend-choice__state")).toHaveText("检测未通过");
   await publishOrca("compatible", "1.4.258");
   await page.getByRole("button", { name: "重新检测", exact: true }).click();
   await expect(choice.locator(".backend-choice__state")).toHaveText("可切换");

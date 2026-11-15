@@ -3,19 +3,21 @@ import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { BackendDetection, SessionCapabilities } from "../contracts.js";
+import { inspectOrcaCliContract, OrcaCliContractError } from "./compatibility.js";
 
 const exec = promisify(execFile);
-export const VERIFIED_ORCA_VERSIONS = ["1.4.258"] as const;
+// Reference releases exercised by real smoke tests; never an admission gate.
+export const TESTED_ORCA_VERSIONS = ["1.4.258", "1.4.259"] as const;
 export const ORCA_CAPABILITIES: SessionCapabilities = {
   create: true, inspect: true, send: true, focus: true, close: true, discover: true, nativeResume: false,
 };
 export const ORCA_RELEASE = {
-  version: "1.4.258",
+  version: "1.4.259",
   filename: "orca-macos-arm64.dmg",
-  bytes: 282_164_836,
-  sha256: "101a3452097ec303ef43b5e5ff06a86dfa8c534e17154c85be0a9297eba55199",
-  url: "https://github.com/stablyai/orca/releases/download/v1.4.258/orca-macos-arm64.dmg",
-  releasePage: "https://github.com/stablyai/orca/releases/tag/v1.4.258",
+  bytes: 283_966_513,
+  sha256: "4118e9e4ec0e78349570f5e35bb0f1a6a6f8b09d7e1122348b9536805d436fb1",
+  url: "https://github.com/stablyai/orca/releases/download/v1.4.259/orca-macos-arm64.dmg",
+  releasePage: "https://github.com/stablyai/orca/releases/tag/v1.4.259",
   teamId: "6CX3WHS9HZ",
   bundleId: "com.stablyai.orca",
 } as const;
@@ -37,21 +39,29 @@ export async function verifyOrcaApplication(appPath: string) {
 export async function detectOrcaApplication(
   appPath: string,
   verify = verifyOrcaApplication,
+  inspect = inspectOrcaCliContract,
 ): Promise<BackendDetection> {
   try { await access(appPath); }
   catch { return { id: "orca", status: "missing", capabilities: { ...ORCA_CAPABILITIES }, detail: "未找到 Orca，请安装或选择已有应用。" }; }
-  try {
-    const detected = await verify(appPath);
-    return {
-      id: "orca", ...detected, capabilities: { ...ORCA_CAPABILITIES },
-      status: (VERIFIED_ORCA_VERSIONS as readonly string[]).includes(detected.version) ? "compatible" : "unverified",
-      ...(!(VERIFIED_ORCA_VERSIONS as readonly string[]).includes(detected.version)
-        ? { detail: `Orca ${detected.version} 尚未通过本版兼容验收；已验证版本为 ${VERIFIED_ORCA_VERSIONS.join("、")}。` } : {}),
-    };
-  } catch (error) {
+  let detected: Awaited<ReturnType<typeof verifyOrcaApplication>>;
+  try { detected = await verify(appPath); }
+  catch (error) {
     return {
       id: "orca", appPath, status: "incompatible", capabilities: { ...ORCA_CAPABILITIES },
       detail: error instanceof Error ? error.message : String(error),
     };
   }
+  try { await inspect(detected.path); }
+  catch (error) {
+    return {
+      id: "orca", ...detected, capabilities: { ...ORCA_CAPABILITIES },
+      status: error instanceof OrcaCliContractError ? "incompatible" : "unverified",
+      detail: error instanceof OrcaCliContractError ? error.message
+        : "尚未完成 Orca 命令行接口检测，请点击“重新检测”后重试。",
+    };
+  }
+  return {
+    id: "orca", ...detected, capabilities: { ...ORCA_CAPABILITIES }, status: "compatible",
+    detail: "应用身份和命令行接口检查通过；切换时会核对运行时能力。",
+  };
 }

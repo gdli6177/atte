@@ -1,6 +1,6 @@
 {
   "name": "@atte/desktop",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "description": "Atte — The attention layer",
   "private": true,
   "type": "module",
