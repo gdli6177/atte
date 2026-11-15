@@ -1,7 +1,7 @@
 {
   "name": "atte",
-  "version": "0.13.0",
-  "description": "Atte — 注意力中心",
+  "version": "0.13.1",
+  "description": "Atte — The attention layer",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -20,6 +20,7 @@
     "desktop:dist": "pnpm --dir apps/desktop dist",
     "test:installers": "node scripts/installer-smoke.mjs",
     "test:desktop": "tsx scripts/desktop-smoke.mjs",
+    "test:first-launch": "tsx scripts/first-launch-smoke.mjs",
     "test:atte-ui": "tsx scripts/atte-ui-smoke.mjs",
     "test:methods": "node scripts/method-library-smoke.mjs",
     "test:terminal": "node scripts/herdr-terminal-smoke.mjs",

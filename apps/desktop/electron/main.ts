@@ -1978,7 +1978,7 @@ app.whenReady().then(async () => {
   app.setAboutPanelOptions({
     applicationName: "Atte",
     applicationVersion: app.getVersion(),
-    copyright: "注意力中心 · The attention layer",
+    copyright: "The attention layer",
   });
   // BrowserWindow.icon is ignored by the macOS Dock in development.
   // Packaged builds embed the same artwork as their CFBundleIconFile.

@@ -1,7 +1,7 @@
 # Atte · Six Vectors 品牌使用规范
 
-> 本规范是运行时品牌资产的依据。品牌标识是 Six Vectors；原像素吉祥物仅作为
-> 应用内角色插画保留。资产分工见 [品牌总览](README.md)。
+> 本规范是运行时品牌标识的依据。品牌标识是 Six Vectors；应用内角色插画使用
+> 用户选定的[装甲小管家](mascot.md)。资产分工见 [品牌总览](README.md)。
 
 定稿方向：04 Six Vectors / 六向
 

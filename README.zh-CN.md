@@ -9,7 +9,7 @@
   <img src="apps/desktop/assets/brand/atte-wordmark.svg" width="320" alt="Atte">
 </picture>
 
-**注意力中心 · The attention layer**
+**The attention layer**
 
 一个工作区，多个项目，一位管家。只有真正需要你的事，才会来到你面前。
 

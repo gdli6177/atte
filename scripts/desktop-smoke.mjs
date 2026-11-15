@@ -214,8 +214,8 @@ try {
   assert.equal(await page.getByRole("button", { name: "找管家" }).locator("svg").first().isVisible(), true);
   await page.screenshot({ path: join(home, "collapsed-dark.png"), animations: "disabled" });
   await page.getByRole("button", { name: "展开侧边栏" }).click();
-  await page.getByRole("button", { name: "我的工作台", exact: true }).click();
-  assert.equal(await page.getByRole("dialog").count(), 0, "workspace overview must not open a directory picker");
+  await page.getByRole("button", { name: "注意力", exact: true }).click();
+  assert.equal(await page.getByRole("dialog").count(), 0, "attention navigation must not open a directory picker");
   await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
   await page.setViewportSize({ width: 1024, height: 760 });
   await page.getByRole("button", { name: "添加项目", exact: true }).waitFor();
@@ -229,11 +229,11 @@ try {
   await page.locator(".topbar").getByText(/^界面测试项目/).waitFor();
   await page.screenshot({ path: join(home, "narrow-project-navigation.png"), animations: "disabled" });
   await page.setViewportSize({ width: 1408, height: 880 });
-  await page.getByRole("button", { name: "我的工作台", exact: true }).click();
+  await page.getByRole("button", { name: "注意力", exact: true }).click();
   await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
   assert.equal(await page.locator(".projects button.active").count(), 0);
   assert.equal(
-    await page.getByRole("button", { name: "我的工作台", exact: true })
+    await page.getByRole("button", { name: "注意力", exact: true })
       .getAttribute("aria-current"),
     "page",
   );
@@ -643,7 +643,7 @@ try {
   );
   await page.screenshot({ path: join(home, "settings-scrolled-fixed-topbar-dark.png"), animations: "disabled" });
   await page.getByText(new RegExp(
-    `Atte ${appVersion.replaceAll(".", "\\.")} · 注意力中心 · The attention layer`,
+    `Atte ${appVersion.replaceAll(".", "\\.")} · The attention layer`,
   )).waitFor();
   await page.getByRole("button", { name: "浅色模式" }).click();
   await page.getByRole("button", { name: "注意力", exact: true }).click();

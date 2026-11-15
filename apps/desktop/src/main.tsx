@@ -14,7 +14,6 @@ import {
   FolderPlus,
   HardDrive,
   Inbox,
-  LayoutDashboard,
   LayoutList,
   Moon,
   NotebookPen,
@@ -543,34 +542,9 @@ function App() {
           <BrandMark />
           <div>
             <strong>Atte</strong>
-            <span>注意力中心 · The attention layer</span>
+            <span>The attention layer</span>
           </div>
         </div>
-        <button
-          className={`workspace-switch ${page === "home" && !projectId ? "active" : ""}`}
-          aria-label="我的工作台"
-          aria-current={page === "home" && !projectId ? "page" : undefined}
-          title="查看所有项目和个人事项"
-          onClick={() => {
-            setPage("home");
-            setProjectId("");
-            setModal("");
-            document.querySelector("main")?.scrollTo({ top: 0, behavior: "smooth" });
-          }}
-        >
-          <span className="workspace-icon" aria-hidden="true">
-            <LayoutDashboard />
-          </span>
-          <span className="workspace-copy">
-            <strong>{state.name}</strong>
-            <small>
-              {page === "home" && !projectId
-                ? "当前：注意力总览"
-                : "所有项目与个人事项"}
-            </small>
-          </span>
-          <ChevronRight size={14} />
-        </button>
         <nav aria-label="主导航">
           <button
             aria-label="注意力"
@@ -650,7 +624,8 @@ function App() {
           <button
             className="add-project"
             aria-label="添加项目"
-            title="添加项目"
+            title={workspace ? "添加项目" : "先选择存储位置"}
+            disabled={!workspace}
             onClick={() => setModal("project")}
           >
             <Plus />
@@ -770,10 +745,10 @@ function App() {
             }}>重试准备 Herdr</Button>}
           </div>
         )}
-          {!workspace ? (
+          {!workspace && page !== "settings" ? (page === "home" ? (
             <section className="welcome">
               <BrandMark variant="mascot" />
-              <span className="eyebrow">Atte · 注意力中心 · The attention layer</span>
+              <span className="eyebrow">Atte · The attention layer</span>
               <h1>
                 把注意力留给重要的事。
               </h1>
@@ -791,7 +766,22 @@ function App() {
                 {pickingWorkspace ? "正在准备工作区…" : "选择存储位置并开始"}
               </Button>
             </section>
-          ) : page === "home" ? (
+          ) : (
+            <div className="content">
+              <section className="intro">
+                <h1>{pages[page]}</h1>
+                <p>{page === "tasks" ? "先记下，或安排由你推进的事项。" : "查看所有项目与个人事项的目标。"}</p>
+              </section>
+              <EmptyState
+                icon={<Folder />}
+                title="先选择存储位置"
+                description="选择本地存储位置后，就可以在这里记录和查看事项。"
+                action={<Button disabled={pickingWorkspace} onClick={() => void pickWorkspace()}>
+                  {pickingWorkspace ? "正在准备工作区…" : "选择存储位置"}
+                </Button>}
+              />
+            </div>
+          )) : page === "home" ? (
             <div className="content home">
               <section className="intro">
                 <div>
@@ -1163,7 +1153,7 @@ function App() {
                   setAgentOptions(await api.agentChoices());
                   setAgentHooks(await api.agentRuntimeStatus());
                   setCli(await api.cliStatus());
-                  applyState(await api.command({ type: "snapshot" }));
+                  if (workspace) applyState(await api.command({ type: "snapshot" }));
                   if (action !== "herdr-install") notify("已准备就绪");
                 } catch (reason) {
                   showError(reason);
@@ -1174,7 +1164,7 @@ function App() {
               openWebhook={() => setModal("webhook")}
               version={version}
               workspace={workspace ?? ""}
-              pickWorkspace={() => setModal("workspace")}
+              pickWorkspace={() => workspace ? setModal("workspace") : void pickWorkspace()}
               openHerdr={() => void openScene(undefined, true)}
             />
           )}
@@ -1739,7 +1729,7 @@ function Settings({
     <div className="content settings">
       <section className="intro">
         <div>
-          <span className="eyebrow">Atte · 注意力中心</span>
+          <span className="eyebrow">Atte · The attention layer</span>
           <h1>只设置必要的。</h1>
           <p>选择真实工作现场，保留你已有的终端、CLI、模型与工作方式。</p>
         </div>
@@ -1785,11 +1775,11 @@ function Settings({
             description="目标保存在此目录的 .atte 中。切换工作区后，界面会显示该目录自己的目标。"
           >
             <div className="settings-facts">
-              <code>{workspace}</code>
+              <code>{workspace || "尚未选择存储位置"}</code>
             </div>
             <div className="ui-settings-card__actions">
               <Button variant="secondary" size="sm" onClick={() => void pickWorkspace()}>
-                更换工作区
+                {workspace ? "更换工作区" : "选择存储位置"}
               </Button>
             </div>
           </SettingsSection>
@@ -1881,12 +1871,12 @@ function Settings({
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={busy}
+                disabled={busy || !workspace}
                 onClick={() => void onAction("concierge")}
               >
                 {busy ? "正在准备…" : "准备管家"}
               </Button>
-              <Button variant="ghost" size="sm" disabled={busy} onClick={openHerdr}>
+              <Button variant="ghost" size="sm" disabled={busy || !workspace} onClick={openHerdr}>
                 内嵌轻现场
               </Button>
             </div>
@@ -1898,7 +1888,7 @@ function Settings({
             key={workspace}
             preferences={state.agents ?? { concierge: "codex" }}
             options={agentOptions}
-            busy={busy}
+            busy={busy || !workspace}
             onSave={saveAgents}
           />
           <AgentRuntimeSettings
@@ -1973,12 +1963,12 @@ function Settings({
           <GovernanceEditor
             projects={state.projects}
             decisions={state.decisions ?? []}
-            busy={busy}
+            busy={busy || !workspace}
             onSave={savePolicy}
           />
           <ExperimentalAutonomySettings
             state={state}
-            busy={busy}
+            busy={busy || !workspace}
             onSaveWorkspace={saveAutonomy}
             onSaveProject={saveProjectAutonomy}
           />
@@ -2014,7 +2004,7 @@ function Settings({
             </div>
           </SettingsSection>
         </SettingsGroup>
-        <SettingsSection icon={<Bot />} title="关于 Atte" description="注意力中心 · The attention layer">
+        <SettingsSection icon={<Bot />} title="关于 Atte" description="The attention layer">
           <div className="about-mark"><BrandMark variant="icon" /></div>
           <div className="settings-facts">
             <p>人只做拍板，Agent 并行推进。管家把决定、验收和需要介入的事项带到你面前。</p>
@@ -2022,7 +2012,7 @@ function Settings({
           </div>
         </SettingsSection>
         <p className="settings-foot">
-          Atte {version} · 注意力中心 · The attention layer · {state.projects.length} 个项目 ·{" "}
+          Atte {version} · The attention layer · {state.projects.length} 个项目 ·{" "}
           {state.goals.length} 个目标
         </p>
       </div>
@@ -2224,8 +2214,13 @@ function MethodLibrary({
   const [approvedScripts, setApprovedScripts] = useState<string[]>([]);
 
   async function refresh() {
-    setLoading(true);
     setFailure("");
+    if (!workspace) {
+      setPacks([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
       setPacks(await api.methodPacksStatus());
     } catch (reason) {
@@ -2328,7 +2323,9 @@ function MethodLibrary({
         title="工作方法"
         description="方法告诉负责人和复核者该按什么流程工作。安装和授权都由你决定；目标只使用自己挂载的方法。"
       >
-        {loading ? (
+        {!workspace ? (
+          <p className="muted">先选择存储位置，再安装或管理工作方法。</p>
+        ) : loading ? (
           <LoadingState label="正在检查本地工作方法…" />
         ) : localPacks.length ? (
           <div className="method-pack-list">

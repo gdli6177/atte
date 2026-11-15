@@ -54,7 +54,7 @@ async function managedRuntime(workspace: string, managedContext: ReturnType<type
     }),
   });
 }
-const usage = `Atte — 注意力中心
+const usage = `Atte — The attention layer
 
 人的消息入口（保存原话，不从文本推断批准或完成）：
   atte status [--json]
