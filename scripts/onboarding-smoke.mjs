@@ -105,8 +105,8 @@ try {
   assert.ok(pluginActions.includes("dev.atte.attention"));
   assert.ok(pluginActions.includes("dev.atte.new-goal"));
   assert.ok(pluginActions.includes("dev.atte.concierge"));
-  await page.getByRole("button", { name: "我的工作台", exact: true }).click();
-  assert.equal(await page.getByRole("dialog").count(), 0, "workspace overview is navigation, not a directory picker");
+  await page.getByRole("button", { name: "注意力", exact: true }).click();
+  assert.equal(await page.getByRole("dialog").count(), 0, "attention overview is navigation, not a directory picker");
   await page.getByRole("button", { name: "设置", exact: true }).click();
   await page.getByText("让外部 Agent 会使用 Atte", { exact: true }).waitFor();
   await page.getByRole("button", { name: "安装 / 更新 Skills", exact: true }).click();

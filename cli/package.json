@@ -1,7 +1,7 @@
 {
   "name": "@atte/cli",
-  "version": "0.13.0",
-  "description": "Atte — 注意力中心 CLI",
+  "version": "0.13.1",
+  "description": "Atte — The attention layer CLI",
   "license": "MIT",
   "type": "module",
   "files": ["bin", "dist"],

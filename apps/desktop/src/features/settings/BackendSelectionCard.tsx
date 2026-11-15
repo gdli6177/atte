@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { api, type BackendControlStatus } from "../../api.js";
 import { Button, LoadingState, Modal, SettingsSection } from "../../ui/index.js";
+import { orcaAvailability } from "./orcaAvailability.js";
 
 const phaseLabels: Record<string, string> = {
   preflight: "检查兼容性与现场",
@@ -36,9 +37,12 @@ export function BackendSelectionCard({
   async function choose(backend: "herdr" | "orca") {
     setError(undefined);
     if (backend === status?.control.selected && status.control.phase === "ready") return;
-    if (backend === "orca" && status?.orca.detection.status !== "compatible") {
-      setError("请先在下方安装并验证 Orca，安装完成后再切换。当前后端和目标不会改变。");
-      return;
+    if (backend === "orca" && status) {
+      const availability = orcaAvailability(status.orca.detection);
+      if (!availability.available) {
+        setError(availability.detail);
+        return;
+      }
     }
     setTarget(backend);
   }
@@ -101,6 +105,7 @@ export function BackendSelectionCard({
     </SettingsSection>
   );
 
+  const availability = orcaAvailability(status.orca.detection);
   const switching = status.control.phase !== "ready" || !!status.control.maintenance;
   const journal = status.journal;
   return <>
@@ -120,7 +125,8 @@ export function BackendSelectionCard({
           detail="原生工作现场、代码与 Diff；Atte 聚焦注意力与验收。"
           selected={status.control.selected === "orca"}
           disabled={busy || switching}
-          available={status.orca.detection.status === "compatible"}
+          available={availability.available}
+          availabilityLabel={availability.label}
           onSelect={() => void choose("orca")}
           icon={<span className="backend-orca-mark" aria-hidden="true">O</span>}
         />
@@ -181,6 +187,7 @@ function BackendChoice({
   selected,
   disabled,
   available = true,
+  availabilityLabel = available ? "可切换" : "先安装",
   onSelect,
 }: {
   name: string;
@@ -189,6 +196,7 @@ function BackendChoice({
   selected: boolean;
   disabled: boolean;
   available?: boolean;
+  availabilityLabel?: string;
   onSelect(): void;
 }) {
   return (
@@ -207,7 +215,7 @@ function BackendChoice({
         <span>{detail}</span>
       </span>
       <span className="backend-choice__state">
-        {selected ? <><Check size={14} /> 当前使用</> : !available ? "先安装" : "可切换"}
+        {selected ? <><Check size={14} /> 当前使用</> : availabilityLabel}
       </span>
     </button>
   );

@@ -1,12 +1,12 @@
 ---
 version: atte-iteration
 name: Atte
-description: 注意力中心 · The attention layer；单列、留白、字阶、克制的状态提示。
+description: The attention layer；单列、留白、字阶、克制的状态提示。
 ---
 
 # Atte 设计基线
 
-产品定位是「注意力中心 · The attention layer」。人做决定、验收和必要介入，
+品牌副标题为「The attention layer」。人做决定、验收和必要介入，
 管家协调并行 Agent。
 这是当前界面的视觉规范。品牌标识已定稿为 Six Vectors，界面基线已于
 2026-11-14 选定 Vercel。
@@ -88,7 +88,7 @@ Hero 行高为 1.05，英文标题使用 `--tracking-tight: -0.02em`；
 - 主区左右留白为 40px，卡片之间 16px，区块之间使用 `--section-gap: 40px`。
 - 卡片保持平面，由留白、边界和字阶区分；只有弹窗、终端等浮层使用 `--shadow`。
 - 不使用轨道、光点、网格纹理、径向光晕、悬浮抬升或装饰阴影。
-- 品牌吉祥物保持原始比例和透明边距，像素图使用最近邻显示；照片与 macOS 图标平滑显示。
+- 吉祥物使用用户选定的[装甲小管家](docs/brand/mascot.md)，保留双耳、护甲、原始比例和透明边距，平滑缩放；历史像素图才使用最近邻显示，照片与 macOS 图标平滑显示。
 
 ## 布局
 

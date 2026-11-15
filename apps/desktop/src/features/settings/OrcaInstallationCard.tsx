@@ -48,13 +48,16 @@ export function OrcaInstallationCard() {
         {status.detection.appPath && <div className="settings-facts"><code>{status.detection.appPath}</code></div>}
         <p className={status.phase === "error" ? "ui-field__error" : "muted"}
           role={status.phase === "error" ? "alert" : "status"} aria-live="polite">{status.detail}</p>
+        {newer && !compatible && <p className="muted">
+          当前版本比本版已验证版本更新，不会自动降级。请重新检测，或通过“选择已有 Orca”使用独立安装的已验证版本。
+        </p>}
         {downloading && <progress aria-label="Orca 安装包下载进度"
           max={status.totalBytes || 1} value={status.receivedBytes || 0} className="orca-download-progress" />}
         <div className="ui-settings-card__actions">
           <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} disabled={busy}
             onClick={() => void act("check")}>检查更新</Button>
-          {(!compatible || status.updateAvailable) && <Button size="sm" icon={<Download size={14} />}
-            disabled={busy || !!newer}
+          {(!compatible || status.updateAvailable) && !newer && <Button size="sm" icon={<Download size={14} />}
+            disabled={busy}
             onClick={() => void act("install")}>{!installed ? "安装 Orca" :
               status.updateAvailable ? "更新 Orca" : "重新安装 Orca"}</Button>}
           <Button variant="secondary" size="sm" disabled={busy} onClick={() => void act("refresh")}>重新检测</Button>

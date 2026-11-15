@@ -56,7 +56,7 @@ test("the executable presents Atte while keeping the public atte command", async
     { cwd: new URL("../../", import.meta.url), timeout: 30_000 },
   );
   assert.equal(stderr, "");
-  assert.match(stdout, /^Atte — 注意力中心/);
+  assert.match(stdout, /^Atte — The attention layer/);
   assert.match(stdout, /atte goal message ID --text TEXT/);
   assert.doesNotMatch(stdout, /\bcrewvane (?:status|attention|board|goal|owner|skill)\b/);
 });
