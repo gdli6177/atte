@@ -918,7 +918,9 @@ try {
   // Wait for the renderer to rehydrate from the persisted snapshot before
   // navigating: clicking straight after reload can reach a store that has not
   // loaded the dispatch failure yet, which reads as a missing attention card.
-  await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
+  // The home headline depends on whether anything needs attention, so wait on
+  // the page container instead of a specific headline variant.
+  await page.locator(".home .intro h1").waitFor();
   await page.waitForFunction(async goalId => {
     const snapshot = await window.atte.command({ type: "snapshot" });
     const current = snapshot.goals.find(goal => goal.id === goalId);
