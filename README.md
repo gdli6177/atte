@@ -15,7 +15,7 @@ One workspace. Many projects. One concierge. Only what needs you reaches you.
 
 [![Latest release](https://img.shields.io/github/v/release/gdli6177/atte?display_name=tag&sort=semver)](https://github.com/gdli6177/atte/releases)
 [![macOS Apple Silicon](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-111520)](docs/releases.md)
-[![MIT License](https://img.shields.io/badge/license-MIT-83e4c2)](LICENSE)
+[![MIT License](https://img.shields.io/badge/license-MIT-F5A524)](LICENSE)
 [![Desktop installers](https://github.com/gdli6177/atte/actions/workflows/desktop-release.yml/badge.svg)](https://github.com/gdli6177/atte/actions/workflows/desktop-release.yml)
 
 </div>
@@ -35,7 +35,7 @@ It works with interactive CLI agents that can already run in a terminal, keeps
 the terminal sessions in Herdr or Orca, and adds the durable workflow around them:
 state, ownership, waiting, evidence, approvals, and recovery.
 
-> **Status:** early preview (`0.11.x`). The desktop UI is currently in Simplified
+> **Status:** early preview (`0.13.x`). The desktop UI is currently in Simplified
 > Chinese and the packaged app supports macOS on Apple Silicon.
 
 ## Why Atte
