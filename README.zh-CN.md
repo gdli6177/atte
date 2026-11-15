@@ -1,7 +1,9 @@
 <div align="center">
 
-<img src="apps/desktop/assets/brand/atte-mascot-baseline-512.png" width="112" alt="Atte 像素魔法师">
-
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="apps/desktop/assets/brand/atte-mark-reversed.svg">
+  <img src="apps/desktop/assets/brand/atte-mark.svg" width="96" alt="Atte">
+</picture>
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="apps/desktop/assets/brand/atte-wordmark-reversed.svg">
   <img src="apps/desktop/assets/brand/atte-wordmark.svg" width="320" alt="Atte">
