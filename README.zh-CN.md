@@ -15,7 +15,7 @@
 
 [![最新版本](https://img.shields.io/github/v/release/gdli6177/atte?display_name=tag&sort=semver)](https://github.com/gdli6177/atte/releases)
 [![平台](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-111520)](docs/releases.md)
-[![许可证](https://img.shields.io/badge/license-MIT-83e4c2)](LICENSE)
+[![许可证](https://img.shields.io/badge/license-MIT-F5A524)](LICENSE)
 [![桌面构建](https://github.com/gdli6177/atte/actions/workflows/desktop-release.yml/badge.svg)](https://github.com/gdli6177/atte/actions/workflows/desktop-release.yml)
 
 </div>
@@ -34,7 +34,7 @@ Atte 不替代 Codex、Claude Code、OMP、Cursor、Qoder 等 CLI Agent。已经
 终端中运行的交互式 Agent，都可以作为工作现场接入。Atte 为这些现场补齐
 持久目标、负责人、等待、证据、审批和恢复机制。
 
-> **当前状态：** 早期预览版（`0.11.x`）。桌面界面目前为简体中文，安装包支持
+> **当前状态：** 早期预览版（`0.13.x`）。桌面界面目前为简体中文，安装包支持
 > macOS Apple Silicon。
 
 ## 为什么需要 Atte
