@@ -41,7 +41,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
       - run: pnpm test:first-launch
       - run: pnpm test:diagnostics
-      - run: pnpm test:semantic
+      - name: Run semantic write notification smoke
+        run: pnpm test:semantic
+        env:
+          # The packaged app checks official Herdr releases; authenticate it so
+          # hosted-runner IP quotas cannot turn a product test into an HTTP 403.
+          GITHUB_TOKEN: ${{ github.token }}
       - run: pnpm test:atte-ui
       - run: pnpm test:desktop
       - run: pnpm test:methods
