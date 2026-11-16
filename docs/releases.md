@@ -21,6 +21,8 @@ GitHub 自动生成的 **Source code** 是源码，不是可安装应用。安�
 - 普通进展仍不进注意力；待验收仍以 `atte goal review` 的真实检查为准。
 - `pnpm test:semantic` 用真实打包应用、真实 Herdr 与真实 CLI 验证“写回 → 第二份案卷 → 无注意力项”；详见[本版说明](release-notes/v0.13.5.md)。
 
+同版修复 0.13.4 未真正发布到安装包的 Orca 窗口激活：用 `NSRunningApplication.activate(AllWindows)` 置顶并切换桌面，失败时回落 `open -a`；已在构建产物的 `main.cjs` 中核对激活与写回通知代码均存在。
+
 ## 0.13.4 安装与验收
 
 - 修复 Orca 模式“回到现场”只切标签、窗口不前置的问题：定位成功后把 Orca 带到前台。
