@@ -19,26 +19,7 @@ contextBridge.exposeInMainWorld("atte", {
   installHerdr: () => ipcRenderer.invoke("atte:install-herdr"),
   checkHerdrUpdate: () => ipcRenderer.invoke("atte:check-herdr-update"),
   cliStatus: () => ipcRenderer.invoke("atte:cli-status"),
-  orcaStatus: () => ipcRenderer.invoke("atte:orca-status"),
-  orcaAction: (action: "check" | "install" | "cancel" | "refresh") =>
-    ipcRenderer.invoke("atte:orca-action", action),
-  selectOrcaApplication: () => ipcRenderer.invoke("atte:orca-select-application"),
-  backendStatus: () => ipcRenderer.invoke("atte:backend-status"),
-  switchBackend: (backend: "herdr" | "orca") =>
-    ipcRenderer.invoke("atte:backend-switch", backend),
-  retryBackendSwitch: () => ipcRenderer.invoke("atte:backend-retry"),
-  cancelBackendSwitch: () => ipcRenderer.invoke("atte:backend-cancel"),
-  restoreBackend: () => ipcRenderer.invoke("atte:backend-restore"),
   skillsStatus: () => ipcRenderer.invoke("atte:skills-status"), installSkills: () => ipcRenderer.invoke("atte:install-skills"),
-  methodPacksStatus: () => ipcRenderer.invoke("atte:method-packs-status"),
-  previewMethodPack: () => ipcRenderer.invoke("atte:method-pack-preview"),
-  installMethodPack: (path: string, approveScripts: string[]) =>
-    ipcRenderer.invoke("atte:method-pack-install", path, approveScripts),
-  mutateMethodPack: (
-    packId: string,
-    action: "approve" | "disable" | "enable" | "remove",
-    scriptIds: string[] = [],
-  ) => ipcRenderer.invoke("atte:method-pack-action", packId, action, scriptIds),
   agentRuntimeStatus: () => ipcRenderer.invoke("atte:agent-runtime-status"),
   configureAgentRuntime: (id: string, action: "install" | "disable" | "uninstall" | "refresh") =>
     ipcRenderer.invoke("atte:agent-runtime-action", id, action),

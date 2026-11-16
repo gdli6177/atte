@@ -5,10 +5,9 @@ import type { SceneReferenceV1 } from "../../../packages/core/src/index.js";
 import type { SceneObservation } from "../../../packages/sessions/src/index.js";
 
 const scenes = Array.from({ length: 100 }, (_, i): SceneReferenceV1 => ({
-  version: 1, backend: "orca", installationId: "installation", backendEpoch: 1,
+  version: 1, backend: "herdr", installationId: "installation", backendEpoch: 1,
   runtimeId: "runtime", runtimeGeneration: "generation", bindingId: `binding-${i}`, attemptId: `attempt-${i}`,
-  locator: { kind: "orca", repoId: "repo", worktreeId: "repo::/tmp/fixture",
-    terminalHandle: `terminal-${i}`, executionHostId: "local", incarnationId: `incarnation-${i}` },
+  locator: { kind: "herdr", session: "atte", workspaceId: "w1", tabId: `w1:t${i}`, paneId: `w1:p${i}` },
 }));
 test("ten minutes of routine observation stays one batch per ten seconds regardless of goal count", async () => {
   let now = 0, calls = 0;
@@ -51,4 +50,24 @@ test("simultaneous ticks share the in-flight group", async () => {
   release([]);
   await Promise.all([first, second]);
   assert.equal(calls, 1);
+});
+
+test("legacy non-Herdr scenes are never observed or migrated", async () => {
+  let calls = 0;
+  const poller = new SessionPoller(() => 0);
+  const orca = {
+    ...scenes[0]!,
+    backend: "orca" as const,
+    locator: {
+      kind: "orca" as const, repoId: "repo", worktreeId: "repo::/tmp/fixture",
+      terminalHandle: "terminal", executionHostId: "local", incarnationId: "incarnation",
+    },
+  };
+  await assert.rejects(poller.inspect([orca], async () => { calls++; return []; }), /旧后端现场保持只读/);
+  assert.equal(calls, 0);
+  await assert.rejects(
+    poller.inspect([scenes[0]!, orca], async () => { calls++; return []; }),
+    /旧后端现场保持只读/,
+  );
+  assert.equal(calls, 0);
 });

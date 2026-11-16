@@ -165,7 +165,7 @@ export function GoalReplyComposer({
     try {
       if (mode === "restart") {
         await service.restartGoal(goal.id, body);
-        onComplete("目标已重新打开；正在恢复原负责人会话并交给管家");
+        onComplete("目标已重启；正在恢复原负责人会话并交给管家");
         return;
       }
       if (mode === "drop") {

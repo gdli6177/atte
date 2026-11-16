@@ -1,4 +1,4 @@
-// Packaged-app regressions for navigation before storage selection and Orca status labels.
+// Packaged-app regressions for navigation and settings before storage selection.
 // Every application write stays inside the temporary home; no user sessions are started.
 import { _electron as electron, expect } from "@playwright/test";
 import assert from "node:assert/strict";
@@ -41,22 +41,21 @@ try {
   page.on("pageerror", error => errors.push(String(error)));
   await page.getByRole("button", { name: "选择存储位置并开始", exact: true }).waitFor();
   assert.equal((await page.evaluate(() => window.atte.environment())).workspace, undefined);
-  for (const name of ["待办池", "全部目标", "设置"]) {
+  for (const [name, heading] of [
+    ["注意力", "把注意力留给重要的事。"],
+    ["全部事项", "全部事项"],
+    ["设置", "只设置必要的。"],
+  ]) {
     await page.getByRole("button", { name, exact: true }).click();
-    await expect(page.getByRole("heading", {
-      name: name === "设置" ? "只设置必要的。" : name,
-      exact: true,
-    })).toBeVisible();
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name, exact: true })).toHaveAttribute("aria-current", "page");
-    await expect(page.locator(".welcome")).toHaveCount(0);
   }
   await expect(page.getByText("尚未选择存储位置", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "我的工作台", exact: true })).toHaveCount(0);
   await expect(page.locator(".brand")).not.toContainText("注意力中心");
   await expect(page.locator(".brand")).toContainText("The attention layer");
   await expect(page.getByLabel("管家启动命令")).toBeDisabled();
-  await expect(page.getByText("先选择存储位置，再安装或管理工作方法。", { exact: true })).toBeVisible();
-  await expect(page.locator('[role="alert"]')).toHaveCount(0);
+  await expect(page.locator('.error[role="alert"]')).toHaveCount(0);
   await app.evaluate(({ dialog }) => {
     dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
   });
@@ -79,80 +78,14 @@ try {
   await page.getByRole("button", { name: "选择存储位置", exact: true }).click();
   await expect(page.getByRole("heading", { name: "现在，可以安心了。", exact: true })).toBeVisible();
   assert.equal((await page.evaluate(() => window.atte.environment())).workspace, await realpath(workspace));
-  assert.equal(JSON.parse(await readFile(join(workspace, ".atte/state.json"), "utf8")).version, 4);
+  assert.equal(JSON.parse(await readFile(join(workspace, ".atte/state.json"), "utf8")).version, 5);
   await page.getByRole("button", { name: "设置", exact: true }).click();
-  const base = await page.evaluate(() => window.atte.backendStatus());
-  const choice = page.getByRole("radio", { name: /^Orca/ });
-  const publishOrca = async (status, version) => {
-    const fixture = structuredClone(base);
-    fixture.orca = {
-      ...fixture.orca,
-      phase: "idle",
-      detection: {
-        ...fixture.orca.detection,
-        status,
-        version,
-        appPath: status === "missing" ? undefined : "/Applications/Orca.app",
-        detail: status === "unverified" ? `Orca ${version} 命令行接口检测尚未完成。` :
-          status === "incompatible" ? "Orca CLI 校验失败。" : undefined,
-      },
-    };
-    await app.evaluate(({ BrowserWindow, ipcMain }, next) => {
-      // Keep this fixture authoritative even when an asynchronous real status
-      // refresh finishes after the test has published its simulated state.
-      const contents = BrowserWindow.getAllWindows()[0].webContents;
-      const originalSend = contents.__atteFixtureOriginalSend ?? contents.send.bind(contents);
-      contents.__atteFixtureOriginalSend = originalSend;
-      contents.send = (channel, event, ...rest) => {
-        if (channel === "atte:event" && event?.type === "backend-control")
-          return originalSend(channel, { ...event, status: next }, ...rest);
-        if (channel === "atte:event" && event?.type === "orca-installation")
-          return originalSend(channel, { ...event, status: next.orca }, ...rest);
-        return originalSend(channel, event, ...rest);
-      };
-      for (const channel of ["atte:backend-status", "atte:orca-status", "atte:orca-action"])
-        ipcMain.removeHandler(channel);
-      ipcMain.handle("atte:backend-status", () => next);
-      ipcMain.handle("atte:orca-status", () => next.orca);
-      ipcMain.handle("atte:orca-action", () => {
-        BrowserWindow.getAllWindows()[0].webContents.send("atte:event", {
-          type: "orca-installation", status: next.orca,
-        });
-        return next.orca;
-      });
-      BrowserWindow.getAllWindows()[0].webContents.send("atte:event", { type: "backend-control", status: next });
-      BrowserWindow.getAllWindows()[0].webContents.send("atte:event", { type: "orca-installation", status: next.orca });
-    }, fixture);
-    // A status request started before the stubs were installed can still
-    // resolve and overwrite the renderer state. Publish again after it settles
-    // so the simulated state is the last write.
-    await page.waitForTimeout(250);
-    await app.evaluate(({ BrowserWindow }, next) => {
-      const contents = BrowserWindow.getAllWindows()[0].webContents;
-      contents.send("atte:event", { type: "backend-control", status: next });
-      contents.send("atte:event", { type: "orca-installation", status: next.orca });
-    }, fixture);
-  };
-  await publishOrca("missing");
-  await expect(choice.locator(".backend-choice__state")).toHaveText("先安装");
-  await publishOrca("unverified", "1.4.259");
-  await expect(choice.locator(".backend-choice__state")).toHaveText("已安装 · 待检测");
-  await expect(page.getByText("已安装 1.4.259", { exact: true })).toBeVisible();
-  await choice.click();
-  await expect(page.locator(".backend-error")).toContainText("1.4.259");
-  await expect(page.locator(".backend-error")).toContainText("接口检测");
-  await expect(page.locator(".backend-error")).not.toContainText("先安装");
-  await page.screenshot({ path: join(home, "orca-installed-unverified.png"), animations: "disabled" });
-  await publishOrca("incompatible", "1.4.259");
-  await expect(choice.locator(".backend-choice__state")).toHaveText("检测未通过");
-  await publishOrca("compatible", "1.4.258");
-  await page.getByRole("button", { name: "重新检测", exact: true }).click();
-  await expect(choice.locator(".backend-choice__state")).toHaveText("可切换");
-  await expect(page.getByText("已安装 1.4.258", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "只设置必要的。", exact: true })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /^Orca/ })).toHaveCount(0);
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ passed: true, navigationBeforeStorage: true, settingsBeforeStorage: true,
     cancelledPickerPreservesPage: true, storageSelectedFromSettings: true, removedWorkspaceTile: true,
-    englishTagline: true, armoredMascot: true, orcaStates: ["missing", "unverified", "incompatible", "compatible"],
+    englishTagline: true, armoredMascot: true, workspaceVersion: 5,
     evidence: home }));
 } catch (error) {
   console.error(`First-launch evidence: ${home}`);

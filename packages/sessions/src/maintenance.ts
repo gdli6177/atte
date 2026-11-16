@@ -6,8 +6,7 @@ import { localProcesses } from "./process.js";
 import { readLaunchReceipt, receiptProcess } from "./launcher.js";
 import { SessionControl } from "./control/control.js";
 
-/** Produces explicit managed paths only. Unknown leases, live launchers and
- * unfinished switch journals are never garbage-collected, even manually. */
+/** Produces explicit managed paths only; unknown leases and live launchers stay protected. */
 export async function staleSessionStorage(directory: string, now = Date.now()): Promise<string[]> {
   const rootInfo = await lstat(directory).catch(() => undefined);
   if (!rootInfo?.isDirectory() || rootInfo.isSymbolicLink() ||
@@ -32,11 +31,9 @@ export async function staleSessionStorage(directory: string, now = Date.now()): 
     let state;
     try { state = await new WorkspaceService(entry.root).read(); }
     catch { return []; } // Cannot prove ownership/liveness across all roots.
-    const intents = [state.concierge.launch, ...state.goals.flatMap(goal =>
-      [goal.sceneLaunch, goal.autonomy?.verificationLaunch])].filter(Boolean);
+    const intents = [state.concierge.launch, ...state.goals.map(goal => goal.sceneLaunch)].filter(Boolean);
     for (const intent of intents) if (intent!.status !== "rejected") activeRequests.add(intent!.requestId);
-    for (const scene of [state.concierge.scene, ...state.goals.flatMap(goal =>
-      [goal.scene, goal.autonomy?.verificationSite?.scene])])
+    for (const scene of [state.concierge.scene, ...state.goals.map(goal => goal.scene)])
       if (scene) activeBindings.add(scene.bindingId);
   }
   const paths: string[] = [], cutoff = now - 24 * 60 * 60_000, month = now - 30 * 24 * 60 * 60_000;
@@ -63,10 +60,8 @@ export async function staleSessionStorage(directory: string, now = Date.now()): 
     if (receipt && await localProcesses.alive(receiptProcess(receipt))) continue;
     if (record(lease) && lease.status !== "finished") continue;
     paths.push(path, launcher);
-    for (const backend of ["herdr", "orca"]) {
-      const adapterPath = await managed("adapters", backend, "launches", `${id}.json`);
-      if (adapterPath) paths.push(adapterPath);
-    }
+    const adapterPath = await managed("adapters", "herdr", "launches", `${id}.json`);
+    if (adapterPath) paths.push(adapterPath);
   }
   for (const path of await entries("leases")) {
     const info = await lstat(path);
@@ -76,7 +71,7 @@ export async function staleSessionStorage(directory: string, now = Date.now()): 
       typeof lease.requestId === "string" && !activeRequests.has(lease.requestId) &&
       (typeof lease.bindingId !== "string" || !activeBindings.has(lease.bindingId))) paths.push(path);
   }
-  for (const folder of ["runtime-deliveries", "adapters/herdr/deliveries", "adapters/orca/deliveries"]) {
+  for (const folder of ["runtime-deliveries", "adapters/herdr/deliveries"]) {
     for (const path of await entries(folder)) {
       const info = await lstat(path);
       if (!info.isFile() || info.isSymbolicLink() || info.mtimeMs > month) continue;
@@ -94,17 +89,6 @@ export async function staleSessionStorage(directory: string, now = Date.now()): 
       }
     }
   }
-  const finalJournals: { path: string; at: number }[] = [];
-  for (const path of await entries("switch")) {
-    const info = await lstat(path);
-    if (!info.isFile() || info.isSymbolicLink()) continue;
-    const value = await readJSON(path);
-    if (record(value) && ["ready", "cancelled"].includes(String(value.phase)) &&
-      value.operationId !== config.switchOperationId) finalJournals.push({ path, at: info.mtimeMs });
-  }
-  finalJournals.sort((a, b) => b.at - a.at).forEach((entry, index) => {
-    if (index >= 20 || entry.at < month) paths.push(entry.path);
-  });
   const recoveryRoot = await managed("recovery");
   if (recoveryRoot && (await lstat(recoveryRoot)).isDirectory()) {
     for (const name of await readdir(recoveryRoot)) {

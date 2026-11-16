@@ -27,6 +27,13 @@ async function fixture(t: test.TestContext) {
     locator: { kind: "herdr", session: "test", workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
   };
   await service.execute({ type: "scene.bind", role: "concierge", scene: concierge });
+  const ownerScene: SceneReferenceV1 = {
+    ...concierge,
+    attemptId: "owner-attempt",
+    bindingId: "owner-binding",
+    locator: { ...concierge.locator, tabId: "w1:t2", paneId: "w1:p2" },
+  };
+  await service.execute({ type: "scene.bind", goalId: goal.id, role: "owner", scene: ownerScene });
   await writeCoordinatorScope(workspace, goal.id, "case-request");
   const context: ManagedSessionContext = {
     installationId: configuration.installationId, backend: "herdr", epoch: 0,
@@ -42,7 +49,7 @@ async function fixture(t: test.TestContext) {
         launchOwner: async input => {
           calls++;
           assert.equal(input.goalId, goal.id);
-          return { goalId: goal.id, runtime: "fixture", scene: concierge };
+          return { goalId: goal.id, runtime: "fixture", scene: ownerScene };
         },
         send: async (scene, deliveryId) => {
           calls++;
@@ -58,7 +65,7 @@ async function fixture(t: test.TestContext) {
     workspace, control, managedContext, cliDirectory: join(root, "bin"),
     adapter: async () => { throw new Error("restricted Agent must not inspect processes or call a backend"); },
   });
-  return { root, workspace, control, service, goal, context, client, active, host, calls: () => calls,
+  return { root, workspace, control, service, goal, context, client, active, host, ownerScene, calls: () => calls,
     block: () => { dispatchable = false; } };
 }
 
@@ -90,7 +97,7 @@ test("the real owner-launch CLI works when the Agent cannot execute ps", { skip:
   assert.equal(f.calls(), 1);
 });
 
-test("host rejects stale attempts, epochs, roles, cross-case launch and switch-time requests", async t => {
+test("host rejects stale attempts, epochs, roles and cross-case launch while runtime is unavailable", async t => {
   const f = await fixture(t);
   for (const context of [
     { ...f.context, attemptId: "old-attempt" },
@@ -98,10 +105,12 @@ test("host rejects stale attempts, epochs, roles, cross-case launch and switch-t
     { ...f.context, role: "owner" as const },
     { ...f.context, goalId: "another-goal" },
   ])
-    await assert.rejects(f.client(context).launchOwner({ goalId: f.goal.id, name: "owner-test" }), /不属于/);
-  await assert.rejects(f.client().launchOwner({ goalId: "another-goal", name: "owner-test" }), /参数无效/);
+    await assert.rejects(f.client(context).launchOwner({ goalId: f.goal.id, name: "owner-test" }),
+      /不属于|身份已撤销|只能为当前案卷启动负责人/);
+  await assert.rejects(f.client().launchOwner({ goalId: "another-goal", name: "owner-test" }),
+    /参数无效|不能启动负责人/);
   f.block();
-  await assert.rejects(f.client().launchOwner({ goalId: f.goal.id, name: "owner-test" }), /正在交接/);
+  await assert.rejects(f.client().launchOwner({ goalId: f.goal.id, name: "owner-test" }), /运行时暂不可用/);
   assert.equal(f.calls(), 0);
 });
 

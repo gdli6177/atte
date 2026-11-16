@@ -1,215 +1,321 @@
 # Atte 架构
 
-产品基线见 [全局管家与注意力中心开发说明](product/attention-center-development.md)
-与 [Atte 自主目标规格](product/autonomous-goals.md)。
+版本：0.14.0
+
+产品说明见[使用说明](atte.md)，领域术语见[CONTEXT.md](../CONTEXT.md)。
 
 ## 边界
 
 ```text
-Electron 主进程      可信文件选择、会话后端、系统通知、受约束 IPC
-React 渲染进程       注意力、目标详情、设置；无 Node 或任意命令能力
-Autonomy scheduler   状态变化即触发 + 10 秒补偿；领取持久续跑并交给管家收件箱
-packages/core        目标、委托、续跑、复核、验收、发布、Bot、锁与原子存储
-cli                  人用消息入口与受信任 Agent 状态协议，调用同一个 core 服务
-Agent Adapter        Codex、Claude Code、Cursor、Qoder 与 OMP 生命周期接入
-Skill Registry       内置角色/工序与工作区本地方法、摘要、授权和启动时解析
-Session Adapter     Herdr / Orca 的创建、发送、观测、聚焦、恢复与关闭
-Herdr 插件           注意力 Pane、新目标与回到管家动作；不是安全边界或状态副本
+Electron 主进程       工作区、Herdr、终端、通知、Hook Broker、巡检、受约束 IPC
+React 渲染进程        注意力、全部事项、设置；无 Node 或任意命令能力
+packages/core         目标、注意力、决定、交付、状态、锁、v5 迁移与恢复
+cli                   人的入口、Agent 状态协议与 Hook ingest，调用同一 core
+Agent Adapter         Codex、Claude Code、Cursor、Qoder 与 OMP 生命周期
+packages/sessions     Herdr-only 的 SessionControl、负责人启动、身份与投递
+Herdr 插件           注意力面板、新建入口、回到管家与现场事件；不是状态副本
 ```
 
-Atte 不运行模型，不管理模型凭据，也不根据终端画面解析 Agent 结果。它通过官方 Hook / Extension 观测受支持 Agent 的生命周期，并把事件归一化为 Atte 自己的 attempt 与 turn 记录。设置中选择 Herdr 或 Orca 作为本安装唯一的会话后端，不会双路派发；未支持 Hook 的 CLI 自动回退到当前后端与巡检。
+Atte 不运行模型，不保存模型凭据，也不从终端画面推断业务结果。0.14 没有自主调度
+器、独立复核执行器、方法注册表、后端切换事务或 Orca Adapter。旧 Orca 类型只保留
+用于读取 v2–v4 快照和展示历史，不能创建新的执行。
 
-0.11.0 的 `packages/sessions` 提供统一 Session 契约、持久切换事务、私有 launcher、身份与代次校验。Herdr 使用 Session / Tab / Pane；Orca 使用官方 CLI 的原生终端。代码只保证传输、幂等、权限、状态与恢复；Skill 指导管家理解目标、委派、追问和整理交付，两种后端复用相同的 Atte CLI 语义写回。
+## 工作区状态
 
-后端切换保存目标和消息，不搬移终端全文。旧现场先静止并核实停止，再以新 attempt 按案卷恢复；旧 attempt、旧 attention 和旧回执不能覆盖新事实。注意力 ↔ 现场通过 `goal.decide` / `goal.scene-reply` / `goal.resolve` 的结构化 ID 关联。现场答复先持久保存原话，再由管家核对并解除对应事项，不由“打开过现场”或终端 idle 推断解决。
+工作区由用户选择，状态位于 `<workspace>/.atte/`。
 
-## 状态
+- `state.json`：完整快照，当前 `WorkspaceState.version = 5`；
+- `events.jsonl`：有界追加事件，保存轻量元数据、状态摘要哈希与字节数，不复制整份快照；
+- `decisions.md` / `rejected.md`：由结构化决定派生的可读账本；
+- `attachments/`：原图，状态只保存相对路径、MIME、大小和 SHA-256；
+- `coordinator-inbox.json`：协调收件箱；
+- `runtime/`：Hook spool、诊断和受管运行文件。
 
-工作区由用户选择，状态位于 `<workspace>/.atte/`。`state.json` 是完整快照，`events.jsonl` 是追加事件记录；事件只保存状态摘要的 SHA-256 与字节数，不再为每次修改复制整份 workspace。日志超过 16 MB 时在状态写锁内只保留最近约 4 MB、最多 2,000 条完整事件，并原子替换旧日志，避免长时间运行产生数 GB 的重复快照。工作区根目录的 `.atte-lock/` 串行化桌面和 CLI 的读取、恢复与并发写入，确保旧状态被整体归档时不会与写入交错。每次修改先写临时文件，再原子替换快照。`decisions.md` 与 `rejected.md` 由结构化决定记录派生，供 Agent 和人直接阅读。图片原图位于 `.atte/attachments/`，状态只保存相对路径、MIME、大小和 SHA-256；导入校验真实文件魔数并限制数量与体积。已结束目标保留图片 30 天，应用启动时清理，也支持逐张或随目标永久删除。
+工作区根目录的 `.atte-lock/` 串行化桌面与 CLI。每次状态修改先写同目录临时文件，
+同步后原子替换 `state.json`；事件日志达到阈值时在写锁内压缩。附件导入校验真实
+文件类型、数量与大小，不把图片字节写入目标状态。
 
-`WorkspaceState.version = 4` 包含项目及上线策略、自主设置、目标、续跑、复核、验收、发布、Bot、决定账本、唯一管家和中性现场引用。`workflows` / `steps` 只作为旧结构读取，不暴露产品入口。有效 v2 先保留 `state.v2.backup.json` 并补齐保守自主默认值；有效 v3 先保留 `.atte/state.v3.backup.json`，再原地升级为 v4，保留目标、attention、消息、附件与授权。备份失败则停止迁移。无法离线核实的 Herdr 引用保存为 `legacyScene`，不编造 runtime 身份；连接核实后才可操作。有效 v4 幂等读取。v1、未来版本、损坏快照或缺快照按既有恢复协议整库归档，不把有效 v3 当作垃圾重建。细节见 [双后端规格](product/session-backends-v0.11.0.md) 与 [工作区恢复](product/workspace-recovery.md)。
+### v5 迁移
 
-目标可选保存 `agentRuntime`：当前 `AgentAttempt`、Adapter 能力、最后事件、当前 turn、最新 Prompt / 回复和 Stop 回执。`AgentAttempt` 在负责人启动、重启或恢复时新建，并由 `atte owner launch` 导出目标 ID、attempt ID、Hook token 与 Agent 名称。原生事件只接受版本、事件 ID、单调序号、来源、Agent、attempt、turn 与受限内容；事件 ID 和 `attemptId + sequence` 去重排序，旧 attempt、旧 turn 与迟到事件只写诊断日志。旧 backend epoch 也会被拒绝，不能覆盖当前现场。
+v5 只保留当前产品所需字段：
 
-目标内容与状态命令分离：
+- 项目与上线策略；
+- 目标、消息、活动、附件、等待、提醒和交付；
+- 决定账本；
+- 唯一管家与现场引用；
+- `watchdog.noProgressMinutes`；
+- Agent 运行时 attempt、turn、回执与受限事件；
+- `history` 中的退役能力事实。
 
-- `goal.message` / `goal.direct` 保存人的原话和附件，不从正文推断批准、验收或完成。外部等待目标交回管家处理时先恢复 `active`、清除旧等待与提醒，保留原下一步；管家根据明确事实重新确立外部等待、进展或注意力。人工事项的普通备注保留等待与提醒。
-- `goal.progress`、`goal.wait`、`goal.review`、`goal.decide` 等是 Agent 或受信任适配器提交的明确状态事实。`waiting` 仅用于具名外部第三方，不能等待用户、管家、负责人或工人；`goal.wait --owner` 必填，外部对象存入 `waitingFor`，不覆盖执行负责人。需要人处理使用注意力，内部协调保持 `active`。`goal.remind` 只设置提醒，活动目标也可到期进入注意力。
-- `goal.accept`、`goal.complete`、`goal.rework`、`goal.drop`、`goal.resolve` 由人通过明确操作触发；非自主事项可以由当前案卷管家依据用户明确原话记录结束。自主目标进入 `review` 后只能走人工验收或独立复核门禁，不能由 `goal.complete` 绕过；结束与决定仍必须保存用户原话，不从“可以”“继续”等顺承词自动推断。
-- 活动记录按 `goalId` 隔离，原始 Agent 内容保持不透明；UI 不要求固定摘要模板。
+有效 v2、v3、v4 快照先在原目录创建对应备份：
 
-读取有效 v2 快照时纠正旧版等待语义：等待对象缺失、指向用户或内部 Agent，或仍有未解决的决定、验收、介入事项时恢复活动状态（已有交付的验收保留 `review`），保留历史与注意力。旧版等用户且缺少注意力时补回介入项。真正的外部等待及其到期跟进保留，不归档整个工作区；后续修改时保存纠正结果。
+- `state.v2.backup.json`
+- `state.v3.backup.json`
+- `state.v4.backup.json`
 
-### 工作方法与本地能力包
+备份过程先写临时普通文件，同步内容后按原始字节计算 SHA-256，再通过原子硬链接
+发布并再次校验。已有备份必须是同字节普通文件；不符、为符号链接、为目录或无法
+校验时停止迁移，原 `state.json` 保持未改写。迁移成功后再次读取 v5 不重复备份、
+不重复写盘。
 
-`SkillRegistry` 将 Agent 上下文限制为可审计的文本和元数据。内置
-`atte.concierge`、`atte.owner`、`atte.verifier` 提供不可被本地包覆盖
-的角色边界；按 `delivery`、`discovery`、`release` 目标类型选择内置工序；
-`atte.agent-setup` 与 `atte.herdr-recovery` 只进入管家控制面。
+迁移映射：
 
-本地能力包安装在工作区 `.atte/skills/<pack-id>/`。安装器拒绝保留前缀、路径
-穿越、符号链接、非 UTF-8 引用、超限文件、重复路径和不匹配的脚本 SHA-256。每个
-目标最多绑定 8 个本地方法，绑定保存包 ID、版本和内容摘要。负责人或复核者启动前
-重新解析当前安装内容；包缺失、停用或摘要变化时失败关闭，不静默沿用旧说明。
+- 事项、消息、活动、附件、决定与已有交付保留；
+- 已有交付进入 `review`，生成人工验收注意力；
+- `brief`、`autonomy`、续跑/复核派发、探索/发布等实验事项进入
+  `executionHold=migration-confirmation`，清除执行派发并等待人确认；
+- 旧 Orca 事项保留原状态、消息和现场引用，标记 `readOnly=legacy-orca`，清除派发、
+  巡检、恢复和自动现场操作；
+- 工作区自主设置、Bot、工人偏好与项目验收授权移入 `history`；
+- 管家与负责人命令收敛为 `agents.concierge`、`agents.owner`，负责人留空继承管家。
 
-上下文优先级固定为 Core 约束、角色 Skill、工序 Skill、目标本地方法、当前任务。
-本地入口最多 12,000 字符，单份参考最多 12,000 字符、每包参考合计最多 24,000
-字符。管家通知只注入控制面 Skill 与本地方法目录；匹配的本地方法全文只在目标
-明确绑定后进入负责人或复核者上下文。每次解析在目标 `skillResolutions` 中保存
-角色、attempt 和包摘要，最多保留 40 条。
+不支持版本、损坏 JSON、缺字段或结构无效的快照保留原文件并停止加载，不自动归档
+或创建空工作区。`workspace.recovery` 只保留为旧格式读取兼容，不覆盖原快照。
 
-需要脚本时，安装本身不会授权。用户逐项批准某个脚本的当前 SHA-256；`skill run`
-只允许当前目标已挂载、摘要匹配且已批准的脚本。脚本环境只包含必要变量，stdout /
-stderr 有界，120 秒后终止，结果写入审计活动。脚本、Hook 和 Skill 都不能修改目标
-生命周期，Atte 语义 CLI 仍是唯一业务状态写入口。产品边界与验收见
-[工作方法与本地能力包](product/local-capability-packs.md)。
+## 目标与注意力
 
-### 自主目标闭环
+`Goal` 的主要生命周期是：
 
-`GoalBrief` 保存结果、范围、完成条件、外部影响、证据类型和有限恢复预算。完成条件必须引用目标内的人的原话、项目规则或可核对验证方法；Agent 修改结果、完成条件或外部影响时必须走 `BoundaryChange`，批准前不领取续跑。`briefHistory` 保留最近修订，活动记录继续保存完整时间线。
+```text
+backlog -> active -> waiting -> active
+                    \-> review -> completed
+active / waiting / review -> dropped
+```
 
-`Goal.autonomy.continuation` 是控制面状态，不在 Agent 中常驻。checkpoint、独立复核、恢复、外部等待到期、决定解决和可信依赖都会创建或替换一条持久续跑；领取必须有未过期租约，回执同时校验 continuation 与 lease，目标修订变化、暂停、人工接管或结束会阻止旧回执生效。Electron 调度器监听状态变化且每 10 秒补偿；同一工作区仍由协调收件箱串行管家案卷，负责人可并行。
+`backlog` 是暂存，不派发、不巡检、不创建现场。`active` 表示仍需跟进；
+`waiting` 只表示等待用户和所有 Atte Agent 之外的具名外部第三方；`review` 表示已
+提交交付、等待人工验收。旧 `manual` 事项可读取和接管，但 v5 不允许新建人工事项。
 
-验收方式按 `goal.override > project.acceptance > workspace.acceptance` 解析，默认人工验收。`auto-with-verification` 只有在摘要来源、候选版本、通过证据、独立复核人、必选条件、审查轮次、暂停与人工接管等门禁全部满足时才由 core 自动完成；失败证据不能被通过结论引用。人可以随时改为人工验收、暂停、重新打开或要求新复核。生产发布另建 `kind=release` 目标，每次批准绑定环境和候选，执行成功后仍进入人工结果确认。
+人的原文与状态事实严格分开：
 
-本地 Bot 只通过 `atte.bot.v1` envelope 使用同一目标与交付事实源。绑定由人创建和撤销，按项目和操作授权，按 `(botId, requestId)` 幂等；它不能提交复核、验收、发布批准或策略修改。远程网络入口和 Bot 复核能力不在 0.9 首期范围。
+- `goal.message` / `goal.direct` 只追加原话与附件，不推断状态；
+- `goal.progress` / `wait` / `decide` / `risk` / `ship` / `review` 等提交明确事实；
+- `goal.accept` 必须由人通过桌面或可信注意力界面执行；
+- `complete` / `rework` / `drop` / `resolve` 的最终状态来自人的明确操作或原话，
+  管家只能记录用户已明确说出的事实；
+- `goal.remind` 只改提醒时间，不改变生命周期。
 
-注意力是独立派生：
+注意力由同一份状态派生，不建立第二份列表：
 
-| 来源 | 进入注意力 |
+| 来源 | 注意力类型 |
 | --- | --- |
-| 人工或管家请求决定 | 是 |
-| 项目上线策略要求审批，或命中九类高风险动作 | 是；决定账本已有记录时直接沿用 |
-| 提交了带真实检查的交付 | 生效方式为人工验收时是；自动验收目标进入独立复核，门禁通过后不生成“请验收” |
-| 等待事项到达提醒时间 | 是 |
-| 当前 attempt 的 Agent Hook 报告阻塞 | 先请管家核查，不等同完成或失败 |
-| Herdr Agent 为 `blocked` / 不可达，或目标长期无进展 | 先请管家核查；联系失败或未恢复再提示人介入 |
-| Herdr `idle` / `done` / `unknown` 或普通进展 | 否 |
+| 业务问题、上线审批、高风险动作、迁移确认 | `decision` |
+| 带真实检查的交付，且需要人验收 | `review` |
+| 提醒到期 | `follow_up` |
+| 派发失败、现场不可达、巡检升级、审查轮次耗尽 | `intervention` |
+| 普通进展、`idle` / `done`、Hook heartbeat | 否 |
 
-`done` 只是 Agent 空闲。目标只有在交付检查与证据完整、且人工验收或独立复核门禁通过后才会完成；自动完成不表示已经合并或上线。
+首页按固定顺序显示“需要你决定、等待你验收、到期跟进、Agent 需要介入”。未到期的
+外部等待只显示紧凑概览。`isReadOnlyGoal` 会在注意力、派发、巡检和现场操作入口
+排除旧 Orca 历史。
 
-活跃目标的负责人持续 `idle` / `done` 90 秒且仍未写回结果时，巡检请管家核对该负责人是否遗漏结果、真实等待或交付。运行标签由列表和详情共享的事实映射生成：当前 turn 已写回显示“本轮已回报”；未产生核对请求且已有下一步时显示“按计划跟进”，缺少下一步时显示“待管家更新”；真正持久记录核对请求后才显示“待管家核对”，确认送达后显示“已请管家核对”，不声称管家正在执行。旧 `recovery` 提示本身不能产生核对请求。需要人处理、验收、外部等待和人工接管的业务事实优先于运行标签。恢复 `working` 或提交新的结构化决定、交付后清除旧核对提示。`active` 只表示目标仍需跟进。终端空闲不自动改变业务状态，也不会直接产生人的注意力事项或自动验收。
-
-可信 Stop Hook 进一步缩短这段反馈链：回合结束后等待 5 秒，若当前 turn 仍没有结构化 Atte 写回，就向同一负责人发送一次命令提醒；再等 30 秒仍缺失时标记 `protocol_missing` 并交给管家，不直接打扰人。Hook heartbeat 不进入 `Activity`，不会重置工作区配置的业务无进展计时（默认 30 分钟）。没有受支持 Hook 的 Agent 继续使用 90 秒 Herdr 路径。详细 Adapter 矩阵、事件模型、隐私限制和故障降级见 [Agent Runtime Hooks](product/agent-runtime-hooks.md)。
-
-状态归并顺序固定为：明确 Atte CLI 语义写回 > 当前 attempt Hook > 当前 Session 后端生命周期 > Watchdog。任何 Hook、Stop 或 Agent 回复都不能推断完成、等待外部、找人决定或验收放行。
-
-负责人由独立 CLI 进程执行，`progress`、`review`、`decide` 等语义写回不经过渲染进程 IPC。桌面在状态同步时比较负责人新增的语义活动：目标仍活动、没有待发送派发且未进入注意力时，写入一条待派发记录并立即排入协调收件箱，不必等待巡检。启动时先用当前快照播种已见活动，因此历史不会被重放；同一目标的连续写回仍按收件箱规则合并。该观察只决定“是否需要管家核对”，普通进展不产生注意力，待验收仍要求 `goal review` 的真实检查。
-
-负责人现场答复通过 `goal.scene-reply` 保存原话和实际结果，再由唯一管家提交状态命令。注意力与回执分别具有独立编号；管家 scope 绑定二者并在状态事务内校验，防止迟到回复清除新问题。现场访问和工作回合仅触发空闲时的一次协议补核对，不构成审批事实；失败保持事项和重试入口。细节见 [人工交互同步](product/herdr-interaction-sync.md)。
-
-待办池复用 `Goal`，通过 `backlog` 生命周期和 `manual` 执行归属区分暂存与本人执行，不建立第二个存储。`goal.intake.handling` 明确选择 `later`、`self` 或默认 `concierge`；前两者没有派发请求。暂存不巡检、不能登记现场或通过进展命令变相启动。人工提醒到期与等待提醒共用稳定 attention ID，但保留原生命周期；只有明确交给管家才建立派发。完成个人事项无需 Agent 交付；移出保留历史，可恢复到暂存。见 [待办池开发说明](product/task-pool-proposal.md)。
-
-### 场景优先导航
-
-注意力中的真实现场介入与有真实引用的普通活动目标直接打开当前后端的现场；决定、验收、到期跟进与派发失败使用轻量动作卡。已完成和已放弃目标只打开历史记录。完整记录继续承担附件、消息历史和目标管理，现场条仅展示结构化目标事实并提供回到注意力的入口。
-
-入口策略集中在 `apps/desktop/src/features/goals/goalEntry.ts`，动作卡复用 `GoalActionDock` 与 core 命令。Electron 的 `terminal-open` 事件携带当前 `goalId`，渲染进程只从同一份工作区快照派生现场上下文，不维护终端内容副本，也不把滚动历史注入 Agent 上下文。
-
-### 桌面工作现场
-
-0.9.2 起，“回到现场”默认由 `ExternalTerminalManager` 在 iTerm2、Terminal 或 Ghostty 中 attach 当前工作区 Herdr Session。设置保存在 userData 的 `scene-settings.json`（`0600`）；每个工作区、Session 的 attach 进程、TTY lease 与固定 launcher 分别使用私有目录。再次打开时先验证原 attach 进程仍存活并激活原窗口；旧 lease 才通过 TTY 定位，窗口已关闭才创建新窗口。Ghostty 将 launcher 作为 `-e` 的单个命令参数，路径含空格也不会被拆开。AppleScript 只接收固定脚本参数，用户文本不拼接进脚本；Session 名称、工作区路径和执行路径都先校验。自动终端失败、权限被拒绝或终端未安装时，目标与 Session 不变，界面明确提示可改用内嵌轻现场。
-
-内嵌轻现场使用同一 Session 与同一核心快照，不维护第二套 Agent 状态。纯文本继续走 xterm PTY；仅图片剪贴板时，渲染进程通过受约束 IPC 确认系统剪贴板类型，再向当前 Agent 写一次 `Ctrl+V`，让 CLI 自己读取剪贴板，避免把图片字节复制进 Atte 状态。轻现场标题栏提供强制外部打开入口，用户所选默认模式只影响普通“回到现场”动作。
-
-## 会话后端与管家
-
-0.11 起以下 Herdr 安装、插件和外部 attach 机制只在 Herdr 被选中时启用；Orca 使用原生窗口与 `SessionRuntime`，不安装或启动 Herdr。
-
-`Executables` 将 Finder 的精简 PATH 与用户登录 shell 的 PATH、常见安装目录合并，保留可执行入口的符号链接名称。安装包在构建时从 Herdr 官方 GitHub Release 获取当前平台二进制，校验 SHA-256 后再连同应用签名；用户首次启动不依赖 Homebrew、网络或系统 PATH。`HerdrInstallation` 启动时先探测应用内置、userData/runtime 或本机已有版本，有效二进制立即可用；随后通过轻量 GitHub Releases API 在后台检查最新版，发现更新时把官方资产下载到 userData/runtime/herdr，再次校验 SHA-256 与实际版本后原子替换。安装请求去重，不修改用户已有安装。更新检查失败时继续使用内置或本机 CLI，并显示可重试提示；安装失败不丢目标。
-
-已识别的 CLI 使用 Herdr Agent 通信；任意自定义交互式 CLI 通过真实 Pane 启动，原样保留可执行文件与参数，用 `transport=pane` 与前台 `processId` 记录并复用。Finder 目录预检找不到命令时，不再提前判定 CLI 不存在：裸命令名交给真实 interactive Pane shell，由其 PATH、alias 与函数解析；绝对路径仍作为一个安全参数执行。每次发送文本前核对该进程仍在前台，退出或换进程时拒绝发送；没有 Agent 生命周期信息时只报告 unknown。不把任意程序“成功启动”当作理解任务或完成任务。用户复杂 shell 表达式通过自己的启动脚本承载。
-
-Atte 不向 Codex 或其他 Agent CLI 注入运行时专属的 `workspace-write`、网络开关、审批参数或额外目录。设置中的启动命令是可执行文件与原生 argv；支持哪些模型、沙箱和权限选项由该 CLI 自己决定。Electron renderer 的 `sandbox: true` 是应用安全边界，与 Agent 执行权限无关。
-
-应用打开工作区后，`SessionRuntime` 通过当前 Session Adapter 准备唯一管家，复用可核实的现有现场；新现场使用设置中保存的完整 CLI 命令。Herdr 使用按工作区路径派生的命名 Session，可通过 `ATTE_HERDR_SESSION` 固定名称；Orca 使用经过验证的本机 runtime、folder 工作区和真实终端 handle。隐藏 Atte 窗口不结束 Agent。所有普通启动、发送和关闭先取得 `SessionControl` 租约，再在返回时复核 backend epoch；切换期间仅受限恢复授权可以操作清单内资源。
-
-管家通过 `atte` 读取和写回目标，只负责分发、协调跟进与向人交接。所有实际执行，包括简单任务、返工和检查，都交给独立负责人；管家不得在阻塞时接手执行。负责人使用 Herdr Tab、Pane 和 Agent 消息，但 Atte 不预设任务图、分配算法或固定层级拓扑。每次派发前先把 `coordinator-scope.json` 写入同目录临时文件，再用 rename 原子替换；准备或刷新管家不会先删除 scope，因此队列中的目标任务不会遇到短暂的文件缺失。Herdr `agent_prompt_stalled` 表示输入已被接受但未及时观察到 working，传输回执保持 `accepted`；timeout 保持未知。两者都不能证明管家完成协调，业务层没有结构化证据时保存为 `unconfirmed`，禁止自动重发。
-
-Herdr 0.9.5 的插件事件不暴露用户提交的 prompt 文本。用户直接在管家终端追加入口时，管家先调用 `atte direct` 写回原始消息：带当前案卷时追加活动，明确的新事项创建新目标并标记为已经从终端送达，避免桌面再次派发同一文本。`direct --new` 成功后会把管家的案卷 scope 原子切到新目标，允许同一回合继续读取、整理和派发新案卷。桌面监听 `.atte/state.json`，外部 CLI 写入后立即刷新，不需要等待 10 秒巡检。这个同步依赖管家执行协议；未经 CLI 写回的终端聊天仍只是终端内容。
-
-职责边界通过初始身份说明、每次目标通知与巡检消息传达。身份初始化是一个没有案卷的独立回合，只确认长期职责后结束，不得读取或猜测目标。每次目标与巡检通知只包含一个 `case_id` 和一个目标的快照，并以案子标记包裹；同一工作区的通知由持久协调收件箱严格串行，必须等当前管家回合进入 `idle` / `done` / `blocked` 后再发送下一案卷，不同工作区可以并行。处理案卷的回合不得创建后台任务、循环轮询或等待负责人完成，否则旧案卷会悬挂并污染下一条通知的 scope。每次应用启动后首次恢复已有管家时，只有 Herdr 状态为 `idle` / `done` 才刷新身份说明，同一运行中按实际管家引用去重；`working` / `blocked` / `unknown` 只保留并聚焦真实现场，不发送身份 prompt。“找管家”直接打开已登记的 Tab/Pane，让用户处理阻塞 UI；已知 blocked 时派发返回可操作状态，不自动发送 Enter、Esc 或其他输入。它是 Agent 行为契约，不是操作系统权限隔离；Atte 无法拦截任意第三方 CLI 内部的工具调用。
+## 协调与巡检
 
 ### 协调收件箱
 
-`CoordinatorInbox` 把人工反馈、注意力、普通目标和后台巡检保存到工作区私有文件 `.atte/coordinator-inbox.json`，权限为 `0600`。排序固定为 `human > attention > normal > background`；同一目标只保留最新有效通知，新请求与旧请求同级时用新请求替换，旧请求为更高优先级时不降级。已经 `processing` 的请求不丢失，新变化在其后重新排队。
+每个工作区一份 `coordinator-inbox.json`，只允许一个管家 drain。优先级固定为：
 
-`requestId` 是投递的幂等键：同一目标、请求与类型重复入队只保留一条，已合并的记录不会被同一次巡检继续追加。`unconfirmed` 在 30 分钟后转为 `expired` 终态并停止计入告警；它仍与“未送达”分开，且不自动重发。`atte delivery <requestId>` 可查询单次投递的最终状态。
+```text
+human > attention > normal > background
+```
 
-`CoordinatorDispatcher` 每个工作区只有一个 drain，因此一次只有一个 Atte 管家回合。负责人创建、执行、交付和 Herdr 现场仍按目标并行；协调收件箱不串行化负责人。单个目标失败后继续处理其他目标。优先级只在当时可排队项之间生效，已经开始的回合不能被后来的人工消息抢占；较低优先级后台工作可以持续运行，不会饿死人工消息。Herdr 明确报 blocked 时暂停下一次自动尝试；`unconfirmed` 且现场仍 `working` 时也暂停，留到下一次轮询或新事件唤醒。收件箱只保留最近 240 条终态记录，超过容量不会删除排队或处理中项目。
+同一事项只保留最新有效通知；更高优先级不会被同级新通知降级。`requestId` 是投递
+幂等键。已排队请求在重启后继续；`processing` 在重启后转为 `unconfirmed`，不自动
+重放。负责人仍按事项并行，管家案卷严格串行。
 
-每条目标通知在发送前原子更新 `coordinator-scope.json`；巡检路径也执行同一步骤。请求绑定 `requestId`，旧回执不能修改新目标状态。管家单回合观察上限为 120 秒；后端恢复最多等待 60 秒的结构化协调证据。超时保存未确认，停止自动重放。累计完成 40 个案卷或估算约 240,000 字符后，应用只在管家 `idle` / `done` 且队列为空时关闭并重建管家上下文；所有目标事实仍在 core 状态中，轮换不会清理消息、附件、交付或注意力。
+负责人新的结构化写回由桌面观察器发现，立即排入协调收件箱；启动时先播种已见活动，
+因此不会重放历史。通知送达不等于业务完成。
 
-应用启动时，持久化为 `queued` 的请求继续处理；`processing` 表示应用可能已把请求交给管家却不知道完整结果，因此转为 `unconfirmed` 且不自动重放。顶部状态只统计每个目标最新一条失败或未确认记录，后续成功重试会清除旧提示。详细设计与基准见 [持久协调收件箱](product/coordinator-inbox.md)。
+### 看门狗
 
-巡检的 `basis` 只取负责人自己的最后一条实质性写回（或派发时间），管家记账、核对说明和已合并通知不会推迟 stale 判定。已有未答卡片时，升级只标记已升级，不再追加第二条同一诉求。负责人现场经身份核实且进程已退出时，`owner launch` 可退役旧 attempt 并建立新 attempt；启动后立即退出的现场记为 `launch_failed`、自动清理本次尝试，旧 attempt 保存在 `attemptHistory`，恢复不再依赖人点按钮。
+`packages/core/src/watchdog.ts` 只根据负责人写回、派发时间、现场可达性和回执判断，
+不解析终端文本。默认无进展阈值为 30 分钟，迁移时可继承有效旧值。
 
-受管 Agent 的沙箱可能禁止连接 Unix Socket，因此桌面同时提供私有 Host Bridge。它只接受随机令牌和 `agent`、`pane`、`tab`、`workspace` 四类命令，并通过系统临时目录下按工作区哈希隔离的原子 request / claim / response 文件工作。目录和文件使用 owner-only 权限；socket 路径不依赖工作区深度，避免 macOS Unix Socket 约 104 字节的路径上限。请求已有 claim 但缺少 response 时表示结果未确认，恢复后只报告状态，不自动重放 Herdr 命令或 Agent prompt。Bridge 始终调用 Atte 选定的同一 Herdr 运行时，避免系统 PATH 中另一份 Herdr 指向不同 Session。
+主要检查点：
 
-自定义 CLI 先按 Pane 进程身份管理。若 Herdr 随后自动识别并登记该 Agent，Atte 会把该 Pane 上的 Agent 改名为受管负责人名称，并改用生命周期感知的 `agent prompt`；无法识别的 CLI 继续按前台 PID 校验后用 Pane 输入，两者都不会把任务发给已经退出的 shell。
+- 派发后 60 秒仍无负责人现场：`unassigned`；
+- 负责人处于 `blocked`：先请管家核对；
+- 现场不可达或进程替换：`missing`；
+- `idle` / `done` 持续 90 秒但仍无结构化结果：`settled`；
+- 可信 Stop 后回执缺失：`protocol_missing`；
+- 超过无进展阈值：`stale`。
 
-管家进程从 `<workspace>/.atte` 启动，并继承 `ATTE_COORDINATOR=1` 与当前案卷 scope 文件。受管 Atte CLI 只允许读取当前目标的详情和 status，以及更新该目标的 update、progress、wait、decide、risk、ship、kind、brief、checkpoint、boundary、complete、rework、drop、resolve、remind、scene-reply 和 session，并可启动负责人或独立复核者；`goal list`、attention、ask、message、验收、自主设置、发布批准和跨目标读写会被拒绝。自主目标进入 `review` 后不能由管家调用 `complete` 绕过验收。结束或放弃时 CLI 要求 `--note` / `--reason` 保留用户明确说出的原话。该边界保护 Atte 数据 API，不能阻止 Agent 直接读取文件或绕过 CLI。
+巡检请求先进入协调收件箱。联系管家失败会保留失败信息并形成 `intervention`；
+已联系 10 分钟仍无恢复进展时升级给人。看门狗、提醒和回执恢复都在 0.14 保留。
+回执提醒成功交给管家时，`contactedAt` 只由协调收件箱的派发路径记账一次；
+Broker 不再额外写一次成功的 `watchdog.report`，避免重复“已请管家核对”。
 
-首次创建负责人统一调用受管的 `atte owner launch`，独立 CLI 与 Desktop 复用 `packages/sessions/src/runtime.ts`。先解析角色与目标方法，再创建私有 launcher、生成 attempt，清除管家控制环境并导出当前目标身份；在真实 `/bin/zsh -ilc` 中 source 启动器，保留 `.zshrc` alias、函数、原生 argv 与 shell PATH。后端只接收短启动命令，避免 canonical 行长限制。启动器把安装、epoch、attempt、进程出生时间及后端 locator 写入私有文件收据；收据没有 Prompt 或 Hook token。读到收据不等于 Agent 已开始，发送前仍核实进程、身份与生命周期。
+### 回执提醒
 
-创建和发送在外部副作用前持久记录请求，响应丢失后先通过同一 request / binding 收据发现原现场，不能重建或换正文重发。新受管路径不再等待终端 marker。旧 Herdr 恢复记录仍由 `owner attach` 验证 Session、Workspace、Tab、Pane 和进程，兼容入口不能绕过中性后端的 epoch 守卫。后端切换后的恢复默认按目标案卷继续；只有实际捕获且受支持的原生会话才标为原会话恢复。
+可信 `turn.settled` 启动一次回执检查：
 
-正常运行的受管 `owner launch` / `owner send` 优先经过中性的桌面 Session Host；
-受限 Agent 不需要自行查询系统进程或放开沙箱。工作区内的 `0600` 描述文件只保存
-当前私有通道与令牌，不进入目标、消息或启动收据；每次调用重新发现，应用重启后
-仍存活的管家不会继续使用旧端点。Host 只接受当前管家 attempt、后端 epoch 与
-当前案卷的启动或投递，实际操作继续经过同一 SessionRuntime 的身份与幂等校验。
-切换期间仅持有内部 SwitchAuthority 的恢复通道可执行。未认领请求在一秒后原子
-取消；已认领而结果丢失则保持未确认，不自动重放。
+1. 等待约 10 秒（初始 `remindAt = settledAt + 10s`）；
+2. 当前 turn 已有关键语义写回则取消；
+3. 否则核实同一负责人现场，把单行协议提醒正文通过 Herdr 官方
+   `agent prompt <pane> <text> --wait --until working` 只投递一次，保持 bracketed
+   paste 和完整 `ATTE_RECEIPT` marker；成功观察 `working` 即记为 `started`；
+4. 只有 Codex 报 `agent_prompt_stalled` 时才补提交：先轮询 `agent list` 是否已
+   `working` / `blocked`；尚未确认接手时，重新核实同一现场身份、可达性及 `idle`
+   状态，通过 `agent read --source visible` 读取最后一个 `›` 输入框，只检查当前
+   草稿，不把 transcript 历史区当作未提交正文；
+5. 仅当最后一个 `›` 输入框的草稿仍含提醒正文时，才补按
+   `agent send-keys <pane> enter`，最多 6 次，每次补按后轮询 `working` / `blocked`，
+   确认接手即记为 `started` 并停止补按。每次补按前重新核实，身份不符、现场不可达、
+   不再 `idle` 或草稿消失即停止；绝不重发正文；
+6. 不能确认处理则记为 `accepted`。桌面 `main` 只把 `started` 映射为 `sent`；
+   `accepted` 向 Broker 返回为 `unconfirmed`，保留说明并按回执检查流程交给管家核对；
+7. 提醒后等待 30 秒仍无语义写回，则标记 `protocol_missing` 并交给管家。
+   初始 `inspectAt = settledAt + 40s`；提醒流程结束时记录 `remindedAt`，并把
+   `inspectAt` 更新为 `remindedAt + 30s`；
+8. 写回早于投递确认时，保留语义回执的 `written`；投递确认只幂等补记一次提醒和
+   `remindedAt`，不退回 `reminded`，不覆盖真实结果或重复生成提醒记录；
+9. 新输入、新 turn、重启、结束或人工接管取消旧计时器。
 
-后端交接先等待上一管家回合真正空闲，再重新读取目标并发布下一案卷 scope。
-负责人现场已创建不代表管家回合已经结束，不能提前切换 scope；等待期间人的
-新决定、消息或结束操作必须以最新状态为准。
+投递收据的 `started` / `accepted` 与语义回执分开；提醒本身产生的 Agent 回合通过
+完整 marker 沿用原回执，不再次催办。没有 Hook 的 Agent 继续使用 Herdr 空闲路径。
 
-Herdr 的 OMP 传输对超过 10 行或 1,000 UTF-16 code units 的正文使用 `0600` 私有文件和一条短读取指引，避开 OMP 18.15 的大段粘贴交互菜单；原始 delivery ID 与 SHA-256 仍绑定完整正文。不会再补按 Enter 或把同一任务拆成多个回合。未知投递不重放；过保留期且不再绑定活动现场的已确认正文通过会话维护清理。
+## Herdr 会话
 
-`atte hook ingest --adapter <id>` 是内部稳定入口。Adapter 把官方原生事件送入 CLI，CLI 负责能力校验、turn 归一化、12,000 字符限制与原文 SHA-256，然后通过 `/tmp/atte-<uid>/<workspace-hash>.sock` 发给 Electron Broker。Socket 请求失败或 500 ms 内不可用时，事件写入工作区 `.atte/runtime/spool/`；目录与文件分别使用 `0700` / `0600`，最多 200 条、保留 7 天。应用重启先 drain 离线队列，再按持久 receipt 时间恢复计时器。工具参数、工具输出和终端全文不会进入 stored event。
+Herdr 是唯一执行后端。`packages/sessions` 提供：
 
-桌面设置中的“Agent 接入”由 `AgentHookManager` 管理。Codex、Claude Code、Cursor、Qoder 通过可核实的命令 marker、首次备份、JSON 合并与原子替换维护各自官方配置；只增删 Atte 条目。保留第三方 handlers、matcher、空用户分组和其他设置；没有受管条目的卸载不重写配置。写入按配置目录加锁，并在提交前重新核对原内容；发现外部编辑则停止写入。损坏 JSON、未来 schema、非普通文件和符号链接不会被覆盖。OMP 使用官方 Extension API，只更新以 Atte 标记开头的同名文件，其他扩展和同名用户文件被保护。Codex 安装后显示“等待信任”，直到原生事件实际被收到；用户可在设置中停用或卸载，停用状态会阻止自动重装。v1 不安装 Pre/PostToolUse，避免工具级进程与重复写入放大。
+- `SessionControl`：租约、epoch、绑定身份和幂等操作；
+- `SessionRuntime`：准备管家、启动/投递负责人、聚焦与关闭现场；
+- 私有 launcher 与启动收据：保存安装、epoch、attempt、进程出生时间和 locator，
+  不保存 Prompt 或 Hook token；
+- Herdr Session / Tab / Pane / Pane 前台进程的运行时核查。
 
-## 上线策略与决定账本
+每次受管启动或投递先取得控制租约，返回时复核 epoch。旧现场、旧 attempt、旧 turn
+或未经核实的 locator 不能发送输入或关闭新现场。创建和发送在外部副作用前记录请求；
+响应丢失时按同一 request / binding 核对，不重建正文或自动重放。身份核实时失败则
+拒绝发送，不把 shell 或已退出的 Pane 当成负责人。
 
-`Project.policy` 包含 `shipPolicy`、可选审批人、修订号与更新时间。默认 `external-approval`；`auto` 允许检查通过后合并和部署，`auto-merge-manual-deploy` 只自动放行合并。审批人只用于展示，不参与身份校验。策略设置命令要求 `actor="你"`，桌面设置是唯一提供的入口，受管 CLI 不提供参数。这个校验是应用层约束，不是操作系统账户认证。
+每个工作区使用独立的 Herdr Session。应用自带经过 SHA-256 校验的 Herdr TUI CLI，
+并提供 `Session Host` 私有通道，使沙箱中的受管 Agent 不必自行查询系统进程或开放
+额外权限。
 
-`goal ship` 先拒绝未通过检查。需要审批时只建立 `decision` 注意力，不会执行外部动作；人批准后写入账本，再次调用才返回 `allowed=true`。`goal risk` 覆盖删除数据、停服、花钱、外部发消息、产品方向、新建或轮换密钥、修改权限和修改上线策略，九类动作无论项目策略为何都先问人。
+外部工作现场由 `ExternalTerminalManager` 在 iTerm2、Terminal 或 Ghostty 中 attach
+当前 Session。终端与工作区的映射保存在 userData 的私有设置中；再次打开先验证
+原 attach 进程与 TTY lease，再复用窗口。内嵌轻现场使用同一 Session，不维护第二份
+Agent 状态；终端滚动历史不进入目标上下文。
 
-决定账本按项目与稳定动作键查找，批准和拒绝都保存原话、时间、来源、目标。命中已有决定时 `goal decide` / `goal risk` 不再产生注意力。`goal review` 对每个目标最多接受三轮，第四轮只建立 `intervention`；人在注意力面板允许后才提高一轮上限。
+0.14 不再保存或切换执行后端，也没有 `SwitchAuthority`、旧后端停止确认或交替恢复
+事务。Herdr 不可用时，目标、提醒和人工验收仍可读取，但新的 Agent 启动与投递暂停。
 
-## Herdr 插件
+### Herdr 插件
 
-应用包内包含一个本地 Herdr 插件 `dev.atte`。Herdr 可用后，应用把插件原子部署到 `userData/herdr-plugin`，通过固定 ID 注册或更新，并在设置中显示就绪状态。插件随 Atte 安装和升级，不需要用户另装 Node、从 GitHub 再下载或手工执行 `plugin link`；应用只使用打包内的固定源码，不静默更新远程代码。插件源码摘要变化时即使应用版本未变也会重新登记，避免新增动作或事件钩子停留在旧清单。
+应用把固定源码部署到 `userData/herdr-plugin`，以 `dev.atte` 注册。插件提供注意力
+控制台、新建入口、回到管家和现场事件：
 
-插件提供三个动作与两个 terminal Pane：打开注意力控制台、直接进入一行新建目标，以及按真实 Agent 名称回到全局管家。控制台直接调用内置 `atte board`，读取 `.atte/state.json` 的同一份 core 数据，展示需要决定、验收、到期跟进和介入的事项。它支持给管家发消息、提交决定、请求跟进、等待事项交给管家或人工接管、验收通过、聚焦真实负责人 Tab，以及 `g` 回到管家；验收反馈不直接改状态，新建入口调用同一 `atte ask`。这些入口都不维护第二份状态，也不自行执行目标。
+- `pane.agent_status_changed`
+- `pane.exited`
+- `pane.closed`
+- `pane.moved`
+- `tab.closed`
+- `workspace.closed`
 
-Herdr 的 `pane.agent_status_changed`、`pane.exited`、`pane.closed`、`pane.moved`、`tab.closed` 和 `workspace.closed` 事件由插件脚本送入内部 `atte event herdr`。CLI 兼容 Herdr 原生的 `{ event, data }` envelope，再按真实 Pane、Tab 或 Workspace ID 查找已登记负责人现场，只有命中目标时才执行 core 的 `live.event`。Pane 移动时用 Herdr 返回的新 Pane、Tab、Workspace 与 Agent 身份原子更新目标，旧 ID 立即停止匹配，避免后续关闭或状态事件落到失效引用。事件是桌面 10 秒 Agent 列表轮询的即时通道和断线补偿，不改变 `idle` / `done` 不等于完成的规则。
+插件只提交事件与动作，不持有业务状态。Pane 移动时用新 locator 原子更新绑定，
+旧 ID 立即失效。插件继承 Herdr 用户权限，因此权限判断和状态写入仍在 core 与受约束
+Electron IPC 中。
 
-插件适合 Herdr 内的快捷入口，不承担持久化、案卷隔离、Agent 权限或系统文件沙箱。插件 v1 的代码继承用户权限并可使用完整 Herdr CLI；Herdr 不沙箱插件。因此权限判断和状态写入继续留在受约束的 Electron IPC 与 Atte core，插件只作为表现和动作层。事件钩子只有在能提供明确增益且不会产生双写竞争时才引入。
+## Agent Hook 管线
 
-通知送达与负责人现场登记是两个独立事实。系统通知和可选 Webhook 消费明确的目标状态变化与只读注意力；状态变化可按各状态分别订阅，Webhook 配置保存在应用数据目录且不回传令牌；普通 HTTP 2xx 记为送达，飞书 / Lark 和企业微信还要求响应业务码为 0，失败按 5 分钟退避，稳定投递键跨重启去重，投递失败不回滚目标。未登记现场的活动目标在一分钟启动宽限期后交由管家巡检，不把通知成功显示成已经执行。`session.set` 拒绝把管家现场或其他未结束目标的现场登记成当前目标负责人；真实连接仍由 Herdr presence 核实，包括自定义 CLI 的前台 PID。Webhook 载荷与适配器边界见 [消息通知](product/notifications.md)。
+```text
+官方 Hook / OMP extension
+        |
+        v
+atte hook ingest --adapter <id>
+        |
+        +--> 512,000-byte / 2 s bounded stdin
+        |
+        +--> 归一化、序列与 turn 校验
+                 |
+                 +--> 本地 Socket -> Electron Broker -> AgentRuntimeState
+                 |
+                 +--> 私有 spool -> 重启后补处理
+```
 
-`goal.accept`、`goal.complete`、`goal.drop` 和已结束目标的永久删除会释放负责人现场。桌面立即关闭对应 Herdr Tab，并通过 `session.release` 清理已结束目标的引用；关闭请求失败时保留引用，巡检恢复后继续重试。永久删除会先尝试关闭现场，关闭失败时不执行删除。目标删除只开放给 `completed` / `dropped`，同时删除附件文件；项目决定账本不随目标删除。
+Hook 只观测会话、turn、阻塞、中断和可用回复。工具参数、工具输出和终端全文不进入
+目标；Prompt 与最新回复只保存有界文本和原文哈希。事件按 attempt 与单调序号去重，
+旧 attempt、旧 turn 和迟到事件只能进入诊断。
 
-关闭负责人前，桌面读取 Herdr 提供的真实 `agent_session`（来源、Agent 类型、ID 或路径）与工作目录，经 `session.preserve` 保存为目标的恢复信息，再关闭 Tab 并释放活动现场。已完成或已放弃的管家目标可以在详情中输入一条新说明并点击“重启目标”：`goal.restart` 保留原消息、附件、交付和验收历史，清除仅属于上一轮的当前交付与提醒，进入 `active` 并创建 `restart` 派发；桌面按 Herdr 原生参数恢复原 Agent 会话、重新绑定独立负责人，再通知管家转交用户说明。没有历史会话标识的旧目标会从原目标记录启动新负责人，并在界面明确说明；个人事项继续使用“恢复到待办池”，不会伪装成 Agent 会话。
+OMP extension revision 3 在写 stdin 前安装子进程与流错误处理器，避免 child 提前
+退出时未处理的 `EPIPE` 杀死 OMP。CLI ingest 同样有界读取；超限后丢弃载荷并继续
+排空到 EOF，2 秒超时，任何失败都不向 Agent 回合返回非零退出码。
 
-## 桌面 IPC
+Socket 不可用或 500 ms 内未响应时，事件转入私有 spool。spool 最多 200 条、保留
+7 天，权限为 owner-only。应用重启先 drain 离线事件，再恢复回执计时器。
 
-渲染进程通过 preload 暴露的有限接口选择工作区与项目、导入与预览受校验的图片、执行目标命令、管理 Herdr 和 CLI、读取剪贴板类型、设置工作现场并打开 HTTPS 链接。`BrowserWindow` 使用 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`，拒绝窗口跳转和权限请求。IPC 校验发送方 URL，项目路径必须先由文件选择器选中；附件导入接受字节而不是任意目标路径，预览与打开只接受当前状态中的附件 ID。外部终端选择只接受枚举值，Session 名称、终端配置和 TTY lease 在进入系统命令前校验。
+Hook 失败诊断写入有界 `hook-diagnostics.json`，只包含固定失败分类的计数和最后
+失败时间；不保存 payload、token、工具输出或终端历史。`atte doctor --json` 读取该
+快照，`AgentHookManager` 同时负责配置合并、首次备份、受管标记、停用与卸载。
+Codex 等待原生 `/hooks` 信任；损坏配置、未来 schema、非普通文件或用户同名 OMP
+文件不会被覆盖。
 
-目标详情位于 `apps/desktop/src/features/goals/`，拆分为展示状态映射、消息历史、回复编辑器、附件区、状态操作区和组合层。它只依赖显式的 `GoalDetailService`：提交 core 命令、导入和打开附件、打开 Herdr 或 URL、重试派发。模块不直接读取 Electron API，也不从自然语言推断状态。
+## 交付、验收与授权
 
-模块化与插件化约束见 [插件架构](product/plugin-architecture.md)。扩展按 `storage`、`execution`、`terminal`、`agent-discovery`、`notification`、`automation`、`view` 和 `integration` 能力接入；第一方 Herdr、通知和 Agent 发现与第三方实现遵守同一协议。可选适配器失效时，目标的创建、查看、消息、等待和验收仍应可用。
+`goal.review` 要求成果摘要和至少一项真实执行过的检查，检查必须包含命令或操作、
+`passed` / `failed` 结果与说明。可选证据支持 `command`、`artifact`、`url`、
+`attachment`、`inspection`。空检查或失败检查不能提交为可验收交付。
 
-应用内 CLI 使用随包分发的独立 Node 可执行文件，CLI bundle 位于 ASAR unpack 目录，脚本和 Node runtime 都在 `.app` 内。打开工作区时自动安装或刷新 `~/.local/bin/atte`，并把它默认绑定到当前工作区。该入口只是应用内脚本的符号链接，因此移动应用后 CLI 会失败并提示重新安装，可避免悄悄执行旧版本。
+人在桌面调用 `goal.accept`，或通过普通终端提交明确验收。0.14 没有独立复核者、
+自动验收门禁或 acceptance mandate。验收通过只结束目标，不执行合并、部署或外发。
 
-本地维护每天最多后台扫描一次 Atte 自己的 Chromium 缓存、诊断日志和遗留临时文件：删除 30 天未用的缓存与日志、退出后遗留超过 24 小时的原子临时文件；设置页可立即显示占用并手动清理当前缓存。清理根目录固定且拒绝符号链接，只匹配已知缓存目录和临时文件名，不删除 `state.json`、目标、当前附件、Agent 会话或 `.atte.backup-*`。已结束目标的附件继续使用 30 天保留期。维护任务与设置页扫描串行执行，避免清理与统计交错；自动任务在首屏打开后后台运行，不阻塞工作区加载。
+`Project.policy` 保存 `shipPolicy`、审批人展示信息、修订号和更新时间。默认
+`external-approval`；策略只由人在桌面修改。`goal.ship` 检查策略并返回是否允许，
+不执行外部动作。九类高风险动作始终先建立 `decision` 注意力，决定账本按稳定动作键
+复用明确批准或拒绝。
 
-## 安装和签名
+`goal.review` 默认最多三轮。达到上限后的新提交转为 `intervention`，只有人明确
+允许才增加一轮。
 
-发布产物包含 DMG、ZIP 和 SHA256SUMS。构建后按 Electron 嵌套代码顺序完成 ad-hoc 或 Developer ID 签名，再制作附件；测试在 ZIP 解压和 DMG 复制后验证严格签名，然后启动安装应用、安装 CLI、真实创建目标，并在隔离 Herdr 中验证插件注册和注意力 Pane。
+## 桌面 IPC 与安全
 
-代码签名证明包内完整性，不等于 Apple 公证。没有 Developer ID 时仍可能出现“无法验证开发者”；只有已核对 GitHub 来源与 SHA-256 的应用才应按系统提示打开。
+`BrowserWindow` 使用 `contextIsolation: true`、`nodeIntegration: false`、
+`sandbox: true`，拒绝窗口跳转与权限请求。preload 只暴露：
+
+- 工作区与项目选择；
+- 图片导入与附件打开；
+- 目标命令；
+- Herdr、CLI、Skill 与 Hook 管理；
+- 工作现场设置；
+- 诊断与 HTTPS 链接。
+
+IPC 校验发送方 URL；附件按字节导入，预览只接受当前状态中的附件 ID；终端枚举、
+Session 名称、TTY lease 和用户文本在进入系统命令前校验。渲染进程只从同一份工作区
+快照派生界面，不直接读取状态文件，也不从自然语言推断目标状态。
+
+应用数据中的私有描述文件、spool 与锁使用 owner-only 权限。诊断日志限制大小并
+压缩绝对路径；不记录目标正文、消息、附件、终端输出、Webhook 地址或凭据。
+
+## 打包与验证
+
+目标平台仅 macOS Apple Silicon。发布产物为：
+
+- `Atte-<version>-macOS-arm64.dmg`
+- `Atte-<version>-macOS-arm64.zip`
+- `SHA256SUMS.txt`
+
+应用包包含 Electron、Atte CLI 的 Node runtime 和经过校验的 Herdr TUI CLI。构建
+完成 Electron 嵌套代码签名后再制作附件。ad-hoc 签名不等于 Apple 公证。
+
+验证覆盖：
+
+- Node 与 Bun 下 OMP extension 的提前退出、部分读取、spawn 失败和重复大载荷；
+- CLI ingest 的超限、超时、排空、非法载荷、正常投递与 spool；
+- v2/v3/v4 → v5 备份、失败停止、幂等和旧记录映射；
+- 看门狗、回执、协调收件箱和负责人写回通知；
+- 真实 Herdr 启动、外部终端、内嵌轻现场、插件注册与安装包。
+
+## 已移除的架构
+
+0.14 不再包含：
+
+- 自主续跑 scheduler 与 continuation lease；
+- 独立复核执行器和自动验收门禁；
+- Bot 请求、能力包仓库、脚本授权与执行；
+- 发布目标生命周期和独立发布批准执行链；
+- 多后端选择、切换、交接和双后端恢复；Herdr 内部绑定注册与 epoch 防护继续保留；
+- Orca 安装、检测、窗口激活和原生终端适配；
+- 工人偏好、工作方法挂载和验收授权设置。
+
+旧字段与旧记录只用于迁移、诊断或历史展示，不获得当前执行权。

@@ -1,6 +1,6 @@
 id = "dev.atte"
 name = "Atte"
-version = "0.13.8"
+version = "0.14.0"
 min_herdr_version = "0.9.5"
 description = "Bring Atte attention, one-line goal intake, and concierge focus into Herdr."
 platforms = ["macos"]
@@ -13,7 +13,7 @@ command = ["/bin/sh", "open-pane.sh", "attention"]
 
 [[actions]]
 id = "new-goal"
-title = "给 Atte 新建目标"
+title = "给 Atte 新建事项"
 contexts = ["workspace"]
 command = ["/bin/sh", "open-pane.sh", "new-goal"]
 
@@ -31,7 +31,7 @@ command = ["/bin/sh", "run-cli.sh", "board"]
 
 [[panes]]
 id = "new-goal"
-title = "Atte 新目标"
+title = "Atte 新事项"
 placement = "overlay"
 command = ["/bin/sh", "new-goal.sh"]
 

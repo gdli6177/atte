@@ -30,7 +30,7 @@ export async function verifyReconciliationPresentation(page, screenshotDirectory
     } } });
     return goal.id;
   }, title);
-  await page.getByRole("button", { name: "全部目标", exact: true }).click();
+  await page.getByRole("button", { name: "全部事项", exact: true }).click();
   await page.locator(".goal-row").filter({ hasText: title }).click();
   const detail = page.locator(".goal-detail-modal");
   await expect(detail.getByText("本轮已回报", { exact: true }).first()).toBeVisible();

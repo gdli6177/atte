@@ -89,6 +89,16 @@ export class HerdrAdapter implements SessionAdapter {
       })).stdout;
   }
   private async call(args: string[], timeout?: number) { return result(await this.raw(args, timeout)); }
+  private async waitForAgentStart(paneId: string, timeout = 1_500) {
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      const agents = list((await this.call(["agent", "list"])).agents, "Agent");
+      const status = agents.find(item => item.pane_id === paneId)?.agent_status;
+      if (status === "working" || status === "blocked") return true;
+      await delay(150);
+    }
+    return false;
+  }
   async detect(): Promise<BackendDetection> {
     try {
       const text = await this.raw(["--version"]);
@@ -281,6 +291,8 @@ export class HerdrAdapter implements SessionAdapter {
       try {
         const agents = list((await this.call(["agent", "list"])).agents, "Agent");
         const agent = agents.find(item => item.pane_id === scene.locator.paneId);
+        const receiptReminder = input.deliveryId.startsWith("receipt-reminder-") &&
+          !input.text.includes("\n");
         if (agent) {
           // OMP 18.15 can intercept marker-sized pastes (>10 lines or >1000
           // UTF-16 code units) with an attachment/menu flow. It is not a byte
@@ -296,8 +308,44 @@ export class HerdrAdapter implements SessionAdapter {
             await writeFile(path, input.text, { mode: 0o600, flag: "wx" });
             prompt = `这是 Atte 的一次受管消息投递，不是 shell 命令。请先用文件读取工具完整读取 ${path}，再按其中的角色、案卷和 Atte CLI 协议执行。不要只回复已读。投递 ID：${input.deliveryId}；正文 SHA-256：${input.payloadSha256}。`;
           }
-          await this.raw(["agent", "prompt", scene.locator.paneId, prompt, "--wait", "--until", "working", "--timeout", "10000"], 12_000);
-          receipt.status = "started";
+          if (receiptReminder && agentFamily(agent) === "codex") {
+            try {
+              await this.raw([
+                "agent", "prompt", scene.locator.paneId, prompt,
+                "--wait", "--until", "working", "--timeout", "10000",
+              ], 12_000);
+              receipt.status = "started";
+            } catch (error) {
+              if (deliveryFailure(error).status !== "accepted") throw error;
+              let started = await this.waitForAgentStart(scene.locator.paneId);
+              for (let attempt = 0; !started && attempt < 6; attempt++) {
+                const current = await this.inspect(scene);
+                if (current.identity !== "match" || !current.reachable) break;
+                if (["working", "blocked"].includes(current.state)) {
+                  started = true;
+                  break;
+                }
+                if (current.state !== "idle") break;
+                const visible = await this.raw(["agent", "read", scene.locator.paneId,
+                  "--source", "visible", "--lines", "80"], 5_000);
+                const sections = visible.split(/(?:^|\n)[ \t]*›[ \t]/u);
+                const draft = sections.length > 1 ? sections.at(-1)! : "";
+                if (!draft.replace(/\s+/gu, "").includes("Atte未收到目标")) break;
+                await this.raw(["agent", "send-keys", scene.locator.paneId, "enter"], 5_000);
+                started = await this.waitForAgentStart(scene.locator.paneId);
+              }
+              receipt.status = started ? "started" : "accepted";
+            }
+            receipt.detail = receipt.status === "started"
+              ? "提醒已通过原负责人 Agent 输入通道送达，并已确认负责人开始处理。"
+              : "Herdr 已接受提醒，但未确认开始处理；未重复发送，交给管家核对。";
+          } else {
+            await this.raw([
+              "agent", "prompt", scene.locator.paneId, prompt,
+              "--wait", "--until", "working", "--timeout", "10000",
+            ], 12_000);
+            receipt.status = "started";
+          }
         } else {
           await this.raw(["pane", "run", scene.locator.paneId, input.text], 5_000);
           receipt.status = "accepted";

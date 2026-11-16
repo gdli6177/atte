@@ -50,6 +50,7 @@ try {
   // A failure carrying a credential must never reach the report verbatim.
   await page.evaluate(token => window.atte.reportRendererError(`Authorization: Bearer ${token}`), secret);
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page.getByRole("link", { name: "高级与维护", exact: true }).click();
   await expect(page.getByText("排查与反馈", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "复制诊断日志", exact: true }).click();
   await expect(page.getByRole("button", { name: "已复制", exact: true })).toBeVisible();

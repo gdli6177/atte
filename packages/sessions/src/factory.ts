@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { SessionBackendId, WorkspaceState } from "../../core/src/index.js";
 import { HerdrAdapter } from "./herdr/adapter.js";
-import { OrcaAdapter } from "./orca/adapter.js";
+import { SessionError } from "./contracts.js";
 import type { BackendControlV1 } from "./control/types.js";
 import { environmentValue } from "../../core/src/index.js";
 export function workspaceSessionName(root: string, environment = process.env, state?: WorkspaceState) {
@@ -11,8 +11,7 @@ export function workspaceSessionName(root: string, environment = process.env, st
   if (state) {
     const goals = state.goals.filter(goal => !["completed", "dropped"].includes(goal.status));
     const scenes = [state.concierge.scene, ...goals.flatMap(goal => [
-      goal.scene, goal.agentRuntime?.attempt.scene, goal.autonomy?.verificationSite?.scene,
-      goal.autonomy?.lastVerification?.reviewerScene,
+      goal.scene, goal.agentRuntime?.attempt.scene,
     ])];
     const current = scenes.find(scene => scene?.backend === "herdr");
     if (current?.locator.kind === "herdr") return current.locator.session;
@@ -32,19 +31,12 @@ export function localAdapter(input: {
   environment?: NodeJS.ProcessEnv;
   state?: WorkspaceState;
 }) {
+  if (input.backend !== "herdr")
+    throw new SessionError("backend_unsupported", "仅支持 Herdr；旧后端现场保留为只读历史。");
   const environment = input.environment ?? process.env;
-  const directory = join(input.directory, "adapters", input.backend);
-  const orcaHostHome = environmentValue(environment, "ORCA_HOST_HOME")?.trim();
-  const orcaEnvironment = input.backend === "orca" && orcaHostHome
-    ? { ...environment, HOME: orcaHostHome }
-    : environment;
+  const directory = join(input.directory, "adapters", "herdr");
   const testZdotdir = environmentValue(environment, "TEST_ZDOTDIR");
-  return input.backend === "orca" ? new OrcaAdapter({
-    directory, appPath: input.control.orcaAppPath ?? "/Applications/Orca.app",
-    environment: orcaEnvironment,
-    // The profile is provided only by an explicit isolated test environment.
-    ...(testZdotdir ? { shellEnvironment: { ZDOTDIR: testZdotdir } } : {}),
-  }) : new HerdrAdapter({
+  return new HerdrAdapter({
     directory, executable: input.herdrExecutable ?? environmentValue(environment, "HERDR_BINARY") ?? "herdr",
     session: workspaceSessionName(input.workspace, environment, input.state), environment,
     ...(testZdotdir ? { shellEnvironment: { ZDOTDIR: testZdotdir } } : {}),

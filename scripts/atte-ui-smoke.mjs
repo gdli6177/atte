@@ -18,7 +18,10 @@ await service.execute({
   type: "agents.configure",
   preferences: { concierge: "/missing/atte-qa-agent" },
 });
-const goal = await service.execute({ type: "goal.intake", text: "核对 Atte 验收入口", handling: "self" });
+const goalDraft = await service.execute({
+  type: "goal.intake", text: "核对 Atte 验收入口", handling: "later",
+});
+const goal = await service.execute({ type: "goal.takeover", goalId: goalDraft.id });
 const reviewed = await service.execute({
   type: "goal.review", goalId: goal.id, actor: "owner",
   delivery: {
@@ -124,6 +127,10 @@ try {
     await theme(value);
     for (const [width, height] of [[1440, 960], [1024, 768], [900, 700]]) {
       await page.setViewportSize({ width, height });
+      await page.waitForFunction(() => {
+        const image = document.querySelector(".pixel-scene img");
+        return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+      });
       const layout = await page.evaluate(() => {
         const heading = document.querySelector(".home .intro h1")?.getBoundingClientRect();
         const image = document.querySelector(".pixel-scene img");
@@ -160,8 +167,18 @@ try {
         await page.emulateMedia({ reducedMotion: "reduce" });
         assert.equal(await page.locator(".ui-button").first().evaluate(element =>
           getComputedStyle(element).transitionDuration), "0s");
-        assert.equal(await page.evaluate(() => document.getAnimations().filter(animation =>
-          animation.playState === "running").length), 0);
+        await expect.poll(() => page.evaluate(() => {
+          const animations = document.getAnimations();
+          for (const animation of animations) {
+            const target = animation.effect?.target;
+            if (target instanceof Element) getComputedStyle(target).animationName;
+          }
+          return animations.filter(animation => animation.playState === "running")
+            .map(animation => ({
+              name: animation.id || animation.animationName || animation.transitionProperty,
+              target: animation.effect?.target?.getAttribute("class"),
+            }));
+        }), { timeout: 1_000 }).toEqual([]);
         await page.emulateMedia({ reducedMotion: "no-preference" });
       }
       await page.getByRole("button", { name: "注意力", exact: true }).click();
@@ -178,8 +195,47 @@ try {
     await capture(`detail-${value}`);
     await page.getByRole("button", { name: "关闭", exact: true }).click();
     await page.getByRole("button", { name: "设置", exact: true }).click();
-    await expect(page.getByRole("navigation", { name: "设置分组" }).getByRole("link")).toHaveCount(5);
-    await expect(page.getByRole("heading", { name: "关于 Atte", exact: true })).toHaveCount(1);
+    await expect(page.getByRole("navigation", { name: "设置分组" }).getByRole("link")).toHaveCount(6);
+    const settings = page.locator(".settings");
+    const maintenance = page.locator("#settings-maintenance");
+    const maintenanceSummary = maintenance.locator(":scope > summary");
+    await expect(maintenance).toHaveJSProperty("open", false);
+    await expect(settings.getByRole("heading", { name: "Agent 接入", exact: true })).toBeVisible();
+    await expect(settings.getByRole("heading", { name: "Herdr 运行时", exact: true })).toHaveCount(0);
+    await expect(settings.getByRole("button", { name: "准备管家", exact: true })).toHaveCount(0);
+    await expect(settings.getByRole("button", { name: "打开内嵌轻现场", exact: true })).toHaveCount(0);
+    await expect(settings.locator(".policy-row")).toHaveCount(0);
+    const policyBefore = (await service.read()).projects.map(project => ({ id: project.id, policy: project.policy }));
+    const projectPolicies = settings.locator(".settings-policy");
+    await expect(projectPolicies).toHaveJSProperty("open", false);
+    await projectPolicies.locator(":scope > summary").focus();
+    await page.keyboard.press("Enter");
+    await expect(projectPolicies).toHaveJSProperty("open", true);
+    await expect(settings.locator(".policy-row")).toHaveCount(policyBefore.length);
+    const firstPolicy = settings.locator(".policy-row").first();
+    await firstPolicy.getByRole("button", { name: "配置", exact: true }).click();
+    await firstPolicy.getByLabel("上线策略", { exact: true }).selectOption("auto");
+    await firstPolicy.getByRole("button", { name: "取消", exact: true }).click();
+    await projectPolicies.locator(":scope > summary").focus();
+    await page.keyboard.press("Space");
+    await expect(projectPolicies).toHaveJSProperty("open", false);
+    await expect(settings.locator(".policy-row")).toHaveCount(0);
+    assert.deepEqual((await service.read()).projects.map(project => ({ id: project.id, policy: project.policy })),
+      policyBefore, "expanding, cancelling and collapsing project exceptions must not change authorization");
+    await expect(settings.locator("#settings-authority details").last()).toHaveJSProperty("open", false);
+    await maintenanceSummary.focus();
+    await page.keyboard.press("Enter");
+    await expect(maintenance).toHaveJSProperty("open", true);
+    await expect(maintenance.getByRole("heading", { name: "关于 Atte", exact: true })).toHaveCount(1);
+    await maintenanceSummary.focus();
+    await page.keyboard.press("Space");
+    await expect(maintenance).toHaveJSProperty("open", false);
+    await page.getByRole("link", { name: "高级与维护", exact: true }).click();
+    await expect(maintenance).toHaveJSProperty("open", true);
+    await expect(maintenanceSummary).toBeFocused();
+    await expect(maintenance.getByRole("button", { name: "复制诊断日志", exact: true })).toBeVisible();
+    await maintenanceSummary.press("Enter");
+    await expect(maintenance).toHaveJSProperty("open", false);
     const appearance = page.locator(".ui-settings-card").filter({ has: page.getByRole("heading", { name: "外观", exact: true }) });
     const next = value === "dark" ? "light" : "dark";
     await appearance.getByRole("button", { name: next === "light" ? "浅色" : "深色", exact: true }).click();
@@ -281,12 +337,18 @@ try {
   if (process.env.ATTE_ATTE_UI_HOLD === "1") {
     console.log("Inspection ready on CDP 9338; send a newline to close.");
     await new Promise(resolveInput => process.stdin.once("data", resolveInput));
+    process.stdin.pause();
   }
 } catch (error) {
   const page = application.windows()[0];
   if (page) {
     await page.screenshot({ path: join(artifacts, "failure.png"), animations: "disabled" }).catch(() => {});
     console.error(JSON.stringify({ artifacts, errors, scene: await page.locator(".scene-settings-panel").innerText().catch(() => "") }));
+  }
+  if (process.env.ATTE_ATTE_UI_HOLD === "1") {
+    console.log("Failure inspection ready on CDP 9338; send a newline to close.");
+    await new Promise(resolveInput => process.stdin.once("data", resolveInput));
+    process.stdin.pause();
   }
   throw error;
 } finally {

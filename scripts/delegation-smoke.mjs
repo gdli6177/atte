@@ -2,12 +2,13 @@
 // owner creation, work and delivery must be performed by the concierge/owners.
 import { _electron as electron, expect } from "@playwright/test";
 import { mkdtemp, mkdir, readFile, writeFile, realpath, rm } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import assert from "node:assert/strict";
-import { completeAutonomySetup } from "./lib/autonomy-setup.mjs";
+import { waitForWorkspace } from "./lib/autonomy-setup.mjs";
 
 const exec = promisify(execFile);
 const trial = await realpath(await mkdtemp("/tmp/cv-delegate-"));
@@ -15,6 +16,7 @@ const workspace = join(trial, "workspace"), home = join(trial, "home");
 const session = `atte-trial-${randomUUID().slice(0, 8)}`;
 const trialAgent = process.env.ATTE_TRIAL_AGENT ??
   "omp";
+const codingAgentDir = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".omp/agent");
 await mkdir(workspace); await mkdir(home);
 await writeFile(join(workspace, "AGENTS.md"), `# 隔离产品验收
 只处理本工作区目标，不访问其他项目或用户文件，不提交、发布或发送外部消息。
@@ -47,15 +49,16 @@ try {
   app = await electron.launch({
     executablePath:resolve(process.env.ATTE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     env:{...process.env,ATTE_TEST_HOME:home,ATTE_TEST_USER_DATA:join(trial,"userData"),
-      ATTE_TEST_WORKSPACE:workspace,ATTE_HERDR_SESSION:session},
+      ATTE_TEST_WORKSPACE:workspace,ATTE_HERDR_SESSION:session,
+      PI_CODING_AGENT_DIR:codingAgentDir},
     timeout:60_000,
   });
   page = await app.firstWindow();
   page.on("pageerror", error => errors.push(String(error)));
-  await completeAutonomySetup(page);
+  await waitForWorkspace(page);
   await expect.poll(async () => (await page.evaluate(() => window.atte.environment())).workspace).toBe(workspace);
   await page.evaluate(preferences => window.atte.command({type:"agents.configure",preferences}), {
-    concierge:trialAgent, owner:trialAgent, worker:trialAgent,
+    concierge:trialAgent, owner:trialAgent,
   });
   const ids = [];
   for (const marker of ["ALPHA_READY","BETA_READY"]) {
@@ -115,17 +118,21 @@ try {
   assert.equal(agents.length,3,"two goals have exactly two owners and one concierge, without duplicate starts");
   assert.equal(agents.filter(agent=>agent.pane_id===current.concierge.scene.locator.paneId).length,1);
   assert.ok(goals.every(goal=>agents.some(agent=>agent.pane_id===goal.scene.locator.paneId)));
-  const directGoal = goals.at(-1), dispatchBeforeDirect = directGoal.dispatch?.id,
+  const directGoal = goals.find(goal => goal.id === ids[0]),
+    dispatchBeforeDirect = directGoal.dispatch?.id,
     directMarker = `DIRECT_TERMINAL_${randomUUID().slice(0, 8)}`;
-  const directPrompt = await app.evaluate(async (_electron, {session,directMarker,currentConciergePane}) => {
+  const directPrompt = await app.evaluate(async (_electron, {
+    session,directMarker,currentConciergePane,directGoalId,directGoalTitle,
+  }) => {
     const { execFile } = process.getBuiltinModule("node:child_process");
     return await new Promise(resolve => execFile("herdr", [
       "--session", session, "agent", "prompt", currentConciergePane,
-      `这是用户直接发给你的 Herdr 终端消息。按你的身份协议，只把原话同步回 Atte 当前目标，不要开始新的执行或创建负责人。原话：追加下一步 ${directMarker}`,
+      `这是用户直接发给你的 Herdr 终端消息。按你的身份协议，只把原话同步回 Atte 目标 ${directGoalId}（${directGoalTitle}），不要开始新的执行或创建负责人。原话：追加下一步 ${directMarker}`,
       "--wait", "--timeout", "180000",
     ], {timeout:190_000,maxBuffer:512_000}, (error, stdout, stderr) =>
       resolve({error:error?.message,stdout,stderr})));
-  }, {session,directMarker,currentConciergePane:current.concierge.scene.locator.paneId});
+  }, {session,directMarker,currentConciergePane:current.concierge.scene.locator.paneId,
+    directGoalId:directGoal.id,directGoalTitle:directGoal.title});
   assert.equal(directPrompt.error, undefined, directPrompt.stderr || directPrompt.error);
   await expect.poll(async () => {
     const state = await snapshot();
@@ -171,7 +178,8 @@ try {
   app = await electron.launch({
     executablePath:resolve(process.env.ATTE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
     env:{...process.env,ATTE_TEST_HOME:home,ATTE_TEST_USER_DATA:join(trial,"userData"),
-      ATTE_TEST_WORKSPACE:workspace,ATTE_HERDR_SESSION:session},timeout:60_000,
+      ATTE_TEST_WORKSPACE:workspace,ATTE_HERDR_SESSION:session,
+      PI_CODING_AGENT_DIR:codingAgentDir},timeout:60_000,
   });
   page = await app.firstWindow();
   page.on("pageerror",error=>errors.push(String(error)));

@@ -1,5 +1,5 @@
 import { hasGoalScene, goalSceneLabel } from "./goalEntry.js";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Bot,
@@ -8,9 +8,6 @@ import {
   FileText,
   ImagePlus,
   MessageSquareText,
-  PauseCircle,
-  PlayCircle,
-  Plus,
   Radio,
   Sparkles,
   SquareTerminal,
@@ -22,13 +19,11 @@ import type {
   Goal,
   GoalAttachment,
   WorkspaceState,
-  SkillPackView,
 } from "../../../../../packages/core/src/types.js";
 import { GoalActionDock } from "./GoalActionDock.js";
 import { GoalAttachments } from "./GoalAttachments.js";
 import { GoalHistory } from "./GoalActivity.js";
 import { GoalDeliveryEvidence } from "./GoalDeliveryEvidence.js";
-import { GoalAutonomySummary } from "./GoalAutonomySummary.js";
 import {
   Badge,
   Button,
@@ -42,6 +37,7 @@ import type { GoalReplyMode } from "./GoalReplyComposer.js";
 import { presentGoal, time } from "./goalPresentation.js";
 import { GoalSceneSync } from "./GoalSceneSync.js";
 import { attentionRequest } from "../../../../../packages/core/src/model.js";
+import { isReadOnlyGoal } from "../../../../../packages/core/src/retirement.js";
 import type { GoalTone } from "./goalPresentation.js";
 import type { GoalDetailService } from "./goalService.js";
 
@@ -126,20 +122,8 @@ export function GoalDetail({
 }) {
   const [replyMode, setReplyMode] = useState<GoalReplyMode | null>(null);
   const [descriptionOpen, setDescriptionOpen] = useState(false);
-  const [reopenNote, setReopenNote] = useState("");
-  const [methodPacks, setMethodPacks] = useState<SkillPackView[]>([]);
-  const [methodPickerOpen, setMethodPickerOpen] = useState(false);
-  useEffect(() => {
-    if (!service.methodPacks) return;
-    let current = true;
-    void service.methodPacks().then(packs => {
-      if (current) setMethodPacks(packs);
-    }).catch(() => {});
-    return () => {
-      current = false;
-    };
-  }, [goal.id, service]);
   const view = presentGoal(goal, state);
+  const readOnly = isReadOnlyGoal(goal);
   const descriptionCanCollapse = goal.description.trim().length > 240;
   const focusTitle = view.needsDecision
     ? goal.attention?.summary || goal.next
@@ -215,7 +199,7 @@ export function GoalDetail({
               </p>
             </div>
             <div className="goal-detail-header-actions">
-              {!view.ended && (
+              {!view.ended && !readOnly && (
                 <button
                   type="button"
                   className="goal-scene-button"
@@ -270,7 +254,7 @@ export function GoalDetail({
                   {goal.status === "review" && (
                     <span>第 {goal.reviewRounds ?? 1} 轮审查</span>
                   )}
-                  {goal.autonomy?.paused && <span>自主续跑已暂停</span>}
+                  {readOnly && <span>只读历史 · 不再执行或打开运行现场</span>}
                   <time>{time(goal.updatedAt)} 更新</time>
                 </div>
               </header>
@@ -291,13 +275,6 @@ export function GoalDetail({
               </section>
 
               <GoalSceneSync goal={goal} view={view} service={service} busy={busy} />
-              <GoalAutonomySummary
-                goal={goal}
-                state={state}
-                service={service}
-                busy={busy}
-                notify={notify}
-              />
               {(
                 <section
                   className="goal-agent-runtime"
@@ -336,122 +313,6 @@ export function GoalDetail({
                           ? `${backendLabel} 状态保持可用；目标完成、等待外部和找人决定仍以 Atte 结构化为准。`
                           : "Hook 不可用时由当前会话后端与巡检完整兜底，不会阻止目标继续执行。"}
                     </p>
-                  )}
-                </section>
-              )}
-              {(goal.skills?.length || methodPacks.some(pack =>
-                pack.source === "local" && pack.status !== "missing")) && (
-                <section className="goal-methods" aria-label="这个目标使用的工作方法">
-                  <header>
-                    <span><Sparkles size={14} aria-hidden="true" /></span>
-                    <div>
-                      <strong>工作方法</strong>
-                      <small>只作用于这个目标，可随时移除</small>
-                    </div>
-                    {!view.ended && service.methodPacks && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<Plus size={14} />}
-                        disabled={busy}
-                        onClick={() => {
-                          setMethodPickerOpen(open => !open);
-                          void service.methodPacks?.().then(setMethodPacks).catch(() => {});
-                        }}
-                      >
-                        添加
-                      </Button>
-                    )}
-                  </header>
-                  {!!goal.skills?.length && (
-                    <div className="goal-method-chips">
-                      {goal.skills.map(binding => {
-                        const current = methodPacks.find(pack =>
-                          pack.id === binding.packId && pack.source === "local");
-                        const unavailable =
-                          !current ||
-                          current.status === "missing" ||
-                          current.status === "disabled" ||
-                          (current.digest && current.digest !== binding.digest);
-                        return (
-                          <span
-                            className={`goal-method-chip ${unavailable ? "unavailable" : ""}`}
-                            key={binding.packId}
-                            title={`${binding.packId}@${binding.version}`}
-                          >
-                            <Sparkles size={12} />
-                            {current?.name ?? binding.packId}
-                            {unavailable && <small>需重新挂载</small>}
-                            {!view.ended && (
-                              <button
-                                type="button"
-                                aria-label={`移除 ${current?.name ?? binding.packId}`}
-                                disabled={busy}
-                                onClick={async () => {
-                                  try {
-                                    await service.command({
-                                      type: "goal.skill.detach",
-                                      goalId: goal.id,
-                                      packId: binding.packId,
-                                      actor: "human",
-                                    });
-                                    notify(`已从这个目标移除 ${current?.name ?? binding.packId}`);
-                                  } catch {
-                                    // The shared command surface reports the error.
-                                  }
-                                }}
-                              >
-                                <X size={12} />
-                              </button>
-                            )}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {methodPickerOpen && !view.ended && (
-                    <div className="goal-method-picker">
-                      {methodPacks.filter(pack =>
-                        pack.source === "local" &&
-                        ["ready", "needs-approval"].includes(pack.status) &&
-                        !goal.skills?.some(binding => binding.packId === pack.id)).length ? (
-                        methodPacks
-                          .filter(pack =>
-                            pack.source === "local" &&
-                            ["ready", "needs-approval"].includes(pack.status) &&
-                            !goal.skills?.some(binding => binding.packId === pack.id))
-                          .map(pack => (
-                            <button
-                              type="button"
-                              key={pack.id}
-                              disabled={busy}
-                              onClick={async () => {
-                                try {
-                                  await service.command({
-                                    type: "goal.skill.attach",
-                                    goalId: goal.id,
-                                    packId: pack.id,
-                                    actor: "human",
-                                  });
-                                  setMethodPickerOpen(false);
-                                  notify(`已为这个目标添加「${pack.name}」`);
-                                } catch {
-                                  // The shared command surface reports the error.
-                                }
-                              }}
-                            >
-                              <strong>{pack.name}</strong>
-                              <span>{pack.description}</span>
-                              {pack.status === "needs-approval" && <small>包含未授权脚本；说明仍可使用</small>}
-                            </button>
-                          ))
-                      ) : (
-                        <p>
-                          还没有可用的本地工作方法。可在设置安装，或让 Agent 使用
-                          「atte-local-pack-author」创建。
-                        </p>
-                      )}
-                    </div>
                   )}
                 </section>
               )}
@@ -506,6 +367,7 @@ export function GoalDetail({
                   attachments={goal.attachments}
                   service={service}
                   remove={removeAttachment}
+                  readOnly={readOnly}
                 />
               )}
 
@@ -519,7 +381,7 @@ export function GoalDetail({
                 </details>
               )}
 
-              <details className="manual-tools goal-detail-advanced">
+              {!readOnly && <details className="manual-tools goal-detail-advanced">
                 <summary>
                   目标管理
                   <ChevronDown size={14} />
@@ -553,34 +415,6 @@ export function GoalDetail({
                       我来处理
                     </Button>
                   )}
-                  {!view.ended && goal.mode === "concierge" &&
-                    Boolean(goal.brief || goal.autonomy) && (
-                    <Button
-                      variant="secondary"
-                      disabled={busy}
-                      icon={goal.autonomy?.paused
-                        ? <PlayCircle size={15} />
-                        : <PauseCircle size={15} />}
-                      onClick={async () => {
-                        try {
-                          await service.command({
-                            type: goal.autonomy?.paused
-                              ? "goal.autonomy.resume"
-                              : "goal.autonomy.pause",
-                            goalId: goal.id,
-                            actor: "你",
-                          });
-                          notify(goal.autonomy?.paused
-                            ? "已恢复自主续跑"
-                            : "已暂停新的自主续跑；当前回合不会被强制终止");
-                        } catch {
-                          // The application-level command surface reports the real error.
-                        }
-                      }}
-                    >
-                      {goal.autonomy?.paused ? "恢复自主推进" : "暂停自主推进"}
-                    </Button>
-                  )}
                   {!view.ended && goal.mode === "manual" && (
                     <Button
                       variant="secondary"
@@ -610,42 +444,11 @@ export function GoalDetail({
                     </Button>
                   )}
                 </div>
-                {view.ended && (
-                  <form
-                    className="goal-reopen-form"
-                    onSubmit={async event => {
-                      event.preventDefault();
-                      try {
-                        await service.command({
-                          type: "goal.reopen",
-                          goalId: goal.id,
-                          note: reopenNote,
-                          actor: "你",
-                        });
-                        setReopenNote("");
-                        notify("目标已重新打开，保留原记录与证据");
-                      } catch {
-                        // The application-level command surface reports the real error.
-                      }
-                    }}
-                  >
-                    <Field label="重新打开原因">
-                      <TextInput
-                        value={reopenNote}
-                        onChange={event => setReopenNote(event.target.value)}
-                        placeholder="例如：复核遗漏了真实环境，需要继续修复。"
-                      />
-                    </Field>
-                    <Button
-                      type="submit"
-                      variant="secondary"
-                      disabled={busy || !reopenNote.trim()}
-                    >
-                      重新打开
-                    </Button>
-                  </form>
-                )}
-              </details>
+              </details>}
+              {readOnly && <section className="goal-original" aria-label="只读历史">
+                <header><span><FileText size={14} />历史记录</span></header>
+                <p>这条事项来自已退役的 Orca 会话。它保留原状态、交付与历史，不再执行动作、重试派发或打开运行现场。</p>
+              </section>}
             </article>
 
             <aside className="goal-detail-context">

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import assert from "node:assert/strict";
 import { WorkspaceService } from "../packages/core/src/index.ts";
+import { waitForWorkspace } from "./lib/autonomy-setup.mjs";
 
 // Real packaged app, isolated data and no model, network notification or user session.
 const home = await mkdtemp("/tmp/cv-external-wait-ui-");
@@ -10,12 +11,6 @@ const workspace = join(home, "workspace");
 await mkdir(workspace);
 const service = new WorkspaceService(workspace);
 await service.execute({ type: "agents.configure", preferences: { concierge: "/missing/cv-external-wait-agent" } });
-await service.execute({
-  type: "workspace.autonomy.set",
-  acceptance: "human-review",
-  initialize: true,
-  actor: "你",
-});
 const human = await service.execute({ type: "goal.direct", text: "等我确认方案", handling: "concierge" });
 const external = await service.execute({ type: "goal.direct", text: "等待供应商报价" });
 await service.execute({ type: "goal.wait", goalId: external.id, reason: "对方尚未发来报价",
@@ -50,22 +45,38 @@ async function launch() {
   const page = await app.firstWindow();
   page.on("pageerror", error => errors.push(error.message));
   await page.getByRole("button", { name: "注意力", exact: true }).waitFor();
+  await waitForWorkspace(page);
   return page;
 }
 const snapshot = page => page.evaluate(() => window.atte.command({ type: "snapshot" }));
+async function showAttention(page) {
+  await page.getByRole("button", { name: "注意力", exact: true }).click();
+  const overview = page.locator(".waiting-overview");
+  await expect(overview).toBeVisible();
+  return overview;
+}
+async function openWaitingGoal(page) {
+  const overview = await showAttention(page);
+  await overview.getByRole("button", { name: "查看等待事项", exact: true }).click();
+  await expect(page.getByRole("button", { name: "等待外部", exact: true }))
+    .toHaveAttribute("aria-pressed", "true");
+  const row = page.locator(".goal-row").filter({ hasText: "等待供应商报价" });
+  await expect(row).toHaveCount(1);
+  await row.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+}
 try {
   let page = await launch();
   await expect(page.locator(".attention-card").filter({ hasText: "等我确认方案" })).toBeVisible();
-  await expect(page.locator(".waiting-row")).toHaveCount(1);
-  await expect(page.locator(".waiting-row")).toContainText("供应商");
-  await expect(page.locator(".waiting-row")).not.toContainText("等我确认方案");
+  await expect(page.locator(".waiting-overview")).toContainText("1 件等待外部");
+  await expect(page.locator(".attention-card").filter({ hasText: "等待供应商报价" })).toHaveCount(0);
   await page.locator(".attention-card").filter({ hasText: "等我确认方案" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByText("请确认先采用方案 A 还是方案 B", { exact: true }).first()).toBeVisible();
   await page.screenshot({ path: join(home, "historical-human-action.png"), animations: "disabled" });
   await page.getByRole("button", { name: "关闭", exact: true }).click();
 
-  await page.locator(".waiting-row").click();
+  await openWaitingGoal(page);
   await page.getByText("目标管理", { exact: true }).click();
   await page.getByRole("button", { name: "编辑目标", exact: true }).click();
   await expect(page.getByLabel("负责人", { exact: true })).toHaveValue("待分配负责人");
@@ -76,12 +87,13 @@ try {
   assert.equal((await snapshot(page)).goals.find(goal => goal.id === external.id).waitingFor, "供应商");
   await page.getByLabel("外部等待对象", { exact: true }).fill("YR");
   await page.getByRole("button", { name: "保存更新", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "编辑目标", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "编辑事项", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "关闭", exact: true }).click();
-  await expect(page.locator(".waiting-row")).toContainText("YR");
+  await expect(await showAttention(page)).toContainText("1 件等待外部");
+  assert.equal((await snapshot(page)).goals.find(goal => goal.id === external.id).waitingFor, "YR");
 
   // A snooze must preserve external waiting, and a new user handoff must leave it.
-  await page.locator(".waiting-row").click();
+  await openWaitingGoal(page);
   await page.getByRole("button", { name: "1 小时后提醒", exact: true }).click();
   assert.equal((await snapshot(page)).goals.find(goal => goal.id === external.id).status, "waiting");
   await page.getByRole("button", { name: "告诉管家", exact: true }).click();
@@ -92,7 +104,8 @@ try {
   assert.equal(handedOff.waitingFor, undefined);
   assert.equal(handedOff.remindAt, undefined);
   await page.getByRole("button", { name: "关闭", exact: true }).click();
-  await expect(page.locator(".waiting-row")).toHaveCount(0);
+  await page.getByRole("button", { name: "注意力", exact: true }).click();
+  await expect(page.locator(".waiting-overview")).toHaveCount(0);
 
   // A scheduled active-goal reminder remains actionable without fabricating a wait.
   const reminder = await page.evaluate(() => window.atte.command({
@@ -108,7 +121,7 @@ try {
   await app.close();
   page = await launch();
   assert.equal((await snapshot(page)).goals.find(goal => goal.id === human.id).status, "active");
-  await expect(page.locator(".waiting-row")).toHaveCount(0);
+  await expect(page.locator(".waiting-overview")).toHaveCount(0);
   await page.getByRole("button", { name: "浅色模式", exact: true }).click();
   await page.screenshot({ path: join(home, "attention-light-restored.png"), animations: "disabled" });
   assert.deepEqual(errors, []);

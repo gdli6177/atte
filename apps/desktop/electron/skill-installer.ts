@@ -17,7 +17,6 @@ const legacyMarker = ".crewvane-managed.json";
 const managedBy = "atte";
 const legacyNames: Record<string, string> = {
   atte: "crewvane",
-  "atte-local-pack-author": "crewvane-local-pack-author",
 };
 
 export type SkillTargetPhase =

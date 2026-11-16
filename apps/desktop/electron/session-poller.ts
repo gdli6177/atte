@@ -1,8 +1,8 @@
 import type { SceneReferenceV1 } from "../../../packages/core/src/index.js";
 import type { SceneObservation } from "../../../packages/sessions/src/index.js";
 
-/** Budget only the routine compensation poll. Explicit focus, delivery and
- * switch identity checks always query freshly through the SessionRuntime. */
+/** Budget only the routine compensation poll. Explicit focus and delivery
+ * identity checks always query freshly through the SessionRuntime. */
 export class SessionPoller {
   private readonly runtimes = new Map<string, {
     next: number; failures: number; pending?: Promise<SceneObservation[]>;
@@ -15,10 +15,12 @@ export class SessionPoller {
   ): Promise<SceneObservation[] | undefined> {
     if (!scenes.length) return;
     const first = scenes[0]!;
-    const key = `${first.backend}:${first.runtimeId}:${first.runtimeGeneration}`;
-    if (scenes.some(scene => scene.backend !== first.backend ||
+    if (scenes.some(scene => scene.backend !== "herdr"))
+      throw new Error("只轮询当前 Herdr 现场；旧后端现场保持只读，不得触碰。");
+    if (scenes.some(scene =>
       scene.runtimeId !== first.runtimeId || scene.runtimeGeneration !== first.runtimeGeneration))
       throw new Error("不能把不同运行时的现场混入同一采集。");
+    const key = `${first.backend}:${first.runtimeId}:${first.runtimeGeneration}`;
     let schedule = this.runtimes.get(key);
     if (!schedule) {
       schedule = { next: 0, failures: 0 };

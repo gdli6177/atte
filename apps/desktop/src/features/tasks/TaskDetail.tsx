@@ -71,7 +71,7 @@ export function TaskDetail({ goal, service, busy, error, close, delegated, notif
               </Button>
               <Button variant="ghost" size="sm" disabled={busy} onClick={() => void act(
                 { type: "goal.drop", goalId: goal.id, note: "你已将这件事移出待办池。" },
-                "已移出，可在全部目标的已放弃记录中恢复", close)}>移出待办池</Button>
+                "已移出，可在全部事项的已放弃记录中恢复", close)}>移出待办池</Button>
             </div>
             {notesOpen && (
               <form className="ui-form" onSubmit={event => {

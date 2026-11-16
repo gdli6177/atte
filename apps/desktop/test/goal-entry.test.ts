@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { initialState } from "../../../packages/core/src/model.ts";
 import type { Goal } from "../../../packages/core/src/types.ts";
-import { goalEntryDestination } from "../src/features/goals/goalEntry.ts";
+import { goalEntryDestination, goalSceneLabel, needsSceneRecovery } from "../src/features/goals/goalEntry.ts";
 
 const at = new Date().toISOString();
 function goal(patch: Partial<Goal> = {}): Goal {
@@ -72,4 +72,17 @@ test("captured and personal tasks open their own controls rather than waking the
   assert.equal(goalEntryDestination(goal({
     mode: "manual", attention: { kind: "decision", summary: "仍需授权", since: at, source: "governance" },
   })), "attention", "personal ownership must not hide an outstanding explicit decision");
+});
+
+test("legacy Orca history is read-only even when it retains an actionable-looking status", () => {
+  const legacy = goal({
+    readOnly: true,
+    readOnlyReason: "legacy-orca",
+    status: "review",
+    attention: { kind: "review", summary: "旧验收", since: at },
+    delivery: { summary: "历史成果", checks: [], submittedAt: at, submittedBy: "负责人" },
+  });
+  assert.equal(goalEntryDestination(legacy), "details");
+  assert.equal(goalSceneLabel(legacy), "查看历史记录");
+  assert.equal(needsSceneRecovery({ ...legacy, backendHandoff: {} as NonNullable<Goal["backendHandoff"]> }), false);
 });

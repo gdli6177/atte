@@ -9,19 +9,17 @@ const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
-async function fixture(mode: "concierge" | "manual" = "concierge") {
+async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "cv-external-wait-"));
   roots.push(root);
   const service = new WorkspaceService(root);
   const goal = await service.execute({ type: "goal.create", input: {
-    title: "核对等待语义", projectId: "personal", mode,
+    title: "核对等待语义", projectId: "personal", mode: "concierge",
   } }) as Goal;
-  if (mode === "concierge") {
-    await service.execute({ type: "session.set", goalId: goal.id,
-      reference: { session: "trial", agent: "owner-a", paneId: "w1:p2" } });
-    await service.execute({ type: "session.set",
-      reference: { session: "trial", agent: "concierge", paneId: "w1:p1" } });
-  }
+  await service.execute({ type: "session.set", goalId: goal.id,
+    reference: { session: "trial", agent: "owner-a", paneId: "w1:p2" } });
+  await service.execute({ type: "session.set",
+    reference: { session: "trial", agent: "concierge", paneId: "w1:p1" } });
   return { root, service, id: goal.id };
 }
 
@@ -94,21 +92,27 @@ test("feedback and explicit follow-up return external waits to active while Agen
   }
 });
 
-test("manual goals start active and a passive personal note does not end a real external wait", async () => {
-  const { service, id } = await fixture("manual");
+test("an existing human takeover keeps its external wait through passive notes", async () => {
+  const { service, id } = await fixture();
+  await service.execute({ type: "goal.takeover", goalId: id });
   assert.equal((await service.read()).goals[0]!.status, "active");
   await service.execute({ type: "goal.wait", goalId: id, reason: "等待物流", owner: "快递公司" });
   await service.execute({ type: "goal.message", goalId: id, text: "留个备注" });
   assert.equal((await service.read()).goals[0]!.status, "waiting");
 });
 
-test("handing personal external waits to the concierge awaits a real execution owner", async () => {
+test("handing a human-taken external wait to the concierge awaits a real execution owner", async () => {
   for (const type of ["goal.followup", "goal.message"] as const) {
-    const { service, id } = await fixture("manual");
-    await service.execute({ type: "goal.wait", goalId: id, reason: "等待物流", owner: "快递公司" });
-    if (type === "goal.followup") await service.execute({ type, goalId: id });
-    else await service.execute({ type, goalId: id, text: "请帮我跟进", routeToConcierge: true });
-    const goal = (await service.read()).goals[0]!;
+    const { root } = await fixture();
+    const service = new WorkspaceService(root);
+    const captured = await service.execute({
+      type: "goal.intake", handling: "later", text: "等待物流的个人事项",
+    }) as Goal;
+    await service.execute({ type: "goal.takeover", goalId: captured.id });
+    await service.execute({ type: "goal.wait", goalId: captured.id, reason: "等待物流", owner: "快递公司" });
+    if (type === "goal.followup") await service.execute({ type, goalId: captured.id });
+    else await service.execute({ type, goalId: captured.id, text: "请帮我跟进", routeToConcierge: true });
+    const goal = (await service.read()).goals.find(item => item.id === captured.id)!;
     assert.equal(goal.mode, "concierge");
     assert.equal(goal.status, "active");
     assert.equal(goal.owner, "待分配负责人");

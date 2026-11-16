@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   mkdir,
   mkdtemp,
+  lstat,
   readFile,
+  readdir,
   rm,
   stat,
   symlink,
@@ -15,6 +17,7 @@ import { AgentHookManager } from "../electron/agent-hook-manager.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
+import { readHookDiagnostics } from "../../../cli/src/hook-diagnostics.js";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -549,6 +552,7 @@ while (Date.now() < deadline) {
     env: {
       ...process.env, ATTE_CLI_BIN: cli, ATTE_GOAL_ID: "goal-fixture",
       ATTE_ATTEMPT_ID: "attempt-fixture", ATTE_HOOK_TOKEN: "fixture",
+      ATTE_AGENT_NAME: "owner-fixture", ATTE_WORKSPACE: root,
     },
     timeout: 12_000,
   });
@@ -562,4 +566,166 @@ while (Date.now() < deadline) {
   assert.ok(events.some(event => event.text === "真实回复"));
   assert.ok(events.some(event => event.hook_event_name === "ToolApprovalRequested"));
   assert.doesNotMatch(body, /PRIVATE_TOOL/);
+});
+
+for (const runtime of [process.execPath, "bun"]) {
+  for (const mode of ["early-exit", "partial-read"]) {
+    test(`the generated OMP extension survives repeated 600 KB writes to a ${mode} child under ${runtime}`, async () => {
+      const { root, home, manager } = await fixture(["omp"]);
+      await manager.install("omp");
+      const extension = join(home, ".omp/agent/extensions/atte.js");
+      const child = join(root, mode);
+      await writeFile(child, mode === "early-exit" ? "#!/bin/sh\nexit 0\n"
+        : `#!${process.execPath}\nprocess.stdin.once("data", () => process.exit(0));\n`, { mode: 0o700 });
+      const { stdout, stderr } = await promisify(execFile)(runtime, [
+        "--input-type=module", "-e", `
+import extension from ${JSON.stringify(pathToFileURL(extension).href)};
+const handlers = new Map();
+extension({ on(name, handler) { handlers.set(name, handler); } });
+for (let index = 0; index < 6; index += 1)
+  handlers.get("input")({ text: "x".repeat(600_000) }, {});
+await new Promise(resolve => setTimeout(resolve, 300));
+console.log("OMP survived");
+`,
+      ], {
+        env: {
+          ...process.env, ATTE_CLI_BIN: child, ATTE_GOAL_ID: "goal-fixture",
+          ATTE_ATTEMPT_ID: "attempt-fixture", ATTE_HOOK_TOKEN: "fixture",
+          ATTE_AGENT_NAME: "owner-fixture", ATTE_WORKSPACE: root,
+        },
+        timeout: 5_000,
+      });
+      assert.match(stdout, /OMP survived/);
+      assert.equal(stderr, "");
+      const diagnostics = readHookDiagnostics(root);
+      assert.equal(diagnostics.counts.stdin_epipe, 6);
+      const body = await readFile(join(root, ".atte/runtime/hook-diagnostics.json"), "utf8");
+      assert.doesNotMatch(body, /fixture|xxxxx|prompt|token|history/);
+      assert.deepEqual((await readdir(join(root, ".atte/runtime"))).sort(), ["hook-diagnostics.json"]);
+      assert.doesNotMatch(await readFile(extension, "utf8"), /uncaughtException|unhandledRejection/);
+    });
+  }
+}
+
+for (const runtime of [process.execPath, "bun"]) {
+  test(`the generated OMP extension fails open on spawn and synchronous failures under ${runtime}`, async () => {
+    const { root, home, manager } = await fixture(["omp"]);
+    await manager.install("omp");
+    const extension = join(home, ".omp/agent/extensions/atte.js");
+    const { stdout, stderr } = await promisify(execFile)(runtime, [
+      "--input-type=module", "-e", `
+import extension from ${JSON.stringify(pathToFileURL(extension).href)};
+const handlers = new Map();
+extension({ on(name, handler) { handlers.set(name, handler); } });
+process.env.ATTE_CLI_BIN = ${JSON.stringify(join(root, "missing-command"))};
+handlers.get("input")({ text: "PRIVATE_PAYLOAD" }, {});
+await new Promise(resolve => setTimeout(resolve, 100));
+process.env = new Proxy(process.env, {
+  get(target, property) {
+    if (property === "ATTE_CLI_BIN") throw new Error("synchronous failure");
+    return Reflect.get(target, property);
+  },
+});
+handlers.get("input")({ text: "PRIVATE_PAYLOAD" }, {});
+console.log("OMP survived");
+`,
+    ], {
+      env: {
+        ...process.env, ATTE_GOAL_ID: "goal-fixture", ATTE_ATTEMPT_ID: "attempt-fixture",
+        ATTE_HOOK_TOKEN: "PRIVATE_TOKEN", ATTE_AGENT_NAME: "owner-fixture",
+        ATTE_WORKSPACE: root,
+      },
+      timeout: 5_000,
+    });
+    assert.match(stdout, /OMP survived/);
+    assert.equal(stderr, "");
+    const diagnostics = readHookDiagnostics(root);
+    assert.equal(diagnostics.counts.spawn_error, 1);
+    assert.equal(diagnostics.counts.sync_error, 1);
+    assert.doesNotMatch(JSON.stringify(diagnostics), /PRIVATE|fixture|command/);
+  });
+}
+
+test("OMP upgrade converges revision 2 and legacy extensions to one revision 3 canonical file", async () => {
+  for (const canonical of [false, true]) {
+    const { home, userData, manager } = await fixture(["omp"]);
+    const directory = join(home, ".omp/agent/extensions");
+    await mkdir(directory, { recursive: true });
+    const old = "// Crewvane managed OMP extension\nexport default () => {};\n";
+    await writeFile(join(directory, "crewvane.js"), old);
+    if (canonical) await writeFile(join(directory, "atte.js"), old);
+    const user = "// user extension\n";
+    await writeFile(join(directory, "other.js"), user);
+    await mkdir(userData, { recursive: true });
+    await writeFile(join(userData, "agent-hooks.json"), JSON.stringify({
+      version: 1, adapters: { omp: {
+        enabled: true, installed: true, waitingTrust: false, managedRevision: 2,
+      } },
+    }));
+    await manager.autoInstallDetected();
+    const path = join(directory, "atte.js");
+    const installed = await readFile(path, "utf8");
+    assert.equal((await manager.status()).find(item => item.id === "omp")?.status, "installed");
+    const before = await stat(path);
+    assert.match(installed, /child\.stdin\?\.on\("error"/);
+    assert.equal(await lstat(join(directory, "crewvane.js")).then(() => true).catch(() => false), false);
+    assert.equal(await readFile(join(directory, "crewvane.js.atte-backup"), "utf8"), old);
+    assert.equal(await readFile(join(directory, "other.js"), "utf8"), user);
+    assert.equal((await json(join(userData, "agent-hooks.json"))).adapters.omp.managedRevision, 3);
+    await manager.autoInstallDetected();
+    assert.equal((await stat(path)).mtimeMs, before.mtimeMs);
+    assert.equal(await readFile(path, "utf8"), installed);
+    await manager.disable("omp");
+    await manager.autoInstallDetected();
+    assert.equal(await lstat(path).then(() => true).catch(() => false), false);
+    assert.equal(await readFile(join(directory, "other.js"), "utf8"), user);
+  }
+});
+
+test("OMP preserves user and symlink files at both canonical and legacy names", async () => {
+  for (const name of ["atte.js", "crewvane.js"]) {
+    for (const linked of [false, true]) {
+      const { root, home, manager } = await fixture(["omp"]);
+      const directory = join(home, ".omp/agent/extensions");
+      await mkdir(directory, { recursive: true });
+      const path = join(directory, name);
+      const target = join(root, "user.js");
+      const body = linked
+        ? "// Crewvane managed OMP extension\nexport default () => {};\n"
+        : "// user extension\n";
+      if (linked) {
+        await writeFile(target, body);
+        await symlink(target, path);
+      } else await writeFile(path, body);
+      await manager.autoInstallDetected();
+      await manager.disable("omp");
+      await manager.uninstall("omp");
+      await manager.autoInstallDetected();
+      assert.equal(await readFile(path, "utf8"), body);
+      assert.equal((await lstat(path)).isSymbolicLink(), linked);
+      if (linked) assert.equal(await readFile(target, "utf8"), body);
+    }
+  }
+});
+
+test("OMP disabled revision 2 extensions remain byte-for-byte untouched during auto-upgrade", async () => {
+  const { home, userData, manager } = await fixture(["omp"]);
+  const directory = join(home, ".omp/agent/extensions");
+  await mkdir(directory, { recursive: true });
+  const body = "// Crewvane managed OMP extension\nexport default () => {};\n";
+  for (const name of ["atte.js", "crewvane.js"])
+    await writeFile(join(directory, name), body);
+  await mkdir(userData, { recursive: true });
+  await writeFile(join(userData, "agent-hooks.json"), JSON.stringify({
+    version: 1, adapters: { omp: {
+      enabled: false, installed: false, waitingTrust: false, managedRevision: 2,
+    } },
+  }));
+  await manager.autoInstallDetected();
+  for (const name of ["atte.js", "crewvane.js"])
+    assert.equal(await readFile(join(directory, name), "utf8"), body);
+  assert.equal((await manager.status()).find(item => item.id === "omp")?.status, "disabled");
+  await manager.uninstall("omp");
+  for (const name of ["atte.js", "crewvane.js"])
+    assert.equal(await lstat(join(directory, name)).then(() => true).catch(() => false), false);
 });

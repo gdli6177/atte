@@ -30,7 +30,7 @@ export class SessionCommandHost {
   }
   private async execute(request: RecoveryRequest) {
     if (!await this.options.canDispatch())
-      throw new SessionError("backend_switch_in_progress", "正在交接现场，普通 Host 请求未执行。");
+      throw new SessionError("backend_busy", "当前 Herdr 运行时暂不可用，Host 请求未执行。");
     const state = await new WorkspaceService(this.options.workspace).read();
     const context = request.context, binding = state.backendBinding;
     const scope = JSON.parse(await readFile(join(workspaceDataDirectory(this.options.workspace), "coordinator-scope.json"), "utf8"));
@@ -43,15 +43,16 @@ export class SessionCommandHost {
     if (request.operation === "launch") {
       const value = request.input;
       if (value.goalId !== scope.goalId || typeof value.name !== "string" ||
-        value.role && value.role !== "owner" && value.role !== "verifier" ||
+        value.role !== undefined && value.role !== "owner" ||
         value.task !== undefined && typeof value.task !== "string" ||
         value.taskFile !== undefined && typeof value.taskFile !== "string" ||
-        value.consultationOnly !== undefined)
+        value.consultationOnly !== undefined && typeof value.consultationOnly !== "boolean")
         throw new Error("受管启动参数无效。");
       return runtime.launchOwner({
         goalId: scope.goalId, name: value.name,
-        role: value.role as "owner" | "verifier" | undefined,
+        role: "owner",
         task: value.task as string | undefined, taskFile: value.taskFile as string | undefined,
+        consultationOnly: value.consultationOnly as boolean | undefined,
       });
     }
     if (request.operation !== "send" || typeof request.input.deliveryId !== "string" ||

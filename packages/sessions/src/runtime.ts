@@ -2,21 +2,21 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 import {
   WorkspaceService, agentRuntimeCapabilities, agentRuntimeSocketPath,
-  parseAgentCommand, SkillRegistry, ownerSceneReplyInstructions, resumeAgentArgs,
+  parseAgentCommand, builtinAgentInstructions, isReadOnlyGoal, ownerSceneReplyInstructions, resumeAgentArgs,
   type AgentRuntimeAdapterId, type Goal, type ManagedSessionContext, type OwnerResume,
   type SceneLaunchIntent,
-  type SceneReferenceV1, type SessionBackendId,
+  type SceneReferenceV1, type SessionBackendId, type WorkspaceState,
   environmentValue, workspaceDataDirectory,
 } from "../../core/src/index.js";
 import { SessionControl } from "./control/control.js";
-import type { BackendControlV1, SwitchAuthority } from "./control/types.js";
+import type { BackendControlV1 } from "./control/types.js";
 import { SessionError, type SendReceipt, type SessionAdapter } from "./contracts.js";
 import { createLaunchFiles, type LaunchFiles } from "./launcher.js";
 import { atomicJSON, childPath, readJSON } from "./io.js";
 import { caseTask, conciergeIdentityPrompt, goalNotificationPrompt } from "./prompts.js";
-import { requestSessionRecovery } from "./recovery-channel.js";
 import { requestWorkspaceSessionHost } from "./session-host.js";
 
 function adapterId(executable: string): AgentRuntimeAdapterId {
@@ -39,8 +39,8 @@ export function managedSessionContext(environment: NodeJS.ProcessEnv): ManagedSe
   if (!raw) return;
   let value: ManagedSessionContext;
   try { value = JSON.parse(raw) as ManagedSessionContext; } catch { throw new Error("受管会话环境损坏。"); }
-  if (!value.installationId || !value.scopeGeneration || !["herdr", "orca"].includes(value.backend) ||
-    !Number.isSafeInteger(value.epoch) || !["owner", "concierge", "verifier"].includes(value.role))
+  if (!value || typeof value !== "object" || !value.installationId || !value.scopeGeneration || value.backend !== "herdr" ||
+    !Number.isSafeInteger(value.epoch) || value.epoch < 0 || !["owner", "concierge"].includes(value.role))
     throw new Error("受管会话身份无效。");
   return value;
 }
@@ -70,8 +70,42 @@ export class SessionRuntime {
   private readonly adapters = new Map<string, Promise<{ adapter: SessionAdapter; control: BackendControlV1 }>>();
   constructor(readonly options: SessionRuntimeOptions) { this.service = new WorkspaceService(options.workspace); }
   private launchPath(id: string) { return childPath(join(this.options.control.directory, "runtime-launches"), id); }
+  private assertWorkspace(state: WorkspaceState, control: BackendControlV1) {
+    const binding = state.backendBinding;
+    if (!binding || binding.backend !== "herdr" || binding.status !== "active" ||
+      binding.installationId !== control.installationId || binding.epoch !== control.epoch ||
+      binding.scopeGeneration !== control.scopeGeneration)
+      throw new SessionError("stale_backend_epoch", "工作区不属于当前 Herdr 控制面；历史现场保持只读。");
+    const managed = this.options.managedContext;
+    if (managed && (managed.backend !== "herdr" || !["concierge", "owner"].includes(managed.role) ||
+      managed.installationId !== control.installationId || managed.epoch !== control.epoch ||
+      managed.scopeGeneration !== control.scopeGeneration))
+      throw new SessionError("stale_backend_epoch", "受管会话身份已撤销。");
+  }
+  private assertGoal(goal: Goal, access: "read" | "execute" = "execute") {
+    if (isReadOnlyGoal(goal) || goal.scene?.backend === "orca" || goal.agentRuntime?.attempt.scene?.backend === "orca")
+      throw new SessionError("scene_read_only", "旧后端或只读历史目标不能启动、恢复或操作负责人。");
+    if (access === "execute" && goal.executionHold)
+      throw new Error("goal_confirmation_required: 旧实验目标必须先由人确认是否继续。");
+  }
+  private assertScene(state: WorkspaceState, scene: SceneReferenceV1, control: BackendControlV1,
+    access: "read" | "execute" = "read") {
+    this.assertWorkspace(state, control);
+    if (scene.backend !== "herdr" || scene.locator.kind !== "herdr")
+      throw new SessionError("backend_unsupported", "仅支持 Herdr，旧后端现场保持只读。");
+    if (scene.installationId !== control.installationId || scene.backendEpoch !== control.epoch)
+      throw new SessionError("stale_backend_epoch", "现场不属于当前 Herdr 安装与代次。");
+    const goal = state.goals.find(item => item.scene?.bindingId === scene.bindingId);
+    if (goal) this.assertGoal(goal, access);
+    const registered = goal?.scene ?? (state.concierge.scene?.bindingId === scene.bindingId ? state.concierge.scene : undefined);
+    if (!registered || !isDeepStrictEqual(scene, registered))
+      throw new SessionError("scene_identity_mismatch", "操作目标不属于当前工作区中已登记的真实现场。");
+    return { goal, role: goal ? "owner" as const : "concierge" as const };
+  }
   private async adapter(startIfMissing = false) {
     const control = await this.options.control.status();
+    if (control.selected !== "herdr")
+      throw new SessionError("backend_unsupported", "仅支持 Herdr 会话。");
     const key = `${control.selected}:${control.epoch}:${control.scopeGeneration}`;
     let pending = this.adapters.get(key);
     if (!pending) {
@@ -82,21 +116,25 @@ export class SessionRuntime {
       this.adapters.set(key, pending);
     }
     const value = await pending;
-    await value.adapter.connect({
+    if (value.adapter.id !== "herdr")
+      throw new SessionError("backend_unsupported", "仅支持 Herdr Adapter。");
+    const identity = await value.adapter.connect({
       installationId: control.installationId,
       cwd: this.options.workspace,
       startIfMissing,
     });
+    if (identity.backend !== "herdr")
+      throw new SessionError("backend_unsupported", "连接的运行时不是 Herdr。");
     return { adapter: value.adapter, control };
   }
   private async prepareLaunch(input: {
-    role: "concierge" | "owner" | "verifier"; goal?: Goal; name: string;
+    role: "concierge" | "owner"; goal?: Goal; name: string;
   }, control: BackendControlV1) {
     await this.options.prepareHost?.();
     const managed = this.options.managedContext;
     if (managed) {
       if (managed.role !== "concierge")
-        throw new SessionError("scene_identity_mismatch", "只有受管管家可以启动负责人或复核者。");
+        throw new SessionError("scene_identity_mismatch", "只有受管管家可以启动负责人。");
       if (input.role === "concierge" || !input.goal || managed.goalId !== input.goal.id)
         throw new SessionError("scene_identity_mismatch", "只能为当前案卷启动负责人。");
       if (managed.backend !== control.selected || managed.epoch !== control.epoch ||
@@ -121,13 +159,10 @@ export class SessionRuntime {
     const home = this.options.environment?.HOME ?? process.env.HOME ?? "";
     const executable = command.executable.startsWith("~/") ? join(home, command.executable.slice(2)) : command.executable;
     const project = goal && state.projects.find(item => item.id === goal.projectId);
-    // Keep the global concierge in the workspace root. Orca registers every
-    // exact terminal cwd as a visible folder project; using .atte here
-    // created a second synthetic project beside each real workspace.
     const cwd = await realpath(project?.path || this.options.workspace);
     const context = environmentContext(control, input.role, goal?.id, intent.attemptId);
     const hookToken = randomBytes(32).toString("hex");
-  const environment: Record<string, string> = {
+    const environment: Record<string, string> = {
       ATTE_WORKSPACE: this.options.workspace,
       ATTE_AGENT_NAME: input.name, ATTE_ROLE: input.role,
       ATTE_SESSION_CONTEXT: JSON.stringify(context),
@@ -159,21 +194,11 @@ export class SessionRuntime {
         environment[`CREWVANE_${target.slice(5)}`] = value;
       }
     }
-    if (input.role === "concierge")
-      for (const key of ["RECOVERY_DIRECTORY", "RECOVERY_TOKEN"]) {
-        const value = environmentValue(this.options.environment ?? {}, key);
-        if (value) {
-          environment[`ATTE_${key}`] = value;
-          environment[`CREWVANE_${key}`] = value;
-        }
-      }
-    if (control.selected === "herdr") {
-      const binary = environmentValue(this.options.environment ?? {}, "HERDR_BINARY") ??
-        (await (await this.options.adapter("herdr", this.options.workspace)).detect()).path;
-      if (binary) {
-        environment.ATTE_HERDR_BINARY = binary;
-        environment.CREWVANE_HERDR_BINARY = binary;
-      }
+    const binary = environmentValue(this.options.environment ?? {}, "HERDR_BINARY") ??
+      (await (await this.options.adapter("herdr", this.options.workspace)).detect()).path;
+    if (binary) {
+      environment.ATTE_HERDR_BINARY = binary;
+      environment.CREWVANE_HERDR_BINARY = binary;
     }
     const files = await createLaunchFiles(this.options.control.directory, {
       ...intent, installationId: control.installationId, cwd, executable, args: command.args, environment,
@@ -186,16 +211,21 @@ export class SessionRuntime {
     return launch;
   }
   private async create(launch: StoredLaunch, adapter: SessionAdapter, control: BackendControlV1,
-    goalId?: string, authority?: SwitchAuthority) {
+    goalId?: string) {
+    if (!["concierge", "owner"].includes(launch.intent.role))
+      throw new SessionError("backend_unsupported", "只支持管家和负责人。");
     const request = {
       requestId: launch.intent.requestId, bindingId: launch.intent.bindingId, attemptId: launch.intent.attemptId,
       installationId: control.installationId, backendEpoch: control.epoch,
-      role: launch.intent.role, goalId, cwd: launch.cwd, title: launch.title, ...launch.files,
+      role: launch.intent.role as "concierge" | "owner", goalId, cwd: launch.cwd, title: launch.title, ...launch.files,
     };
     const created = await this.options.control.operation({
-      workspace: this.options.workspace, requestId: request.requestId, kind: "create", authority,
-      role: launch.intent.role, goalId,
-      admit: async () => {
+      workspace: this.options.workspace, requestId: request.requestId, kind: "create",
+      role: request.role, goalId,
+      admit: async current => {
+        if (current.installationId !== control.installationId || current.epoch !== launch.intent.backendEpoch ||
+          current.scopeGeneration !== control.scopeGeneration)
+          throw new SessionError("stale_backend_epoch", "启动身份已改变，未创建现场。");
         await this.service.execute({ type: "scene.prepare", goalId, intent: launch.intent });
         if (goalId && launch.intent.role === "owner") {
           await this.service.execute({
@@ -208,6 +238,11 @@ export class SessionRuntime {
         }
       },
     }, async () => adapter.create(request), async result => {
+      this.assertWorkspace(await this.service.read(), control);
+      if (result.scene && (result.scene.backend !== "herdr" || result.scene.installationId !== control.installationId ||
+        result.scene.backendEpoch !== control.epoch || result.scene.bindingId !== request.bindingId ||
+        result.scene.attemptId !== request.attemptId))
+        throw new SessionError("scene_identity_mismatch", "启动回执与当前 Herdr 请求不匹配。");
       if (result.scene) await this.service.execute({
         type: "scene.bind", goalId, scene: result.scene, role: launch.intent.role,
       });
@@ -251,18 +286,30 @@ export class SessionRuntime {
     return created.scene;
   }
   private async recoverIntent(intent: SceneLaunchIntent, goalId?: string) {
+    const state = await this.service.read(), current = await this.options.control.status();
+    this.assertWorkspace(state, current);
+    if (intent.backendEpoch !== current.epoch || !["concierge", "owner"].includes(intent.role))
+      throw new SessionError("stale_backend_epoch", "原启动请求已退休，不能恢复或重建现场。");
+    if (goalId) {
+      const goal = state.goals.find(item => item.id === goalId);
+      if (!goal) throw new Error("目标不存在。");
+      this.assertGoal(goal);
+    }
     const { adapter, control } = await this.adapter();
     const discovered = await adapter.discover({ installationId: control.installationId,
       runtimeId: (await adapter.connect({ installationId: control.installationId, cwd: this.options.workspace })).id,
       requestId: intent.requestId });
     if (discovered.length === 1) {
       const scene = discovered[0]!.scene;
+      if (scene.backend !== "herdr" || scene.installationId !== control.installationId ||
+        scene.backendEpoch !== control.epoch || scene.bindingId !== intent.bindingId || scene.attemptId !== intent.attemptId)
+        throw new SessionError("scene_identity_mismatch", "原启动请求的现场身份不匹配。");
       await this.service.execute({ type: "scene.bind", goalId, role: intent.role, scene });
       return scene;
     }
     throw new SessionError("launch_unconfirmed", "原启动请求未确认；已保留记录，不能自动再建一个现场。");
   }
-  private async initializeConcierge(scene: SceneReferenceV1, authority?: SwitchAuthority) {
+  private async initializeConcierge(scene: SceneReferenceV1) {
     const state = await this.service.read();
     if (state.concierge.initializedAttemptId === scene.attemptId) {
       if (state.concierge.status !== "ready" || state.concierge.detail)
@@ -293,7 +340,7 @@ export class SessionRuntime {
     }) as SendReceipt | undefined;
     if (!receipt) {
       await waitIdle(true);
-      receipt = await this.send(scene, id, conciergeIdentityPrompt(this.options.workspace, state.agents), authority);
+      receipt = await this.send(scene, id, conciergeIdentityPrompt(this.options.workspace, state.agents));
     }
     if (!["started", "accepted"].includes(receipt.status))
       throw new SessionError("delivery_unconfirmed", receipt.detail ?? "管家身份初始化尚未确认；请核对原现场，未重复发送。");
@@ -301,31 +348,42 @@ export class SessionRuntime {
     await this.service.execute({ type: "scene.concierge.status", status: "ready", initializedAttemptId: scene.attemptId });
     return scene;
   }
-  async prepareConcierge(authority?: SwitchAuthority) {
+  async prepareConcierge() {
     const state = await this.service.read();
+    this.assertWorkspace(state, await this.options.control.status());
     if (state.concierge.scene) {
+      this.assertScene(state, state.concierge.scene, await this.options.control.status());
       const { adapter } = await this.adapter();
       const observation = await adapter.inspect(state.concierge.scene);
       if (observation.identity !== "match") throw new SessionError("scene_identity_mismatch", "管家运行时已改变，请重新核实现场。");
-      if (observation.state !== "exited") return this.initializeConcierge(state.concierge.scene, authority);
+      if (observation.state !== "exited") return this.initializeConcierge(state.concierge.scene);
       await this.service.execute({ type: "scene.release", bindingId: state.concierge.scene.bindingId });
-    } else if (state.concierge.legacyScene?.reference.paneId)
+    } else if (state.concierge.legacyScene)
       throw new SessionError("scene_identity_mismatch", "旧管家现场尚未核实；不能静默创建第二位管家。");
     if (state.concierge.launch && !state.concierge.scene && state.concierge.launch.status !== "rejected")
-      return this.initializeConcierge(await this.recoverIntent(state.concierge.launch), authority);
+      return this.initializeConcierge(await this.recoverIntent(state.concierge.launch));
     const { adapter, control } = await this.adapter(true);
     const launch = await this.prepareLaunch({ role: "concierge", name: "concierge" }, control);
-    const scene = await this.create(launch, adapter, control, undefined, authority);
-    return this.initializeConcierge(scene, authority);
+    const scene = await this.create(launch, adapter, control);
+    return this.initializeConcierge(scene);
   }
-  async launchOwner(input: { goalId: string; name: string; role?: "owner" | "verifier"; task?: string; taskFile?: string;
-    consultationOnly?: boolean }, authority?: SwitchAuthority) {
-    if (!authority && this.options.managedContext && !this.options.hostExecution) {
-      const environment = this.options.environment ?? process.env;
-      if (environmentValue(environment, "RECOVERY_DIRECTORY") && !await this.options.control.canDispatch())
-        return await requestSessionRecovery(environment, {
-          context: this.options.managedContext, operation: "launch", input,
-        }) as { goalId: string; runtime: string; scene: SceneReferenceV1; receipt?: SendReceipt; warning?: string };
+  async launchOwner(input: { goalId: string; name: string; role?: "owner"; task?: string; taskFile?: string;
+    consultationOnly?: boolean }) {
+    if (input.role && input.role !== "owner")
+      throw new SessionError("backend_unsupported", "仅支持负责人启动。");
+    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(input.name)) throw new Error("负责人名称只能包含小写英文字母、数字、下划线和短横线，以字母开头。");
+    const state = await this.service.read(), goal = state.goals.find(item => item.id === input.goalId);
+    this.assertWorkspace(state, await this.options.control.status());
+    if (!goal || goal.mode !== "concierge" || ["completed", "dropped", "backlog"].includes(goal.status))
+      throw new Error("当前事项不能启动负责人。");
+    this.assertGoal(goal);
+    if (this.options.managedContext && (this.options.managedContext.role !== "concierge" ||
+      this.options.managedContext.goalId !== goal.id))
+      throw new SessionError("scene_identity_mismatch", "只能为当前案卷启动负责人。");
+    if (goal.legacyScene && !goal.scene)
+      throw new SessionError("scene_identity_mismatch", "旧负责人现场尚未核实，不能创建第二个负责人。");
+    if (goal.scene) this.assertScene(state, goal.scene, await this.options.control.status());
+    if (this.options.managedContext && !this.options.hostExecution) {
       const host = await requestWorkspaceSessionHost(this.options.workspace, {
         context: this.options.managedContext, operation: "launch", input,
       });
@@ -333,18 +391,7 @@ export class SessionRuntime {
         goalId: string; runtime: string; scene: SceneReferenceV1; receipt?: SendReceipt; warning?: string;
       };
     }
-    if (!authority && this.options.managedContext && !await this.options.control.canDispatch())
-      return await requestSessionRecovery(this.options.environment ?? process.env, {
-        context: this.options.managedContext, operation: "launch", input,
-      }) as { goalId: string; runtime: string; scene: SceneReferenceV1; receipt?: SendReceipt; warning?: string };
-    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(input.name)) throw new Error("负责人名称只能包含小写英文字母、数字、下划线和短横线，以字母开头。");
-    const state = await this.service.read(), goal = state.goals.find(item => item.id === input.goalId);
-    if (!goal || goal.mode !== "concierge" || ["completed", "dropped", "backlog"].includes(goal.status))
-      throw new Error("当前事项不能启动负责人。");
-    const role = input.role ?? "owner";
-    if (role === "verifier" && (goal.status !== "review" || !goal.delivery || !goal.brief))
-      throw new Error("独立复核需要待复核交付和委托摘要。");
-    if (goal.scene && role === "owner") {
+    if (goal.scene) {
       // A dead terminal keeps its reference on purpose: it is evidence until
       // someone verifies that the process is gone. Re-verify here so a crashed
       // owner can be replaced by a new attempt without hand-editing state.
@@ -360,7 +407,7 @@ export class SessionRuntime {
       delete goal.sceneLaunch;
       delete goal.agentRuntime;
     }
-    const candidateIntent = role === "owner" ? goal.sceneLaunch : goal.autonomy?.verificationLaunch;
+    const candidateIntent = goal.sceneLaunch;
     const existingIntent = candidateIntent?.status === "rejected" ? undefined : candidateIntent;
     if (existingIntent) {
       const scene = await this.recoverIntent(existingIntent, goal.id);
@@ -368,9 +415,7 @@ export class SessionRuntime {
         warning: "已核实原现场；原投递结果需另行核对，未重复发送任务。" };
     }
     const { adapter, control } = await this.adapter(true);
-    const launch = await this.prepareLaunch({ role, goal, name: input.name }, control);
-    const skills = await new SkillRegistry(this.options.workspace).resolve(goal, role, launch.intent.attemptId);
-    await this.service.execute({ type: "goal.skill.resolve", goalId: goal.id, resolution: skills.resolution });
+    const launch = await this.prepareLaunch({ role: "owner", goal, name: input.name }, control);
     let task = input.task;
     if (input.taskFile) {
       if (task) throw new Error("--task 与 --task-file 不能同时使用。");
@@ -381,48 +426,31 @@ export class SessionRuntime {
       task = await readFile(path, "utf8");
     }
     if (task && task.length > 100_000) throw new Error("任务说明超长。");
-    const scene = await this.create(launch, adapter, control, goal.id, authority);
+    const scene = await this.create(launch, adapter, control, goal.id);
+    const instructions = builtinAgentInstructions(goal, "owner");
     const prompt = input.consultationOnly
-      ? `${skills.text}\n当前目标处于决定、验收、等待或暂停。只读取 goal show ${goal.id} 的问题与已有证据，等待用户答复；不得开始实现、解掉注意力或变更状态。\n${ownerSceneReplyInstructions(goal.id)}`
-      : `${skills.text}\n${task ?? caseTask(this.options.workspace, goal, role)}\n${role === "owner" ? ownerSceneReplyInstructions(goal.id) : ""}`;
-    const receipt = await this.send(scene, `task-${launch.intent.requestId}`, prompt, authority);
+      ? `${instructions}\n当前目标处于决定、验收或等待。只读取 goal show ${goal.id} 的问题与已有证据，等待用户答复；不得开始实现、解掉注意力或变更状态。\n${ownerSceneReplyInstructions(goal.id)}`
+      : `${instructions}\n${task ?? caseTask(this.options.workspace, goal, "owner")}\n${ownerSceneReplyInstructions(goal.id)}`;
+    const receipt = await this.send(scene, `task-${launch.intent.requestId}`, prompt);
     return { goalId: goal.id, runtime: state.agents?.owner || state.agents?.concierge || "codex", scene, receipt,
       ...(["accepted", "unknown"].includes(receipt.status) ? { warning: "任务送达后尚未观察到开始；已保留原现场，不自动重发。" } : {}) };
   }
-  async send(scene: SceneReferenceV1, deliveryId: string, text: string, authority?: SwitchAuthority): Promise<SendReceipt> {
-    if (!authority && this.options.managedContext && !this.options.hostExecution) {
-      const environment = this.options.environment ?? process.env;
-      if (environmentValue(environment, "RECOVERY_DIRECTORY") && !await this.options.control.canDispatch())
-        return await requestSessionRecovery(environment, {
-          context: this.options.managedContext, operation: "send", input: { scene, deliveryId, text },
-        }) as SendReceipt;
+  async send(scene: SceneReferenceV1, deliveryId: string, text: string): Promise<SendReceipt> {
+    const state = await this.service.read(), control = await this.options.control.status();
+    const { goal, role } = this.assertScene(state, scene, control, "execute");
+    const managed = this.options.managedContext;
+    if (managed && (managed.role !== "concierge" || !goal || managed.goalId !== goal.id))
+      throw new SessionError("scene_identity_mismatch", "只能向当前案卷负责人发送协调消息。");
+    if (this.options.managedContext && !this.options.hostExecution) {
       const host = await requestWorkspaceSessionHost(this.options.workspace, {
         context: this.options.managedContext, operation: "send", input: { scene, deliveryId, text },
       });
       if (host.handled) return host.result as SendReceipt;
     }
-    if (!authority && this.options.managedContext && !await this.options.control.canDispatch())
-      return await requestSessionRecovery(this.options.environment ?? process.env, {
-        context: this.options.managedContext, operation: "send", input: { scene, deliveryId, text },
-      }) as SendReceipt;
     // Watchdog correlation IDs can include ISO timestamps. Keep a bounded,
     // stable encoding for filesystem and control-operation keys.
     if (!/^[a-zA-Z0-9_-]{1,140}$/.test(deliveryId))
       deliveryId = `delivery-${createHash("sha256").update(deliveryId).digest("hex")}`;
-    const { adapter } = await this.adapter();
-    const state = await this.service.read();
-    const goal = state.goals.find(item => item.scene?.bindingId === scene.bindingId ||
-      item.autonomy?.verificationSite?.scene?.bindingId === scene.bindingId);
-    const role = state.concierge.scene?.bindingId === scene.bindingId ? "concierge" :
-      goal?.scene?.bindingId === scene.bindingId ? "owner" :
-        goal?.autonomy?.verificationSite?.scene?.bindingId === scene.bindingId ? "verifier" : undefined;
-    if (!role)
-      throw new SessionError("scene_identity_mismatch", "投递目标不属于当前工作区中已登记的真实现场。");
-    const managed = this.options.managedContext;
-    if (managed && (managed.role !== "concierge" || !goal || managed.goalId !== goal.id ||
-      managed.backend !== scene.backend || managed.epoch !== scene.backendEpoch ||
-      managed.scopeGeneration !== state.backendBinding?.scopeGeneration))
-      throw new SessionError("scene_identity_mismatch", "只能向当前案卷负责人发送协调消息。");
     const receiptPath = childPath(join(this.options.control.directory, "runtime-deliveries"), deliveryId);
     const previous = await readJSON(receiptPath).catch(error => {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
@@ -430,30 +458,40 @@ export class SessionRuntime {
     }) as SendReceipt | undefined;
     const payloadSha256 = createHash("sha256").update(text).digest("hex");
     if (previous) {
-      if (previous.payloadSha256 !== payloadSha256 || previous.scene.bindingId !== scene.bindingId)
+      if (previous.payloadSha256 !== payloadSha256 || !isDeepStrictEqual(previous.scene, scene))
         throw new SessionError("scene_identity_mismatch", "原投递不能更换正文或现场。");
       return previous;
     }
+    const { adapter } = await this.adapter();
     const result = await this.options.control.operation({
       workspace: this.options.workspace, requestId: `delivery-${deliveryId}`, kind: "send",
-      bindingId: scene.bindingId, authority, role, goalId: goal?.id,
+      bindingId: scene.bindingId, role, goalId: goal?.id,
+      admit: async current => { this.assertScene(await this.service.read(), scene, current, "execute"); },
     }, () => adapter.send({ scene, deliveryId, text, payloadSha256 }),
-    async receipt => { await atomicJSON(receiptPath, receipt); });
+    async receipt => {
+      this.assertScene(await this.service.read(), scene, control, "execute");
+      await atomicJSON(receiptPath, receipt);
+    });
     return result;
   }
-  async notifyGoal(goal: Goal, note?: string, authority?: SwitchAuthority, deliveryId?: string) {
-    const scene = await this.prepareConcierge(authority);
+  async notifyGoal(goal: Goal, note?: string, _authority?: never, deliveryId?: string) {
+    const state = await this.service.read();
+    const current = state.goals.find(item => item.id === goal.id);
+    if (!current) throw new Error("目标不存在。");
+    this.assertWorkspace(state, await this.options.control.status());
+    this.assertGoal(current);
+    const scene = await this.prepareConcierge();
     const observation = (await this.inspect([scene]))[0];
     if (observation?.identity === "match" && ["working", "blocked"].includes(observation.state))
       throw new SessionError("backend_busy", "管家仍在处理上一回合或等待现场授权；通知保留在队列中，尚未发送。");
     const receipt = await this.send(scene, deliveryId ?? goal.dispatch?.id ?? randomUUID(),
-      await goalNotificationPrompt(this.options.workspace, goal, note), authority);
+      await goalNotificationPrompt(this.options.workspace, current, note));
     if (receipt.status === "rejected") throw new Error(receipt.detail ?? "管家未接受消息。");
     return { scene, receipt };
   }
   async focus(scene: SceneReferenceV1) {
+    this.assertScene(await this.service.read(), scene, await this.options.control.status());
     const { adapter } = await this.adapter();
-    if (!await this.options.control.canDispatch()) throw new SessionError("backend_switch_in_progress", "请先完成现场交接。");
     const result = await adapter.focus(scene);
     if (result.status !== "focused" || !result.navigated) throw new SessionError("focus_failed", result.detail ?? "未能定位原现场。");
     return result;
@@ -462,22 +500,14 @@ export class SessionRuntime {
    * enough evidence to retire a possibly working scene. */
   async recoverOwnerForConsultation(goalId: string) {
     const state = await this.service.read(), goal = state.goals.find(item => item.id === goalId);
+    const control = await this.options.control.status();
+    this.assertWorkspace(state, control);
     if (!goal || goal.mode !== "concierge" || ["completed", "dropped", "backlog"].includes(goal.status))
       throw new Error("该事项当前不能恢复现场。");
-    const control = await this.options.control.status();
-    let scene = goal.scene;
-    if (scene && (scene.backend !== control.selected || scene.backendEpoch !== control.epoch)) {
-      // A backend switch leaves the old reference behind. It belongs to another
-      // runtime, so this adapter cannot verify it; the handoff already stopped
-      // that scene, which is the only case where it may be retired here.
-      if (!goal.backendHandoff)
-        throw new SessionError("scene_identity_mismatch",
-          "该现场属于另一个会话后端；请先完成后端交接，再恢复现场。原有目标和记录不会被修改。");
-      await this.service.execute({ type: "scene.retire", goalId,
-        bindingId: scene.bindingId, attemptId: scene.attemptId });
-      scene = undefined;
-    }
+    this.assertGoal(goal);
+    const scene = goal.scene;
     if (scene) {
+      this.assertScene(state, scene, control);
       const { adapter } = await this.adapter();
       const observed = await adapter.inspect(scene);
       if (observed.identity === "match" && observed.reachable && observed.state !== "exited")
@@ -491,21 +521,30 @@ export class SessionRuntime {
       consultationOnly: true });
   }
   async close(scene: SceneReferenceV1, goalId?: string) {
+    const registered = this.assertScene(await this.service.read(), scene, await this.options.control.status(), "execute");
+    if (goalId && registered.goal?.id !== goalId)
+      throw new SessionError("scene_identity_mismatch", "关闭目标与登记的负责人现场不一致。");
     const { adapter } = await this.adapter();
     const receipt = await this.options.control.operation({
       workspace: this.options.workspace, requestId: `close-${scene.bindingId}-${randomUUID()}`, kind: "close",
-      bindingId: scene.bindingId,
-    }, () => adapter.close(scene));
+      bindingId: scene.bindingId, goalId: registered.goal?.id, role: registered.role,
+      admit: async current => { this.assertScene(await this.service.read(), scene, current, "execute"); },
+    }, () => adapter.close(scene), async () => {
+      this.assertScene(await this.service.read(), scene, await this.options.control.status(), "execute");
+    });
     if (!receipt.identityVerified || receipt.status === "unknown")
       throw new SessionError("scene_identity_mismatch", receipt.detail ?? "现场停止未确认。");
     await this.service.execute({ type: "scene.release", bindingId: scene.bindingId, goalId });
     return receipt;
   }
   async captureOwnerResume(goalId: string, scene: SceneReferenceV1): Promise<OwnerResume | undefined> {
+    const state = await this.service.read();
+    const registered = this.assertScene(state, scene, await this.options.control.status());
+    if (registered.goal?.id !== goalId)
+      throw new SessionError("scene_identity_mismatch", "恢复记录与登记的负责人现场不一致。");
     const { adapter } = await this.adapter();
     const result = await adapter.captureResume(scene);
     if (result.status !== "supported") return undefined;
-    const state = await this.service.read();
     const goal = state.goals.find(item => item.id === goalId);
     if (!goal) throw new Error("目标不存在。");
     const project = state.projects.find(item => item.id === goal.projectId);
@@ -529,6 +568,9 @@ export class SessionRuntime {
     return resume;
   }
   async inspect(scenes: SceneReferenceV1[]) {
+    if (!scenes.length) return [];
+    const state = await this.service.read(), control = await this.options.control.status();
+    for (const scene of scenes) this.assertScene(state, scene, control);
     const { adapter } = await this.adapter();
     return adapter.inspectMany(scenes);
   }

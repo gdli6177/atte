@@ -17,6 +17,7 @@ async function fixture(t: test.TestContext) {
     receiptPath: join(root, "environment-ready.json"),
   };
   let alive = true, generation = "one", creates = 0, sends = 0, focused = false, stallNextPrompt = false;
+  let paneText = "", agentStatus = "idle", agentKind = "Omp", history = "", promptInHistory = false;
   let focusTabSelectsPane = true;
   let stallError = 'Command failed: herdr agent prompt {"error":{"code":"agent_prompt_stalled","message":"accepted, but no working state was observed"}}';
   const commands: string[][] = [];
@@ -42,17 +43,30 @@ async function fixture(t: test.TestContext) {
         }));
         return "";
       }
+      if (command === "pane send-text") { paneText = args[3]!; return ""; }
+      if (command === "pane send-keys") return "";
+      if (command === "agent read") return `${history}\n› ${paneText || "Ask Codex to do anything"}\n\n  model · workspace`;
+      if (command === "agent send-keys") {
+        assert.equal(args[2], "w1:p1");
+        assert.equal(args[3], "enter");
+        history = paneText;
+        paneText = "";
+        agentStatus = "working";
+        return "";
+      }
       if (command === "pane list") return envelope({ panes: alive ? [
         { pane_id: "w1:p1", tab_id: "w1:t1", focused },
         { pane_id: "w1:p-user", tab_id: "w1:t1", focused: false },
       ] : [{ pane_id: "w1:p-user", tab_id: "w1:t1", focused: false }] });
       if (command === "agent list") return envelope({ agents: alive ? [{
-        pane_id: "w1:p1", name: "owner-one", agent: "Omp", agent_status: "idle", terminal_title: "PRIVATE_TERMINAL_TEXT",
+        pane_id: "w1:p1", name: "owner-one", agent: agentKind, agent_status: agentStatus, terminal_title: "PRIVATE_TERMINAL_TEXT",
       }] : [] });
       if (command === "agent prompt") {
         sends++;
         if (stallNextPrompt) {
           stallNextPrompt = false;
+          if (promptInHistory) history = args[3]!;
+          else paneText = args[3]!;
           throw new Error(stallError);
         }
         return "";
@@ -75,7 +89,10 @@ async function fixture(t: test.TestContext) {
   await adapter.connect({ installationId: input.installationId, cwd: input.cwd });
   return { adapter, create: () => adapter.create(input),
     counts: () => ({ creates, sends }), restart: () => { generation = "two"; }, commands,
-    stallNextPrompt: (error = stallError) => { stallNextPrompt = true; stallError = error; },
+    stallNextPrompt: (error = stallError, historyOnly = false) => {
+      stallNextPrompt = true; stallError = error; promptInHistory = historyOnly;
+    },
+    useCodex: () => { agentKind = "Codex"; },
     otherPaneFocused: () => { focusTabSelectsPane = false; focused = false; } };
 }
 sessionContract("Herdr", fixture);
@@ -140,6 +157,52 @@ test("Herdr stalled observation preserves accepted input without retrying its de
   assert.match(first.detail ?? "", /agent_prompt_stalled/);
   assert.deepEqual(await f.adapter.send({ scene, text, deliveryId: "stalled-once", payloadSha256 }), first);
   assert.equal(f.counts().sends, 1, "The same accepted prompt is never sent twice.");
+});
+
+test("a stalled Codex reminder preserves its full marker and retries only the submit key", async t => {
+  const f = await fixture(t);
+  const { scene } = await f.create();
+  assert(scene);
+  f.useCodex();
+  f.stallNextPrompt();
+  const text = "[ATTE_RECEIPT:0123456789abcdef01234567] Atte 未收到目标 goal-demo 本回合的结构化写回。请补交结构化回执。";
+  const payloadSha256 = createHash("sha256").update(text).digest("hex");
+  const receipt = await f.adapter.send({
+    scene, text, deliveryId: "receipt-reminder-turn-one", payloadSha256,
+  });
+  assert.equal(receipt.status, "started", receipt.detail);
+  assert.match(receipt.detail ?? "", /确认负责人开始处理/);
+  const write = f.commands.find(args => args[0] === "agent" && args[1] === "prompt");
+  assert(write);
+  assert.equal(write[2], "w1:p1");
+  assert.equal(write[3], text);
+  const submit = f.commands.find(args => args[0] === "agent" && args[1] === "send-keys");
+  assert(submit);
+  assert.equal(submit[2], "w1:p1");
+  assert.equal(submit[3], "enter");
+  assert.equal(f.counts().sends, 1);
+  assert.equal(f.commands.filter(args => args[0] === "agent" && args[1] === "send-keys").length, 1);
+  assert.equal(f.commands.some(args => args[0] === "pane" && args[1] === "send-text"), false);
+  assert.deepEqual(await f.adapter.send({
+    scene, text, deliveryId: "receipt-reminder-turn-one", payloadSha256,
+  }), receipt);
+  assert.equal(f.counts().sends, 1);
+});
+
+test("a reminder visible only in Codex history never receives another Enter", async t => {
+  const f = await fixture(t);
+  const { scene } = await f.create();
+  assert(scene);
+  f.useCodex();
+  f.stallNextPrompt(undefined, true);
+  const text = "[ATTE_RECEIPT:0123456789abcdef01234567] Atte 未收到目标 goal-demo 本回合的结构化写回。请补交结构化回执。";
+  const receipt = await f.adapter.send({
+    scene, text, deliveryId: "receipt-reminder-history-only",
+    payloadSha256: createHash("sha256").update(text).digest("hex"),
+  });
+  assert.equal(receipt.status, "accepted");
+  assert.equal(f.counts().sends, 1);
+  assert.equal(f.commands.some(args => args[0] === "agent" && args[1] === "send-keys"), false);
 });
 
 test("Herdr delivery receipts never persist prompt or full command diagnostics", async t => {

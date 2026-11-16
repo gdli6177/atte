@@ -1,25 +1,24 @@
 import {
   WorkspaceService,
-  SkillRegistry,
   attentionGoals,
   attentionRequest,
   importAttachmentFiles,
   workspaceDataDirectory,
   type AtteCommand,
   type GoalAttachment,
-  type HerdrReference,
   type IntakeHandling,
   type HighRiskCategory,
 } from "../../packages/core/src/index.js";
-import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { execFile, spawn } from "node:child_process";
+import { readFile, rename, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import { runBoard } from "./board.js";
-import { launchOwner } from "./owner-launch.js";
 import { attachOwner } from "./owner-attach.js";
 import { ingestAgentHook } from "./hook-ingest.js";
+import { readHookDiagnostics } from "./hook-diagnostics.js";
+import { readHookInput } from "./hook-input.js";
 import {
   SessionControl,
   SessionRuntime,
@@ -58,6 +57,7 @@ async function doctorReport(service: WorkspaceService) {
       items.push({ goalId: goal.id, title: goal.title, kind: "watchdog_error", detail: goal.watchdog.lastError });
     return items;
   }).slice(-10);
+  const hookDiagnostics = readHookDiagnostics(service.root);
   return {
     version: cliVersion,
     workspace: service.root,
@@ -84,6 +84,7 @@ async function doctorReport(service: WorkspaceService) {
         checkedAt: goal.live?.checkedAt,
       })),
     issues,
+    hookDiagnostics,
   };
 }
 async function managedRuntime(workspace: string, managedContext: ReturnType<typeof managedSessionContext>) {
@@ -122,12 +123,12 @@ const usage = `Atte — The attention layer
   atte board [--new] [--once]
   atte scene focus [GOAL_ID]（只定位已登记现场；省略 ID 回到管家）
   atte ask TEXT [--project ID] [--attachment PATH ...]
-  atte capture TEXT [--self] [--project ID] [--remind-at ISO]
-    [--attachment PATH ...]（只记录；--self 表示由你执行）
+  atte capture TEXT [--project ID] [--remind-at ISO]
+    [--attachment PATH ...]（先记下；明确交给管家后才执行）
   atte goal start ID --by self|concierge
   atte goal restore ID（将移出的个人事项恢复到待办池）
   atte direct TEXT [--new] [--goal ID] [--project ID]
-    [--handling concierge|later|self]（只适用于新事项）
+    [--handling concierge|later]（只适用于新事项）
     [--attachment PATH ...]
   atte goal list [--all] [--json]
   atte goal show ID [--json]
@@ -136,11 +137,11 @@ const usage = `Atte — The attention layer
     --summary "现场已如何处理" [--json]
 
 Agent 状态协议（仅在明确事实发生后使用）：
-  atte hook ingest --adapter codex|claude-code|cursor|qoder|omp
+  atte hook ingest --adapter codex|claude-code|cursor|qoder|omp [--json]
     （由受管 Agent Hook 调用；普通 Agent 会话无目标环境时 no-op）
   atte event herdr [--json]
   atte goal create --title TEXT [--project ID] [--description TEXT]
-    [--kind delivery|discovery] [--mode concierge|manual]
+    [--kind delivery|discovery]
   atte goal kind ID --kind delivery|discovery
   atte goal update ID [--title TEXT] [--description TEXT] [--next TEXT]
     [--owner TEXT] [--status active|waiting] [--waiting-for 外部第三方] [--remind-at ISO]
@@ -149,12 +150,6 @@ Agent 状态协议（仅在明确事实发生后使用）：
   atte goal decide ID --question TEXT [--next TEXT] [--key KEY]
   atte goal risk ID --category CATEGORY --summary TEXT [--key KEY]
   atte goal ship ID --operation merge|deploy --checks passed|failed
-  atte goal brief ID --file PATH [--expected-revision N]
-  atte goal checkpoint ID --summary TEXT --next TEXT [--due-at ISO]
-  atte goal verify ID --delivery ID --outcome passed|failed
-    --summary TEXT --criterion ID::passed|failed::EVIDENCE_ID
-    [--criterion ... | --criteria-file PATH] [--reviewer NAME]
-  atte goal boundary ID --file PATH
   atte goal review ID --summary TEXT [--location TEXT] [--url URL]
     --check "名称::命令或操作::passed::说明"（可重复）
     [--candidate-revision REV] [--candidate-digest SHA256] [--evidence-file PATH]
@@ -174,51 +169,6 @@ Agent 状态协议（仅在明确事实发生后使用）：
   atte owner attach ID --name NAME --session SESSION
     --workspace ID --tab ID --pane ID [--agent NAME] [--recovery-id ID]
     在核对 Herdr 真实现场后，恢复并绑定 owner launch 未确认的负责人
-  atte verifier launch ID --name NAME [--task TEXT]
-    为待复核交付创建不复用负责人现场的独立复核者
-
-本地工作方法（能力包）：
-  atte skill list|show [PACK_ID] [--json]
-  atte skill draft DIRECTORY --id ID --name NAME
-    [--description TEXT] [--role owner|verifier ...]
-  atte skill validate DIRECTORY [--json]
-  atte skill install DIRECTORY [--approve-script ID ...] [--json]
-  atte skill approve PACK_ID --approve-script ID [...]
-  atte skill disable|enable|remove PACK_ID
-  atte skill attach GOAL_ID PACK_ID [--json]
-  atte skill detach GOAL_ID PACK_ID [--json]
-  atte skill resolve GOAL_ID --role concierge|owner|verifier [--json]
-  atte skill run PACK_ID SCRIPT_ID --goal GOAL_ID [--arg VALUE ...]
-
-人用自主目标与发布协议：
-  atte autonomy set [--acceptance human-review|auto-with-verification]
-    [--paused yes|no] [--max-recovery-attempts N] [--no-progress-minutes N]
-    [--initialize]
-  atte project autonomy PROJECT_ID [--acceptance inherit|human-review|auto-with-verification]
-    [--release-on-merge never|production|unknown]
-  atte goal autonomy pause|resume ID
-  atte goal autonomy acceptance ID
-    --acceptance inherit|human-review|auto-with-verification
-  atte goal boundary-resolve ID --boundary ID --outcome approved|rejected --note TEXT
-  atte goal reopen ID --note TEXT
-  atte release create --from GOAL_ID [--from GOAL_ID ...] --environment production
-    --revision REV [--digest SHA256] [--version VERSION]
-  atte release approve ID --note TEXT
-  atte release reject ID --note TEXT
-  atte release result ID --outcome succeeded|failed
-    --evidence "真实结果"（可重复）| --evidence-file PATH
-
-本地 Bot 发起方协议：
-  atte bot call --file ENVELOPE.json
-  atte bot bind --id ID --name NAME --role initiator
-    --project ID（可重复）--operation OPERATION（可重复）--expires-at ISO
-  atte bot revoke ID
-
-内部续跑调度（应用主进程使用）：
-  atte autonomy inspect [--at ISO]
-  atte autonomy claim ID --continuation ID [--at ISO]
-  atte autonomy report ID --continuation ID --outcome sent|failed|settled
-    [--lease LEASE_ID] [--detail TEXT] [--at ISO]
 
 使用 --root DIR 或 ATTE_WORKSPACE 指定工作区（兼容读取 CREWVANE_WORKSPACE）。所有读写与桌面共用状态。
 goal message 与 direct 不按正文推断状态。交给管家处理的外部等待会恢复 active，待管家重新核定；next 保留。
@@ -242,6 +192,38 @@ function parse(argv: string[]) {
   }
   return { positional, one: (name: string) => values.get(name)?.[0], all: (name: string) => values.get(name) ?? [], has: (name: string) => values.has(name) };
 }
+function hookJsonRequested(argv: string[]) {
+  return argv.some(token => token === "--json" || token === "--json=true");
+}
+async function hookIngestFailOpen(
+  argv: string[],
+  io: { out: (value: string) => void; error: (value: string) => void },
+) {
+  let args: ReturnType<typeof parse> | undefined;
+  let reason: string | undefined;
+  try {
+    args = parse(argv);
+  } catch (error) {
+    reason = error instanceof Error ? error.message : String(error);
+  }
+  let result: unknown;
+  try {
+    result = await ingestAgentHook({
+      adapter: args?.one("adapter") ?? "",
+      stdin: () => readHookInput(),
+    });
+  } catch (error) {
+    reason = error instanceof Error ? error.message : String(error);
+  }
+  if (result && typeof result === "object" && "reason" in result &&
+    typeof result.reason === "string")
+    reason = result.reason;
+  if (args?.has("json") || hookJsonRequested(argv))
+    io.out(JSON.stringify(reason ? { accepted: false, reason, result } : { accepted: true, result }));
+  // Agent lifecycle Hooks are observational. Failure is fail-open and must
+  // never prevent the Agent from starting, running or stopping.
+  return 0;
+}
 function checks(values: string[]) {
   if (!values.length) throw new Error("至少提供一个 --check，记录实际运行的检查");
   return values.map((value) => {
@@ -250,68 +232,31 @@ function checks(values: string[]) {
     return { name, command, result: result as "passed" | "failed", ...(note.length ? { note: note.join("::") } : {}) };
   });
 }
-async function createSkillDraft(
-  directory: string,
-  options: { id: string; name: string; description?: string; roles: string[] },
-) {
-  const root = resolve(directory),
-    id = options.id.trim(),
-    name = options.name.trim();
-  if (!/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)+$/.test(id) || id.startsWith("atte."))
-    throw new Error("能力包 ID 必须带命名空间，例如 acme.design-review；atte. 前缀保留");
-  if (!name || name.length > 120) throw new Error("请输入有效的能力包名称");
-  const roles = [...new Set(options.roles.length ? options.roles : ["owner"])];
-  if (roles.some(role => role !== "owner" && role !== "verifier"))
-    throw new Error("能力包角色只能是 owner 或 verifier");
-  const description = options.description?.trim() || "说明这个工作方法何时使用、希望 Agent 如何做。";
-  await mkdir(root, { recursive: true });
-  for (const file of ["manifest.json", "SKILL.md"]) {
-    try {
-      await access(join(root, file));
-      throw new Error(`草稿目录已包含 ${file}，拒绝覆盖`);
-    } catch (error) {
-      if (error instanceof Error && /拒绝覆盖/.test(error.message)) throw error;
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-  }
-  const manifest = {
-    schemaVersion: 1,
-    id,
-    name,
-    description,
-    version: "1.0.0",
-    minimumAtte: "0.11.0",
-    kind: "process",
-    roles,
-    entry: "SKILL.md",
-    references: [],
-    scripts: [],
-  };
-  const skill = `---
-name: ${id}
-description: ${JSON.stringify(description.replaceAll("\n", " "))}
----
-
-# ${name}
-
-## 何时使用
-
-${description}
-
-## 执行方法
-
-1. 根据当前目标和用户最新消息补充这里的步骤。
-2. 明确要求 Agent 先检查什么、如何执行、如何验证。
-3. 只保留可复用的方法，不写入某个目标的隐私信息。
-
-## 完成前检查
-
-- 实际结果已经验证。
-- 证据和下一步已经通过 Atte CLI 写回。
-`;
-  await writeFile(join(root, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
-  await writeFile(join(root, "SKILL.md"), skill, { mode: 0o600 });
-  return { directory: root, manifest };
+class RetiredCommandError extends Error {
+  readonly code = "feature_removed";
+}
+function rejectRetiredCommand(args: ReturnType<typeof parse>) {
+  const [group, action] = args.positional;
+  const retiredGroup = ["skill", "autonomy", "release", "bot", "verifier", "backend"].includes(group ?? "");
+  const retiredGoal = group === "goal" && [
+    "brief", "checkpoint", "verify", "boundary", "boundary-resolve", "autonomy", "reopen",
+  ].includes(action ?? "");
+  const retiredParameter = ["acceptance", "release-on-merge", "max-recovery-attempts",
+    "no-progress-minutes", "continuation", "lease", "workflow", "stage", "worker",
+    "approve-script"].some(name => args.has(name));
+  const retiredCreation = (group === "capture" && args.has("self")) ||
+    (group === "direct" && args.one("handling") === "self") ||
+    (group === "goal" && action === "kind" && args.one("kind") === "release") ||
+    (group === "goal" && action === "create" &&
+      (args.one("mode") === "manual" || args.one("kind") === "release"));
+  if (retiredGroup || retiredGoal || retiredParameter || retiredCreation ||
+    (group === "project" && action === "autonomy") ||
+    args.one("role") === "verifier" || environmentValue(process.env, "ROLE") === "verifier")
+    throw new RetiredCommandError(
+      "该功能已在 Atte 0.14 移除。先记下用 capture，执行用 ask / owner launch，" +
+      "进展用 goal progress，交付用 goal review，由人验收；发布继续使用 goal ship 检查项目策略。" +
+      "接管已有事项可用 goal start ID --by self。",
+    );
 }
 function textArg(value: string | undefined, label: string) {
   if (!value?.trim()) throw new Error(`${label} 不能为空`);
@@ -322,25 +267,6 @@ export function assertOwnerSendReceipt(receipt: SendReceipt): SendReceipt {
     throw new Error(`负责人现场拒绝本次消息：${receipt.detail?.trim() || "未提供原因"}`);
   return receipt;
 }
-function currentHerdrReference(agent?: string): HerdrReference | undefined {
-  if (process.env.HERDR_ENV !== "1") return undefined;
-  const session = process.env.HERDR_SESSION?.trim();
-  if (!session || !/^[a-zA-Z0-9_-]{1,80}$/.test(session)) return undefined;
-  const reference: HerdrReference = {
-    session,
-    ...(process.env.HERDR_WORKSPACE_ID?.trim()
-      ? { workspaceId: process.env.HERDR_WORKSPACE_ID.trim() }
-      : {}),
-    ...(process.env.HERDR_TAB_ID?.trim()
-      ? { tabId: process.env.HERDR_TAB_ID.trim() }
-      : {}),
-    ...(process.env.HERDR_PANE_ID?.trim()
-      ? { paneId: process.env.HERDR_PANE_ID.trim() }
-      : {}),
-    ...(agent ? { agent } : {}),
-  };
-  return reference.paneId || reference.tabId ? reference : undefined;
-}
 async function jsonFile(path: string | undefined, label: string): Promise<unknown> {
   if (!path?.trim()) throw new Error(`需要 ${label} 文件路径`);
   let parsed: unknown;
@@ -350,26 +276,6 @@ async function jsonFile(path: string | undefined, label: string): Promise<unknow
     throw new Error(`${label} 不是有效 JSON：${error instanceof Error ? error.message : String(error)}`);
   }
   return parsed;
-}
-async function verificationCriteria(values: string[], file?: string) {
-  if (values.length && file) throw new Error("--criterion 与 --criteria-file 不能同时使用");
-  if (file) {
-    const parsed = await jsonFile(file, "复核条件");
-    if (!Array.isArray(parsed)) throw new Error("复核条件文件必须是数组");
-    return parsed;
-  }
-  if (!values.length) throw new Error("至少提供一个 --criterion");
-  return values.map(value => {
-    const [criterionId, result, evidenceIds, ...note] = value.split("::");
-    if (!criterionId || !["passed", "failed"].includes(result ?? "") || !evidenceIds)
-      throw new Error("--criterion 格式：完成条件ID::passed|failed::证据ID[,证据ID]::说明");
-    return {
-      criterionId: criterionId.trim(),
-      result,
-      evidenceIds: evidenceIds.split(",").map(id => id.trim()).filter(Boolean),
-      ...(note.length ? { note: note.join("::") } : {}),
-    };
-  });
 }
 async function coordinatorCaseId(allowMissing = false) {
   if (environmentValue(process.env, "COORDINATOR") !== "1") return;
@@ -524,40 +430,13 @@ async function currentHerdrAgent(paneId: string) {
   }
 }
 export async function run(argv: string[], io = { out: console.log, error: console.error }): Promise<number> {
+  if (argv[0] === "hook" && argv[1] === "ingest")
+    return hookIngestFailOpen(argv, io);
   try {
     const args = parse(argv), [group, action, target] = args.positional;
     if (args.has("help") || !group) { io.out(usage); return 0; }
-    if (group === "hook" && action === "ingest") {
-      try {
-        await ingestAgentHook({
-          adapter: args.one("adapter") ?? "",
-          stdin: () => new Promise((resolve, reject) => {
-            const chunks: Buffer[] = [];
-            let size = 0;
-            process.stdin.on("data", chunk => {
-              const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-              size += buffer.length;
-              if (size > 512_000) {
-                reject(new Error("Hook payload too large"));
-                process.stdin.destroy();
-                return;
-              }
-              chunks.push(buffer);
-            });
-            process.stdin.once("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-            process.stdin.once("error", reject);
-          }),
-        });
-      } catch {
-        // Agent lifecycle observation must never make the Agent turn fail.
-      }
-      // Agent lifecycle Hooks are observational. Failure is fail-open and
-      // must never prevent the Agent from starting, running or stopping.
-      return 0;
-    }
+    rejectRetiredCommand(args);
     const managedAgentName = environmentValue(process.env, "AGENT_NAME")?.trim(),
-      verifierMode = environmentValue(process.env, "ROLE")?.trim() === "verifier",
-      verifierGoalId = environmentValue(process.env, "GOAL_ID")?.trim(),
       workspaceRoot = args.one("root") ?? (environmentValue(process.env, "WORKSPACE")?.trim() || process.cwd()),
       sessionContext = managedSessionContext(process.env),
       coordinatorMode = environmentValue(process.env, "COORDINATOR") === "1",
@@ -582,50 +461,14 @@ export async function run(argv: string[], io = { out: console.log, error: consol
       io.out(args.has("json") ? JSON.stringify(focused) : "已定位原现场。");
       return 0;
     }
-    if (verifierMode) {
-      if (!managedAgentName)
-        throw new Error("独立复核者必须由 Atte 启动并登记身份");
-      if (!verifierGoalId)
-        throw new Error("独立复核者缺少当前复核目标");
-      const allowed = group === "status" ||
-        (group === "goal" && ["show", "verify"].includes(action ?? ""));
-      if (!allowed)
-        throw new Error("独立复核者只能查看当前目标或提交复核结果");
-      if (group === "goal" && action === "show" &&
-        (target ?? args.one("id")) !== verifierGoalId)
-        throw new Error("独立复核者只能查看当前复核目标");
-      if (group === "goal" && action === "verify" && target !== verifierGoalId)
-        throw new Error("独立复核者只能提交当前复核目标的复核结果");
-    }
     let command: AtteCommand | undefined, result: unknown, coordinatorRead = false,
-      verifierRead = false,
       ownerLaunch: {
         name: string;
         task?: string;
         taskFile?: string;
-        role?: "owner" | "verifier";
+        role?: "owner";
       } | undefined;
     let ownerSend: { text: string } | undefined;
-    if (verifierMode && group === "status") {
-      const state = await service.read(),
-        goal = state.goals.find(item => item.id === verifierGoalId);
-      if (!goal) throw new Error("当前复核目标不存在");
-      result = {
-        name: state.name,
-        agents: state.agents ?? { concierge: "codex" },
-        project: state.projects.find(project => project.id === goal.projectId),
-        goal: {
-          id: goal.id,
-          title: goal.title,
-          kind: goal.kind,
-          mode: goal.mode,
-          status: goal.status,
-          next: goal.next,
-          attention: goal.attention ?? null,
-        },
-      };
-      verifierRead = true;
-    }
     if (group === "board" && !coordinatorCase) {
       await runBoard(service, io, {
         once: args.has("once"), startWithNewGoal: args.has("new"),
@@ -672,7 +515,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
         coordinatorRead = true;
       } else if (group === "goal" && [
         "update", "progress", "wait", "decide", "risk", "ship",
-        "brief", "checkpoint", "boundary", "kind",
+        "kind",
         "complete", "rework", "drop", "resolve", "remind", "scene-reply",
       ].includes(action ?? "")) {
         assertCoordinatorCase(coordinatorCase, target);
@@ -684,13 +527,6 @@ export async function run(argv: string[], io = { out: console.log, error: consol
         assertCoordinatorCase(coordinatorCase, target);
       } else if (group === "owner" && action === "attach") {
         assertCoordinatorCase(coordinatorCase, target);
-      } else if (group === "verifier" && action === "launch") {
-        assertCoordinatorCase(coordinatorCase, target);
-      } else if (group === "skill" && ["list", "show"].includes(action ?? "")) {
-        // Available method metadata is read-only and scoped to the current
-        // workspace. It does not expose other goals.
-      } else if (group === "skill" && ["attach", "detach", "resolve", "run"].includes(action ?? "")) {
-        assertCoordinatorCase(coordinatorCase, target);
       } else if (group === "direct") {
         if (args.has("new") && args.one("goal"))
           throw new Error("--new 不能与 --goal 同时使用");
@@ -700,7 +536,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
           assertCoordinatorCase(coordinatorCase, args.one("goal") ?? coordinatorCase);
       } else throw new Error("管家当前只能查看或更新自己的案卷，不能执行该命令");
     }
-    if (!coordinatorRead && !verifierRead) {
+    if (!coordinatorRead) {
       if (group === "status") result = await service.read();
       else if (group === "doctor") result = await doctorReport(service);
       else if (group === "delivery") {
@@ -725,7 +561,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
       else if (group === "capture") {
         const attachments = await importAttachmentFiles(service.root, args.all("attachment"));
         command = { type: "goal.intake", text: args.positional.slice(1).join(" "),
-          projectId: args.one("project"), handling: args.has("self") ? "self" : "later",
+          projectId: args.one("project"), handling: "later",
           remindAt: args.one("remind-at"), ...(attachments.length ? { attachments } : {}) };
       }
       else if (group === "direct") {
@@ -800,65 +636,6 @@ export async function run(argv: string[], io = { out: console.log, error: consol
           kind: textArg(args.one("kind"), "--kind") as "delivery" | "discovery",
           actor,
         };
-      else if (group === "goal" && action === "brief") {
-        const brief = await jsonFile(args.one("file"), "委托摘要");
-        if (!brief || typeof brief !== "object" || Array.isArray(brief))
-          throw new Error("委托摘要文件必须是 JSON 对象");
-        command = {
-          type: "goal.brief",
-          goalId: target!,
-          brief: brief as import("../../packages/core/src/index.js").GoalBriefInput,
-          expectedRevision: args.one("expected-revision")
-            ? Number(args.one("expected-revision"))
-            : undefined,
-          actor,
-        };
-      }
-      else if (group === "goal" && action === "checkpoint")
-        command = {
-          type: "goal.checkpoint",
-          goalId: target!,
-          summary: args.one("summary")!,
-          next: args.one("next")!,
-          dueAt: args.one("due-at"),
-          actor,
-        };
-      else if (group === "goal" && action === "verify") {
-        const explicitReviewer = args.one("reviewer");
-        if (managedAgentName && explicitReviewer &&
-          explicitReviewer !== managedAgentName)
-          throw new Error("受管 Agent 不能用 --reviewer 冒用其他复核人身份");
-        const criteria = await verificationCriteria(
-          args.all("criterion"),
-          args.one("criteria-file"),
-        ) as import("../../packages/core/src/index.js").VerificationCriterion[];
-        const reviewer = managedAgentName ?? explicitReviewer ?? actor,
-          reviewerHerdr = currentHerdrReference(reviewer);
-        command = {
-          type: "goal.verify",
-          goalId: target!,
-          deliveryId: args.one("delivery")!,
-          outcome: args.one("outcome") as "passed" | "failed",
-          summary: args.one("summary")!,
-          criteria,
-          reviewer,
-          ...(reviewerHerdr ? { reviewerHerdr } : {}),
-        };
-      }
-      else if (group === "goal" && action === "boundary") {
-        const change = await jsonFile(args.one("file"), "边界变更");
-        if (!change || typeof change !== "object" || Array.isArray(change))
-          throw new Error("边界变更文件必须是 JSON 对象");
-        command = {
-          type: "goal.boundary",
-          goalId: target!,
-          change: change as Extract<
-            AtteCommand,
-            { type: "goal.boundary" }
-          >["change"],
-          actor,
-        };
-      }
       else if (group === "goal" && action === "update") command = { type: "goal.update", goalId: target!, patch: {
         ...(args.has("stage") ? (() => { throw new Error("工序已移除；请直接更新目标下一步"); })() : {}),
         title: args.one("title"), description: args.one("description"), next: args.one("next"),
@@ -946,195 +723,6 @@ export async function run(argv: string[], io = { out: console.log, error: consol
           actor: action === "accept" ? "你" : actor,
         };
       }
-      else if (group === "goal" && action === "autonomy") {
-        requireHumanCli();
-        const goalId = args.positional[3];
-        if (!goalId) throw new Error("需要目标 ID");
-        if (target === "acceptance") {
-          command = {
-            type: "goal.autonomy.acceptance",
-            goalId,
-            acceptance: textArg(
-              args.one("acceptance"),
-              "--acceptance",
-            ) as "inherit" | "human-review" | "auto-with-verification",
-            actor: "你",
-          };
-        } else if (target === "pause" || target === "resume") {
-          command = {
-            type: target === "pause"
-              ? "goal.autonomy.pause"
-              : "goal.autonomy.resume",
-            goalId,
-            actor: "你",
-          };
-        } else {
-          throw new Error("goal autonomy 只支持 pause、resume 或 acceptance");
-        }
-      }
-      else if (group === "goal" && action === "boundary-resolve") {
-        requireHumanCli();
-        command = {
-          type: "goal.boundary.resolve",
-          goalId: target!,
-          boundaryId: args.one("boundary")!,
-          outcome: args.one("outcome") as "approved" | "rejected",
-          note: args.one("note")!,
-          actor: "你",
-        };
-      }
-      else if (group === "goal" && action === "reopen") {
-        requireHumanCli();
-        command = {
-          type: "goal.reopen",
-          goalId: target!,
-          note: args.one("note")!,
-          actor: "你",
-        };
-      }
-      else if (group === "autonomy" && action === "set") {
-        requireHumanCli();
-        const pausedValue = args.one("paused");
-        if (pausedValue !== undefined && !["yes", "no", "true", "false"].includes(pausedValue))
-          throw new Error("--paused 必须是 yes 或 no");
-        command = {
-          type: "workspace.autonomy.set",
-          acceptance: args.one("acceptance") as
-            | "human-review"
-            | "auto-with-verification"
-            | undefined,
-          paused: pausedValue === undefined
-            ? undefined
-            : ["yes", "true"].includes(pausedValue),
-          maxRecoveryAttempts: args.one("max-recovery-attempts")
-            ? Number(args.one("max-recovery-attempts"))
-            : undefined,
-          noProgressMinutes: args.one("no-progress-minutes")
-            ? Number(args.one("no-progress-minutes"))
-            : undefined,
-          initialize: args.has("initialize"),
-          actor: "你",
-        };
-      }
-      else if (group === "autonomy" && action === "inspect") {
-        command = {
-          type: "autonomy.inspect",
-          at: args.one("at") ?? new Date().toISOString(),
-        };
-      }
-      else if (group === "autonomy" && action === "claim") {
-        if (!target) throw new Error("需要目标 ID");
-        command = {
-          type: "autonomy.claim",
-          goalId: target,
-          continuationId: args.one("continuation")!,
-          at: args.one("at") ?? new Date().toISOString(),
-        };
-      }
-      else if (group === "autonomy" && action === "report") {
-        if (!target) throw new Error("需要目标 ID");
-        command = {
-          type: "autonomy.report",
-          goalId: target,
-          continuationId: args.one("continuation")!,
-          outcome: args.one("outcome") as "sent" | "failed" | "settled",
-          detail: args.one("detail"),
-          leaseId: args.one("lease"),
-          at: args.one("at") ?? new Date().toISOString(),
-        };
-      }
-      else if (group === "project" && action === "autonomy") {
-        requireHumanCli();
-        if (!target) throw new Error("需要项目 ID");
-        const project = (await service.read()).projects.find(item => item.id === target);
-        if (!project) throw new Error("找不到项目");
-        command = {
-          type: "project.autonomy.set",
-          projectId: target,
-          acceptance: (args.one("acceptance") ??
-            project.autonomy?.acceptance ??
-            "inherit") as "inherit" | "human-review" | "auto-with-verification",
-          releaseOnMerge: (args.one("release-on-merge") ??
-            project.releaseOnMerge ??
-            "unknown") as "never" | "production" | "unknown",
-          actor: "你",
-        };
-      }
-      else if (group === "release" && action === "create") {
-        requireHumanCli();
-        const sourceGoalIds = args.all("from");
-        if (!sourceGoalIds.length) throw new Error("发布目标至少需要一个 --from");
-        command = {
-          type: "release.create",
-          sourceGoalIds,
-          environment: args.one("environment") ?? "production",
-          candidate: {
-            revision: args.one("revision")!,
-            digest: args.one("digest"),
-            version: args.one("version"),
-          },
-          actor: "你",
-        };
-      }
-      else if (group === "release" && ["approve", "reject"].includes(action ?? "")) {
-        requireHumanCli();
-        if (!target) throw new Error("需要发布目标 ID");
-        command = {
-          type: `release.${action}` as "release.approve" | "release.reject",
-          goalId: target,
-          note: args.one("note")!,
-          actor: "你",
-        };
-      }
-      else if (group === "release" && action === "result") {
-        if (!target) throw new Error("需要发布目标 ID");
-        const evidence = args.one("evidence-file")
-          ? await jsonFile(args.one("evidence-file"), "发布证据")
-          : args.all("evidence");
-        if (!Array.isArray(evidence) || !evidence.every(item => typeof item === "string"))
-          throw new Error("发布证据必须是字符串数组");
-        command = {
-          type: "release.result",
-          goalId: target,
-          outcome: args.one("outcome") as "succeeded" | "failed",
-          evidence,
-          actor,
-        };
-      }
-      else if (group === "bot" && action === "bind") {
-        requireHumanCli();
-        command = {
-          type: "bot.binding.set",
-          binding: {
-            id: args.one("id")!,
-            name: args.one("name")!,
-            role: args.one("role") as "initiator" | "executor",
-            projectIds: args.all("project"),
-            operations: args.all("operation") as import("../../packages/core/src/index.js").BotOperation[],
-            expiresAt: args.one("expires-at")!,
-          },
-          actor: "你",
-        };
-      }
-      else if (group === "bot" && action === "revoke") {
-        requireHumanCli();
-        if (!target) throw new Error("需要 Bot 绑定 ID");
-        command = { type: "bot.binding.revoke", botId: target, actor: "你" };
-      }
-      else if (group === "bot" && action === "call") {
-        const envelope = await jsonFile(args.one("file"), "Bot 请求");
-        if (!envelope || typeof envelope !== "object" || Array.isArray(envelope))
-          throw new Error("Bot 请求必须是 JSON 对象");
-        const value = envelope as Record<string, unknown>;
-        command = {
-          type: "bot.request",
-          schema: value.schema as "atte.bot.v1",
-          requestId: value.requestId as string,
-          operation: value.operation as import("../../packages/core/src/index.js").BotOperation,
-          botId: value.botId as string,
-          payload: value.payload,
-        };
-      }
       else if (group === "goal" && action === "resolve") command = {
         type: "goal.resolve", goalId: target!, note: args.one("note") ?? args.one("reason"), actor,
         outcome: (args.one("outcome") ?? "approved") as "approved" | "rejected",
@@ -1146,176 +734,6 @@ export async function run(argv: string[], io = { out: console.log, error: consol
           throw new Error("session set 必须指定目标 ID；全局管家现场由桌面应用管理。");
         command = { type: "session.set", goalId: target, reference: { session: args.one("session") ?? process.env.HERDR_SESSION ?? "atte", workspaceId: args.one("workspace"), tabId: args.one("tab"), paneId: args.one("pane"), agent: args.one("agent"),
           ...(args.has("transport") ? { transport: args.one("transport") as "pane", processId: Number(args.one("process-id")) } : {}) } };
-      }
-      else if (group === "skill" && action === "list") {
-        result = await new SkillRegistry(service.root).list();
-      }
-      else if (group === "skill" && action === "show") {
-        if (!target) throw new Error("需要能力包 ID");
-        result = await new SkillRegistry(service.root).show(target);
-      }
-      else if (group === "skill" && action === "draft") {
-        requireHumanCli();
-        if (!target) throw new Error("需要草稿目录");
-        result = await createSkillDraft(target, {
-          id: textArg(args.one("id"), "--id"),
-          name: textArg(args.one("name"), "--name"),
-          description: args.one("description"),
-          roles: args.all("role"),
-        });
-      }
-      else if (group === "skill" && action === "validate") {
-        if (!target) throw new Error("需要能力包目录");
-        result = await new SkillRegistry(service.root).validate(target);
-      }
-      else if (group === "skill" && action === "install") {
-        requireHumanCli();
-        if (!target) throw new Error("需要能力包目录");
-        result = await new SkillRegistry(service.root).install(target, {
-          approveScripts: args.all("approve-script"),
-        });
-      }
-      else if (group === "skill" && action === "approve") {
-        requireHumanCli();
-        if (!target) throw new Error("需要能力包 ID");
-        const scripts = args.all("approve-script");
-        if (!scripts.length) throw new Error("至少提供一个 --approve-script ID");
-        result = await new SkillRegistry(service.root).approveScripts(target, scripts);
-      }
-      else if (group === "skill" && action === "disable") {
-        requireHumanCli();
-        if (!target) throw new Error("需要能力包 ID");
-        result = await new SkillRegistry(service.root).disable(target, true);
-      }
-      else if (group === "skill" && action === "enable") {
-        requireHumanCli();
-        if (!target) throw new Error("需要能力包 ID");
-        result = await new SkillRegistry(service.root).disable(target, false);
-      }
-      else if (group === "skill" && action === "remove") {
-        requireHumanCli();
-        if (!target) throw new Error("需要能力包 ID");
-        await new SkillRegistry(service.root).remove(target);
-        result = { removed: target };
-      }
-      else if (group === "skill" && action === "attach") {
-        if (!target) throw new Error("需要目标 ID");
-        const packId = args.positional[3];
-        if (!packId) throw new Error("需要能力包 ID");
-        command = {
-          type: "goal.skill.attach",
-          goalId: target,
-          packId,
-          actor: coordinatorMode ? "concierge" : "human",
-        };
-      }
-      else if (group === "skill" && action === "detach") {
-        if (!target) throw new Error("需要目标 ID");
-        const packId = args.positional[3];
-        if (!packId) throw new Error("需要能力包 ID");
-        command = {
-          type: "goal.skill.detach",
-          goalId: target,
-          packId,
-          actor: coordinatorMode ? "concierge" : "human",
-        };
-      }
-      else if (group === "skill" && action === "resolve") {
-        if (!target) throw new Error("需要目标 ID");
-        const role = args.one("role") ?? "owner";
-        if (!["concierge", "owner", "verifier"].includes(role))
-          throw new Error("--role 只能是 concierge、owner 或 verifier");
-        const state = await service.read(),
-          item = state.goals.find(goal => goal.id === target);
-        if (!item) throw new Error("找不到目标");
-        result = await new SkillRegistry(service.root).resolve(
-          item,
-          role as "concierge" | "owner" | "verifier",
-        );
-      }
-      else if (group === "skill" && action === "run") {
-        if (!target) throw new Error("需要能力包 ID");
-        const scriptId = args.positional[3],
-          goalId = args.one("goal");
-        if (!scriptId || !goalId) throw new Error("skill run 需要 SCRIPT_ID 与 --goal GOAL_ID");
-        if (managedAgent) {
-          const currentGoal = environmentValue(process.env, "GOAL_ID")?.trim();
-          if (!currentGoal || currentGoal !== goalId)
-            throw new Error("受管 Agent 只能运行当前目标挂载的能力包脚本");
-        }
-        const state = await service.read(),
-          item = state.goals.find(goal => goal.id === goalId);
-        if (!item) throw new Error("找不到目标");
-        const registry = new SkillRegistry(service.root),
-          script = await registry.scriptForGoal(item, target, scriptId);
-        if (!((await stat(script.path)).mode & 0o111))
-          throw new Error(`脚本 ${scriptId} 没有可执行权限`);
-        const environment: NodeJS.ProcessEnv = {
-          HOME: process.env.HOME,
-          PATH: process.env.PATH,
-          TMPDIR: process.env.TMPDIR,
-          LANG: process.env.LANG,
-          ATTE_GOAL_ID: item.id,
-          CREWVANE_GOAL_ID: item.id,
-          ATTE_SKILL_PACK: target,
-          CREWVANE_SKILL_PACK: target,
-          ATTE_SKILL_SCRIPT: scriptId,
-          CREWVANE_SKILL_SCRIPT: scriptId,
-        };
-        const execution = await new Promise<{
-          code: number | null;
-          stdout: string;
-          stderr: string;
-        }>((resolvePromise, reject) => {
-          const child = spawn(script.path, args.all("arg"), {
-            cwd: script.cwd,
-            env: environment,
-            stdio: ["ignore", "pipe", "pipe"],
-          });
-          let stdout = "", stderr = "", settled = false;
-          const finish = (code: number | null, error?: Error) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            if (error) reject(error);
-            else resolvePromise({
-              code,
-              stdout: stdout.slice(0, 60_000),
-              stderr: stderr.slice(0, 60_000),
-            });
-          };
-          child.stdout.on("data", chunk => {
-            if (stdout.length < 120_000) stdout += String(chunk);
-          });
-          child.stderr.on("data", chunk => {
-            if (stderr.length < 120_000) stderr += String(chunk);
-          });
-          child.once("error", error => finish(null, error));
-          child.once("close", code => finish(code));
-          const timer = setTimeout(() => {
-            child.kill("SIGTERM");
-            setTimeout(() => child.kill("SIGKILL"), 1_000).unref();
-            finish(null, new Error("能力包脚本超过 120 秒，已终止"));
-          }, 120_000);
-        });
-        const succeeded = execution.code === 0,
-          summary = [
-            `退出码：${execution.code ?? "无"}`,
-            execution.stdout.trim() ? `stdout：${execution.stdout.trim()}` : "",
-            execution.stderr.trim() ? `stderr：${execution.stderr.trim()}` : "",
-          ].filter(Boolean).join("\n").slice(0, 8_000);
-        await service.execute({
-          type: "goal.skill.audit",
-          goalId,
-          packId: target,
-          scriptId,
-          outcome: succeeded ? "succeeded" : "failed",
-          summary: summary || (succeeded ? "脚本执行成功且没有输出。" : "脚本执行失败且没有输出。"),
-          actor: managedAgentName || "你",
-        });
-        if (!succeeded)
-          throw new Error(`能力包脚本失败（退出码 ${execution.code ?? "无"}）：${execution.stderr.trim() || execution.stdout.trim()}`);
-        result = { packId: target, scriptId, goalId, ...execution };
       }
       else if (group === "owner" && action === "attach") {
         if (!target) throw new Error("需要目标 ID");
@@ -1343,14 +761,6 @@ export async function run(argv: string[], io = { out: console.log, error: consol
         };
       else if (group === "owner" && action === "send")
         ownerSend = { text: textArg(args.one("text"), "--text") };
-      else if (group === "verifier" && action === "launch")
-        ownerLaunch = {
-          name: textArg(args.one("name"), "--name"),
-          role: "verifier",
-          ...(args.one("task")
-            ? { task: textArg(args.one("task"), "--task") }
-            : {}),
-        };
       else throw new Error(`不支持的命令：${args.positional.join(" ")}\n\n${usage}`);
     }
     if (command && "goalId" in command && command.type !== "goal.scene-reply") {
@@ -1387,14 +797,6 @@ export async function run(argv: string[], io = { out: console.log, error: consol
       result = { ...goal, attentionRequest: attentionRequest(goal) };
     }
     if (args.has("json")) io.out(JSON.stringify(result, null, 2));
-    else if (group === "status" && verifierRead) {
-      const current = result as {
-        name: string;
-        project?: { name?: string };
-        goal: { status: string; next: string };
-      };
-      io.out(`${current.name} · ${current.project?.name ?? "个人事项"} · 当前复核目标 · ${current.goal.status}\n${current.goal.next}`);
-    }
     else if (group === "status" && coordinatorRead) {
       const current = result as { name: string; project?: { name?: string };
         goal: { status: string; next: string; owner: string } };
@@ -1405,6 +807,10 @@ export async function run(argv: string[], io = { out: console.log, error: consol
       io.out(`${report.workspace}\nAtte ${report.version} · ${report.backend?.selected ?? "未选择后端"} epoch ${report.backend?.epoch ?? "-"}` +
         `\n目标 ${report.state.open} 个进行中 / ${report.state.goals} 个 · 注意力 ${report.state.attention} · 状态 ${Math.round(report.state.bytes / 1024)} KB` +
         `\n收件箱：排队 ${report.inbox.queued ?? 0} · 未确认 ${report.inbox.unconfirmed ?? 0} · 失败 ${report.inbox.failed ?? 0} · 过期 ${report.inbox.expired ?? 0}` +
+        (Object.keys(report.hookDiagnostics.counts).length
+          ? `\nHook 观测异常：${Object.entries(report.hookDiagnostics.counts)
+            .map(([reason, count]) => `${reason} ${count}`).join(" · ")}`
+          : "") +
         (report.deadScenes.length ? `\n不可达现场 ${report.deadScenes.length} 个：${report.deadScenes.map(item => item.goalId).join(", ")}` : "\n没有已标记不可达的现场") +
         (report.issues.length ? `\n最近问题：\n${report.issues.map(item => `- ${item.kind} ${item.goalId} ${item.detail}`).join("\n")}` : ""));
     }
@@ -1427,5 +833,15 @@ export async function run(argv: string[], io = { out: console.log, error: consol
     }
     else { const goal = result as import("../../packages/core/src/index.js").Goal; io.out(goal?.id ? `${goal.id} · ${goal.status}\n${goal.next}` : JSON.stringify(result)); }
     return 0;
-  } catch (error) { io.error(`atte: ${error instanceof Error ? error.message : String(error)}`); return 1; }
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "feature_removed") {
+      const message = error instanceof Error ? error.message : "该功能已移除";
+      if (argv.includes("--json") || argv.includes("--json=true"))
+        io.out(JSON.stringify({ error: "feature_removed", message }));
+      io.error(`atte: feature_removed: ${message}`);
+      return 2;
+    }
+    io.error(`atte: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
 }

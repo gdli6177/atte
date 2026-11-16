@@ -279,8 +279,8 @@ test("a settled turn creates a receipt and semantic writes mark it written", asy
   });
   let runtime = (await service.read()).goals[0]!.agentRuntime!;
   assert.equal(runtime.receipt?.status, "waiting");
-  assert.equal(runtime.receipt?.remindAt, at(8));
-  assert.equal(runtime.receipt?.inspectAt, at(38));
+  assert.equal(runtime.receipt?.remindAt, at(13));
+  assert.equal(runtime.receipt?.inspectAt, at(43));
   assert.equal(runtime.lastReply?.text, "实现完成，准备写回。");
 
   await service.execute({
@@ -353,6 +353,51 @@ test("receipt escalation is reminder-once and protocol_missing without treating 
   assert.equal(missing.goal.attention, null);
   assert.equal(missing.goal.agentRuntime?.receipt?.status, "protocol_missing");
   assert.equal(missing.goal.watchdog?.reason, "protocol_missing");
+});
+
+test("a semantic write before reminder acknowledgement keeps the reminder record", async () => {
+  const { service, goalId } = await fixture();
+  for (const event of [
+    runtimeEvent(goalId, 1, "turn.started", { turnId: "turn-1" }),
+    runtimeEvent(goalId, 2, "turn.settled", { turnId: "turn-1", at: at(2) }),
+  ]) await service.execute({ type: "agent.runtime.event", event });
+  await service.execute({
+    type: "agent.runtime.receipt",
+    goalId,
+    attemptId: "attempt_a",
+    turnId: "turn-1",
+    stage: "reminding",
+    at: at(12),
+  });
+  await service.execute({
+    type: "goal.progress",
+    goalId,
+    actor: "owner-a",
+    summary: "提醒送达确认前已补交真实结果。",
+    next: "等待验收。",
+  });
+  const acknowledged = await service.execute({
+    type: "agent.runtime.receipt",
+    goalId,
+    attemptId: "attempt_a",
+    turnId: "turn-1",
+    stage: "reminded",
+    at: at(13),
+  }) as { updated: boolean; goal: Goal };
+  assert.equal(acknowledged.updated, true);
+  assert.equal(acknowledged.goal.agentRuntime?.receipt?.status, "written");
+  assert.equal(acknowledged.goal.agentRuntime?.receipt?.remindedAt, at(13));
+  assert.equal(acknowledged.goal.activities.filter(activity =>
+    activity.kind === "session" &&
+    activity.text.includes("已发送一次结构化回执提醒")).length, 1);
+  assert.deepEqual(await service.execute({
+    type: "agent.runtime.receipt",
+    goalId,
+    attemptId: "attempt_a",
+    turnId: "turn-1",
+    stage: "reminded",
+    at: at(14),
+  }), { updated: false, reason: "already_reminded" });
 });
 
 test("new Hook turns, direct input and ending a goal cancel old receipt work", async () => {

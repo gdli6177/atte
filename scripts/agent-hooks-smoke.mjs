@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { WorkspaceService } from "../packages/core/src/index.ts";
+import { agentReceiptMarker, WorkspaceService } from "../packages/core/src/index.ts";
 
 const exec = promisify(execFile);
 const { version: appVersion } = JSON.parse(
@@ -56,12 +56,6 @@ await service.execute({
     // Installation must still report waiting-trust until an event arrives.
     owner: "codex --no-daemon --no-alt-screen --dangerously-bypass-hook-trust",
   },
-});
-await service.execute({
-  type: "workspace.autonomy.set",
-  acceptance: "human-review",
-  initialize: true,
-  actor: "你",
 });
 const environment = {
   ...process.env, HOME: home, CODEX_HOME: codexHome,
@@ -137,6 +131,11 @@ try {
     { timeout: 180_000, intervals: [500] }).toBe("written");
   assert.ok((await goal()).activities.some(item =>
     item.kind === "progress" && item.text.includes("真实 Codex")));
+  const remindedRuntime = (await goal()).agentRuntime;
+  assert.ok(remindedRuntime.lastPrompt.text.startsWith(
+    agentReceiptMarker(remindedRuntime.attempt.attemptId, remindedRuntime.receipt.turnId),
+  ));
+  assert.equal(remindedRuntime.receipt.reminderTurnId, remindedRuntime.currentTurnId);
   assert.equal((await goal()).attention, null);
   assert.equal((await goal()).status, "active");
   const attempt = (await goal()).agentRuntime.attempt.attemptId;
@@ -148,7 +147,7 @@ try {
   assert.equal((await readdir(join(workspace, ".atte/runtime/spool"))
     .catch(() => [])).filter(name => name.endsWith(".json")).length, 0);
   trace("semantic-write-verified");
-  await page.getByRole("button", { name: "全部目标", exact: true }).click();
+  await page.getByRole("button", { name: "全部事项", exact: true }).click();
   await page.getByText("真实 Codex Hook 验收", { exact: true }).click();
   try {
     await expect(page.locator(".terminal-panel")).toBeVisible({ timeout: 8_000 });
@@ -164,7 +163,7 @@ try {
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await herdr(["agent", "wait", ownerPane, "--timeout", "120000"], 130_000);
   await page.getByRole("button", { name: "隐藏终端", exact: true }).click();
-  await page.getByRole("button", { name: "全部目标", exact: true }).click();
+  await page.getByRole("button", { name: "全部事项", exact: true }).click();
   await expect(page.locator(".goal-row").filter({ hasText: "真实 Codex Hook 验收" })
     .getByText("本轮已回报", { exact: true })).toBeVisible({ timeout: 30_000 });
   await page.screenshot({ path: join(trial, "real-written-idle-list.png"), animations: "disabled" });
@@ -183,9 +182,11 @@ try {
   assert.ok((await goal()).agentRuntime.lastReply?.text.includes("CV_HOOK_OFFLINE_DONE"));
   // Measure the shipped CLI process, Socket and real persistent Broker together,
   // rather than measuring an in-process mock transport.
+  const benchmarkDraft = await service.execute({
+    type: "goal.intake", text: "Hook 传输性能夹具", handling: "later",
+  });
   const benchmark = await service.execute({
-    type: "goal.create",
-    input: { title: "Hook 传输性能夹具", projectId: "personal", mode: "manual" },
+    type: "goal.takeover", goalId: benchmarkDraft.id,
   });
   const benchmarkToken = randomBytes(32).toString("hex");
   const benchmarkAttempt = `attempt_perf_${Date.now()}`;
@@ -218,6 +219,11 @@ try {
   await expect(page.locator(".terminal-panel")).toBeVisible();
   const hookP95 = hookTimings.sort((a, b) => a - b)[Math.ceil(hookTimings.length * .95) - 1];
   const offlineHookMs = await invokeHook({ ATTE_HOOK_SOCKET: join(trial, "offline.sock") });
+  console.log(JSON.stringify({
+    step: "hook-latency", samples: hookTimings.length,
+    p50Ms: hookTimings[Math.floor(hookTimings.length / 2)],
+    p95Ms: hookP95, maxMs: hookTimings.at(-1), offlineHookMs,
+  }));
   assert.ok(hookP95 < 250, `packaged Hook p95 ${hookP95.toFixed(1)} ms`);
   assert.ok(offlineHookMs < 500, `packaged offline Hook ${offlineHookMs.toFixed(1)} ms`);
   await service.execute({ type: "goal.complete", goalId: benchmark.id, note: "性能夹具已验证" });
@@ -227,6 +233,7 @@ try {
     reminders: (await goal()).activities.filter(item => item.kind === "session" &&
       item.text.includes("已发送一次结构化回执提醒")).length,
     receipt: (await goal()).agentRuntime.receipt?.status,
+    reminderMarkerPreserved: true,
     offlineRecovered: true,
     hookP95Ms: hookP95, offlineHookMs,
   }, null, 2));

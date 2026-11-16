@@ -83,7 +83,7 @@ test("the latest raw message and its attachments remain visible without changing
     input: {
       title: "消息详情",
       projectId: "personal",
-      mode: "manual",
+      mode: "concierge",
       next: "按原计划继续",
     },
   }) as Goal;

@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { completeAutonomySetup } from "./lib/autonomy-setup.mjs";
+import { waitForWorkspace } from "./lib/autonomy-setup.mjs";
 const exec = promisify(execFile);
 const originalClipboard = await exec("/usr/bin/pbpaste").then(result => result.stdout).catch(() => undefined);
 async function writeSystemClipboard(value) {
@@ -47,19 +47,15 @@ const env = { ...process.env, ATTE_TEST_HOME: home, ATTE_TEST_USER_DATA: userDat
   ATTE_TEST_WORKSPACE: workspace, ATTE_HERDR_SESSION: session };
 let app, page;
 const errors = [];
-let autonomyInitialized = resume;
 const launch = async () => {
   app = await electron.launch({ executablePath, args: [], env, timeout: 60_000 });
   page = await app.firstWindow();
   page.on("pageerror", (error) => errors.push(error.message));
-  if (!autonomyInitialized) {
-    await completeAutonomySetup(page);
-    autonomyInitialized = true;
-  }
+  await waitForWorkspace(page);
   await expect.poll(async () => Boolean((await page.evaluate(() => window.atte.environment())).workspace)).toBe(true);
   if (process.env.ATTE_TRIAL_AGENT)
     await page.evaluate(agent => window.atte.command({ type: "agents.configure",
-      preferences: { concierge: agent, owner: agent, worker: agent } }), process.env.ATTE_TRIAL_AGENT);
+      preferences: { concierge: agent, owner: agent } }), process.env.ATTE_TRIAL_AGENT);
 };
 const state = async () => JSON.parse(await readFile(join(workspace, ".atte/state.json"), "utf8"));
 const captureAgents = async (label) => {

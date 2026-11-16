@@ -14,9 +14,7 @@ export interface RecoveryRequest {
   input: Record<string, unknown>;
 }
 interface Envelope extends RecoveryRequest { version: 1; token: string; id: string }
-/** Ephemeral, owner-only bridge. Only the desktop retains SwitchAuthority;
- * a CLI never receives an operation flag that can manufacture that authority.
- * File transport also works for Agents whose sandbox disallows Unix sockets. */
+/** Ephemeral, owner-only desktop bridge for sandboxed Agent calls. */
 export class SessionRecoveryChannel {
   readonly token = randomBytes(32).toString("hex");
   readonly directory: string;
@@ -63,7 +61,8 @@ export class SessionRecoveryChannel {
         if (!record(value) || value.version !== 1 || value.id !== id || typeof value.token !== "string" ||
           Buffer.byteLength(value.token) !== Buffer.byteLength(this.token) ||
           !timingSafeEqual(Buffer.from(value.token), Buffer.from(this.token)) ||
-          !["launch", "send"].includes(String(value.operation)) || !record(value.context) || !record(value.input))
+          !["launch", "send"].includes(String(value.operation)) || !record(value.context) || !record(value.input) ||
+          value.context.backend !== "herdr" || value.context.role !== "concierge")
           throw new Error("恢复请求未获授权。");
         response = { ok: true, result: await this.handle(value as unknown as Envelope) };
       } catch (error) {
@@ -77,9 +76,11 @@ export class SessionRecoveryChannel {
 
 export async function requestSessionRecovery(environment: NodeJS.ProcessEnv, request: RecoveryRequest,
   timeoutMs = 75_000): Promise<unknown> {
+  if (request.context.backend !== "herdr" || request.context.role !== "concierge")
+    throw new SessionError("backend_unsupported", "会话服务仅接受当前 Herdr 管家的请求。");
   const directory = environmentValue(environment, "RECOVERY_DIRECTORY"),
     token = environmentValue(environment, "RECOVERY_TOKEN");
-  if (!directory || !token) throw new SessionError("backend_switch_in_progress", "普通调用不能在交接期间启动或投递现场。");
+  if (!directory || !token) throw new SessionError("backend_unreachable", "普通调用不能访问私有桌面会话服务。");
   const info = await lstat(directory);
   if (!info.isDirectory() || info.isSymbolicLink() || info.mode & 0o077 ||
     process.getuid && info.uid !== process.getuid()) throw new Error("恢复通道目录不安全。");

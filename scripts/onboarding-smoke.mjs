@@ -1,13 +1,13 @@
 // Real packaged-app regression: Finder PATH, native picker boundary, official
 // Herdr download and a real interactive custom CLI (no model credentials).
 import { _electron as electron, expect } from "@playwright/test";
-import { access, mkdtemp, mkdir, writeFile, readFile, realpath, stat, rm } from "node:fs/promises";
+import { access, mkdtemp, mkdir, writeFile, readFile, readdir, realpath, stat, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import assert from "node:assert/strict";
-import { completeAutonomySetup } from "./lib/autonomy-setup.mjs";
+import { waitForWorkspace } from "./lib/autonomy-setup.mjs";
 const exec = promisify(execFile);
 // macOS AF_UNIX has a short socket path limit. Keep isolated HOME/session short.
 const home = await mkdtemp("/tmp/cv-onboarding-");
@@ -87,7 +87,7 @@ try {
   await picker(rootA);
   await page.getByRole("button", { name: "选择存储位置并开始" }).click();
   await page.getByText("已打开工作区：所有事项", { exact: true }).waitFor();
-  await completeAutonomySetup(page);
+  await waitForWorkspace(page);
   await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
   assert.equal((await page.evaluate(() => window.atte.environment())).workspace, await realpath(rootA));
   await expect.poll(async () => {
@@ -108,6 +108,7 @@ try {
   await page.getByRole("button", { name: "注意力", exact: true }).click();
   assert.equal(await page.getByRole("dialog").count(), 0, "attention overview is navigation, not a directory picker");
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page.getByRole("link", { name: "高级与维护", exact: true }).click();
   await page.getByText("让外部 Agent 会使用 Atte", { exact: true }).waitFor();
   await page.getByRole("button", { name: "安装 / 更新 Skills", exact: true }).click();
   await expect.poll(() => access(join(home, ".agents/skills/atte/SKILL.md"))
@@ -132,26 +133,21 @@ try {
   assert.equal(await page.getByRole("dialog").isVisible(), true);
   await picker(legacy);
   await page.getByRole("dialog").getByRole("button", { name: "选择其他工作区文件夹" }).click();
-  await expect.poll(async () =>
-    (await page.evaluate(() => window.atte.environment())).workspace
-  ).toBe(await realpath(legacy));
-  await completeAutonomySetup(page);
-  await page.getByText("旧版工作区已自动保护", { exact: true }).waitFor();
-  await page.screenshot({ path: join(home, "legacy-recovered-dark.png"), animations:"disabled" });
-  const recovered = await page.evaluate(() => window.atte.command({type:"snapshot"}));
-  assert.equal(recovered.recovery.reason, "unsupported-version");
-  assert.equal(JSON.parse(await readFile(join(legacy, ".atte/state.json"), "utf8")).version, 4);
-  assert.equal((await stat(recovered.recovery.archivedPath)).isDirectory(), true);
-  assert.equal(
-    JSON.parse(await readFile(join(recovered.recovery.archivedPath, "state.json"), "utf8")).version,
-    1,
-  );
-  await page.getByRole("button", { name: "浅色模式", exact: true }).click();
-  await page.screenshot({ path: join(home, "legacy-recovered-light.png"), animations:"disabled" });
-  await page.getByRole("button", { name: "深色模式", exact: true }).click();
-  await page.getByRole("button", { name: "关闭恢复提示", exact: true }).click();
-  await page.getByText("旧版数据继续保留在备份目录中。", { exact: true }).waitFor();
-  assert.equal(await page.getByText("旧版工作区已自动保护", { exact: true }).count(), 0);
+  const workspaceError = page.getByRole("dialog").getByRole("alert");
+  await workspaceError.waitFor();
+  await expect(workspaceError).toContainText("工作区状态版本 1 与当前版本不兼容");
+  assert.equal((await page.evaluate(() => window.atte.environment())).workspace, await realpath(rootA));
+  assert.equal(await page.getByRole("dialog").isVisible(), true);
+  const legacyStatePath = join(legacy, ".atte/state.json");
+  const legacyState = await readFile(legacyStatePath);
+  assert.deepEqual(legacyState, Buffer.from('{"version":1}'));
+  const legacyBackups = [
+    ...(await readdir(legacy)),
+    ...(await readdir(join(legacy, ".atte"))),
+  ].filter(name => name.startsWith(".atte.backup-") ||
+    /^state\.v\d+\.backup\.json$/.test(name));
+  assert.deepEqual(legacyBackups, []);
+  await page.getByRole("dialog").getByRole("button", { name: "关闭" }).click();
   await page.getByRole("button", { name: "设置", exact: true }).click();
   await page.getByRole("button", { name: "更换工作区", exact: true }).click();
   await picker(rootB);
@@ -159,7 +155,7 @@ try {
   await expect.poll(async () =>
     (await page.evaluate(() => window.atte.environment())).workspace
   ).toBe(await realpath(rootB));
-  await completeAutonomySetup(page);
+  await waitForWorkspace(page);
   await page.getByRole("button", { name: "设置", exact: true }).click();
   // This command exists only as a function in the isolated user's .zshrc.
   // Finder and Atte's directory scan cannot resolve it; the real Herdr
@@ -168,9 +164,17 @@ try {
   await page.getByLabel("管家启动命令").fill(command);
   await page.getByRole("button", { name: "保存偏好", exact: true }).click();
   await page.getByText("Agent 偏好已保存，将用于新启动的会话。", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "准备管家", exact: true }).click();
+  const sceneSettings = page.locator(".ui-settings-card").filter({
+    has: page.getByRole("heading", { name: "工作现场", exact: true }),
+  });
+  await sceneSettings.getByRole("button", { name: "内嵌轻现场", exact: true }).click();
+  await sceneSettings.getByRole("button", { name: "保存工作现场", exact: true }).click();
+  await expect(sceneSettings.getByRole("button", { name: "保存工作现场", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "找管家", exact: true }).click();
   trace("custom-cli-concierge");
   await expect.poll(async () => (await page.evaluate(() => window.atte.command({type:"snapshot"}))).concierge.status, {timeout:90_000}).toBe("ready");
+  await page.getByRole("region", { name: "Herdr 工作现场" }).waitFor();
+  await page.getByRole("button", { name: "隐藏终端", exact: true }).click();
   let state = await page.evaluate(() => window.atte.command({type:"snapshot"}));
   assert.equal(state.concierge.scene.backend, "herdr");
   const firstScene = state.concierge.scene;
@@ -217,7 +221,7 @@ try {
     const panes = JSON.parse((await exec(installedExecutable, [
       "--session", session, "pane", "list", "--workspace", firstReference.workspaceId,
     ], { env: testEnvironment })).stdout).result.panes;
-    newGoalPaneId = panes.find(pane => pane.label === "Atte 新目标")?.pane_id;
+    newGoalPaneId = panes.find(pane => pane.label === "Atte 新事项")?.pane_id;
     return newGoalPaneId ?? null;
   }, { timeout: 45_000 }).not.toBeNull();
   await new Promise(resolve => setTimeout(resolve, 1_000));
@@ -238,9 +242,9 @@ try {
     "--session", session, "pane", "split", "--pane", firstReference.paneId,
     "--direction", "down", "--cwd", rootB, "--no-focus",
   ], { env: testEnvironment, timeout: 10_000 })).stdout).result.pane.pane_id;
-  const eventGoal = await page.evaluate(() => window.atte.command({ type:"goal.create", input:{
-    title:"Herdr 插件事件验收", projectId:"personal", mode:"manual",
-  }}));
+  const eventGoal = await page.evaluate(() => window.atte.command({
+    type: "goal.intake", text: "Herdr 插件事件验收", handling: "concierge",
+  }));
   await page.evaluate(({ goalId, reference }) => window.atte.command({
     type:"session.set", goalId, reference,
   }), {
@@ -277,7 +281,7 @@ try {
   // Onboarding installs tools, launches a CLI and performs many real IPC writes;
   // CI hosts occasionally need longer than the Playwright interaction default.
   await page.getByRole("button", { name: "注意力", exact: true }).click();
-  await page.locator(".top-actions").getByRole("button", { name:"新目标" }).click();
+  await page.locator(".top-actions").getByRole("button", { name:"新事项" }).click();
   await page.getByLabel("要交给管家的事情").fill(longGoalRequest);
   await page.getByRole("button", { name:"确认交给管家", exact:true }).click();
   await expect.poll(async () => {
@@ -318,7 +322,7 @@ try {
   }}));
   await page.evaluate(id => window.atte.command({ type:"goal.wait", goalId:id, reason:"等 YR 审批", owner:"YR", remindAt:"2030-01-01T00:00:00Z" }), waiting.id);
   trace("waiting-reply");
-  await page.getByRole("button", { name:"全部目标", exact:true }).click();
+  await page.getByRole("button", { name:"全部事项", exact:true }).click();
   await page.getByText("等待审批后继续", { exact:true }).click();
   await page.getByRole("button", { name:"告诉管家", exact:true }).click();
   await page.getByLabel("发给管家的消息", { exact:true }).fill("YR 已批准，按原方案继续开发");
@@ -400,7 +404,7 @@ try {
   assert.equal(externalGoal.waitingFor, undefined);
   assert.equal(externalGoal.remindAt, undefined);
   await page.getByRole("button", { name:"设置", exact:true }).click();
-  await page.getByRole("button", { name: "打开内嵌轻现场", exact: true }).click();
+  await page.getByRole("button", { name: "找管家", exact: true }).click();
   await page.getByRole("region", { name: "Herdr 工作现场" }).waitFor();
   const panel = page.getByRole("region", { name: "Herdr 工作现场" });
   const beforeResize = await panel.boundingBox();
@@ -477,9 +481,12 @@ try {
   await expect.poll(() => readFile(log, "utf8"), {timeout:30_000}).toContain(recoveredGoal.id);
   // The old reference must still reject messages even though its pane now holds
   // a manual process.
-  const exitedGoal = await restored.evaluate(() => window.atte.command({type:"goal.create", input:{
-    title:"退出后的任务",projectId:"personal",mode:"manual",
-  }}));
+  const exitedGoal = await restored.evaluate(async () => {
+    const draft = await window.atte.command({
+      type:"goal.intake", text:"退出后的任务", handling:"later",
+    });
+    return window.atte.command({ type:"goal.takeover", goalId: draft.id });
+  });
   const { HerdrClient } = await import("../apps/desktop/electron/herdr.ts");
   const runner = { async run(args) {
     return (await exec(installedExecutable, args, {env:{...testEnvironment, HERDR_SESSION:session},timeout:10_000})).stdout;
@@ -491,7 +498,8 @@ try {
     "bundled Herdr plugin auto-linked", "real Herdr plugin pane renders Atte attention",
     "real Herdr plugin action creates a one-line goal",
     "real Herdr pane close event reaches the matching goal",
-    "same directory feedback", "cancel preserves state", "legacy workspace is archived and automatically recovered",
+    "same directory feedback", "cancel preserves state", "legacy v1 workspace is rejected without migration or backup",
+    "legacy switch failure preserves the current workspace and can be retried",
     "workspace switching",
     "packaged Atte skill installs into detected agent directories", "system clipboard round trip",
     "arbitrary CLI saves and starts", "native argv preserved", "reuse custom concierge",

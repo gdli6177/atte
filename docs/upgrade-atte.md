@@ -1,79 +1,156 @@
-# 从 Crewvane 升级到 Atte
+# Atte 升级、迁移与回滚
 
-本文说明当前代码在旧版升级时的实际行为。GitHub 仓库重命名由维护者操作；代码中的
-下载、发布和仓库引用已经改为 `github.com/gdli6177/atte`。
+本文说明 Atte 0.14.0 的工作区升级、Hook 更新和回滚边界，并保留旧 Crewvane 标识
+迁移的历史说明。当前产品能力见[使用说明](atte.md)。
 
-## 标识变化
+## 升级前
+
+1. 关闭 Atte。
+2. 停止所有正在通过 Atte CLI 写入工作区的 Agent，尤其是旧版管家和负责人。
+3. 最好在旧版仍可运行时复制完整 `.atte/` 目录，作为独立升级备份。
+4. 确认磁盘空间足够保存原快照、备份快照和迁移临时文件。
+
+升级会保留旧目录，不会删除原工作区、附件或决定记录。不要只备份
+`state.json` 而忽略附件、事件和决定账本。
+
+## 0.14.0：工作区 v5
+
+### 自动升级步骤
+
+旧版有效快照按以下路径升级：
+
+| 原版本 | 备份文件 | 目标版本 |
+| --- | --- | --- |
+| v2 | `.atte/state.v2.backup.json` | v5 |
+| v3 | `.atte/state.v3.backup.json` | v5 |
+| v4 | `.atte/state.v4.backup.json` | v5 |
+
+首次打开旧工作区时，Atte：
+
+1. 在 `.atte/` 中创建原快照的普通文件备份；
+2. 同步备份内容；
+3. 用原始字节计算 SHA-256 并校验备份；
+4. 原子发布备份，再校验一次；
+5. 在内存中迁移并校验 v5；
+6. 通过同目录临时文件和原子替换写回 `state.json`。
+
+有效 v5 再次读取时不会重复备份或改写快照。
+
+### 备份失败时
+
+以下情况会停止升级并保留原 `state.json`：
+
+- 已有 `state.vN.backup.json` 与当前原快照字节不一致；
+- 备份路径是符号链接、目录或不可读文件；
+- 写入、同步或 SHA-256 校验失败；
+- 迁移后的状态不满足 v5 结构。
+
+Atte 不会覆盖不匹配的旧备份，也不会自动归档或创建空工作区来“修复”问题。保留原
+`.atte/`，检查磁盘空间、权限和备份文件，修复后重试。若无法安全恢复，请联系维护者，
+不要删除状态或附件。
+
+### v4 → v5 数据映射
+
+| 旧数据 | 0.14.0 处理 |
+| --- | --- |
+| 事项、消息、活动、附件、顺序与时间 | 保留 |
+| 决定、审批记录、项目上线策略 | 保留 |
+| 已有交付 | 保留原交付与检查，进入 `review` 人工验收 |
+| 未完成的续跑、独立复核、探索/发布实验事项 | `executionHold=migration-confirmation`，暂停执行并等待人确认 |
+| 旧 Orca 事项 | 保留原状态、消息和现场引用；标记只读历史 |
+| 工作区自主设置、Bot、工人偏好、项目验收授权 | 移入 `history`，不能重新启用 |
+| 管家 / 负责人命令 | 只保留 `concierge` 与 `owner`；负责人留空继承管家 |
+| 无进展阈值 | 有效的旧值保留，否则使用 30 分钟默认值 |
+
+迁移会复制旧实验字段到 `goal.history`，但不会把它们恢复成可执行配置。旧交付不会被
+当作已验收，旧 Orca 事项不会获得新的负责人、派发、巡检、恢复或自动现场操作。
+
+### 哪些快照不会自动迁移
+
+低 v2、未知版本、损坏 JSON、缺字段或结构无效的快照保留原文件并停止加载。Atte
+不会自动把整个目录改名为 `.atte.backup-*`，也不会重建空工作区。请先保留现场并
+检查原因。
+
+## OMP Hook revision 3
+
+0.14.0 把受管 OMP extension 升级到 revision 3，修复子进程提前退出时
+`child.stdin` 没有错误监听而产生未处理 `EPIPE`、进而杀死 OMP 会话的问题。
+
+revision 3 的行为：
+
+- 在写 stdin 之前安装 child 与流的错误处理器；
+- 不安装全局 `EPIPE` 吞错；
+- Hook 输入最多 512,000 字节，2 秒截止；
+- 超限时丢弃载荷，但继续排空输入到 EOF；
+- `atte hook ingest` 始终 fail-open，退出码为 0；
+- 失败通过 `atte doctor --json` 中的 `hookDiagnostics` 查看；
+- 诊断只保存固定分类计数和最后失败时间，不保存 payload、token、工具输出或终端历史。
+
+受管 extension 使用规范文件 `~/.omp/agent/extensions/atte.js`。如果旧安装留下了由
+Atte 标记管理的 `crewvane.js`，升级会安全收敛该旧文件；用户同名文件、符号链接、
+其他 OMP extension 和已停用配置不会被删除或覆盖。安装器可重复运行，revision 3
+不会因重启反复改写。
+
+已经运行的 OMP 进程可能继续持有旧 extension 代码。升级后请关闭并重启相应 OMP
+会话。正在运行的进程不会因为 Atte 写入了新文件就自动热更新。
+
+重启后如果仍看到 Hook 异常，可运行：
+
+```sh
+atte doctor --json
+```
+
+旧会话已经发生但未由 revision 3 记录的崩溃不会被追溯补写；diagnostics 只反映新的
+受管失败。
+
+## 回滚
+
+1. 关闭 Atte、所有 Atte CLI 和所有正在写入该工作区的 Agent。
+2. 保存当前 `.atte/`，不要覆盖或删除 v5 快照、附件、事件和备份。
+3. 优先恢复升级前复制的完整 `.atte/` 目录。
+4. 如果只有 v4 状态备份，退出应用后用已验证的 `.atte/state.v4.backup.json`
+   替换 `.atte/state.json`，并保留当前 v5 文件另存供排查。
+5. 重新安装与 v4 兼容的旧版应用。
+
+不要用旧版直接打开 v5 快照。旧版可能忽略新字段或写入不兼容数据。升级后产生的
+新事项、消息、交付和决定不会被状态文件回滚，除非恢复了完整的升级前目录；回滚前
+应明确接受这部分丢失。
+
+如果迁移在备份或校验阶段停止，原 `state.json` 尚未替换，不需要回滚状态，只需修复
+迁移阻塞后重试。
+
+## 旧 Crewvane 标识迁移
+
+以下内容是 Atte 0.12 前后的历史兼容背景，不是 0.14 的当前功能入口：
 
 | 项目 | 旧标识 | 当前标识 |
 | --- | --- | --- |
 | npm workspace 包 | `@crewvane/*` | `@atte/*` |
-| CLI | `crewvane` | `atte`，没有 `crewvane` 命令别名 |
+| CLI | `crewvane` | `atte`，不提供 `crewvane` 命令别名 |
 | 用户安装目录 | `~/.crewvane` | `~/.atte` |
 | 工作区状态与锁 | `.crewvane` / `.crewvane-lock` | `.atte` / `.atte-lock` |
 | macOS 应用数据 | `appData/Crewvane` | `appData/Atte` |
 | 新写入环境变量 | `CREWVANE_*` | `ATTE_*` |
 | IPC 与插件 | `crewvane:*` / `dev.crewvane` | `atte:*` / `dev.atte` |
-| Bot envelope | `crewvane.bot.v1` | `atte.bot.v1` |
-| 新能力包清单 | `minimumCrewvane` | `minimumAtte` |
+| 旧 Bot envelope | `crewvane.bot.v1` | 历史字段；0.14 不提供 Bot 能力 |
+| 旧能力包清单字段 | `minimumCrewvane` | 历史字段；0.14 不提供本地能力包 |
 
-所有环境变量优先读取 `ATTE_*`，只有未设置新名时才回退读取 `CREWVANE_*`。为让旧版
-Agent、Hook 和启动器继续收到同一份会话身份，Atte 启动的子 Agent 或生成的 launcher
-仍会镜像一部分旧变量名；这是过渡期的兼容输出，不是新的配置入口，也不复制模型密钥
-或登录凭据。新客户端读取 `ATTE_*` 优先、旧名回退，旧客户端继续只读旧名；两者共享
-同一份已迁移状态，不会同时创建两份业务状态。
+代码仍优先读取 `ATTE_*`，在未设置时回退读取部分 `CREWVANE_*`，用于旧 Hook、
+旧启动器和已迁移会话的身份兼容。这是读取兼容，不是新增配置入口。
 
-安装包、应用与 CLI 文件名都使用 Atte。由旧应用创建的 MCP / Hook 配置仍然读取
-`CREWVANE_*` 和 `crewvane.bot.v1`，新的配置写入 `ATTE_*` / `atte.bot.v1`；
-但 `crewvane` 不再是可执行命令，旧外部配置若直接调用它，需要改用 `atte` 或在
-设置中重新安装 CLI、Hooks 和 Skills。应用不会改写不受它管理的 MCP 配置。
+只有 `.crewvane` 的旧工作区采用复制、递归文件清单和 SHA-256 校验后迁移到
+`.atte`，旧目录保留。失败时继续使用旧目录并删除未完成副本。旧 Herdr 插件
+`dev.crewvane` 不再写入事件；新版只注册 `dev.atte`。
 
-## 一次性迁移
+0.14 不恢复旧 Bot 协议、本地能力包、脚本或旧验收授权。旧记录可以读取，但相关命令
+会返回 `feature_removed`，退出码为 2。
 
-工作区第一次被新 Core 打开时，若只有 `.crewvane`，会在同一工作区锁内复制到临时
-目录，递归核对普通文件清单与每个文件的 SHA-256，然后写入 `.atte-migration.json`
-并原子改名成 `.atte`。快照中的附件路径和 Bot 协议会更新；事件日志保留原字节。
-旧 `.crewvane` 完整保留，绝不自动删除。迁移拒绝跟随符号链接，也不复制特殊文件。
+## 验证覆盖
 
-迁移失败时删除未完成的临时副本，继续使用旧 `.crewvane`，不会只留下错误页面。
-此时旧附件路径也保持可用。下次启动会在新目录仍不存在时重试；用户可以根据诊断
-修复源目录后重试。工作区锁兼容旧名称，但不会删除其他进程正在持有的锁。
-普通目录锁只写 `.atte-lock`；只有工作区迁移/状态存储这一条兼容路径，在旧锁仍
-存在或只有 `.crewvane` 状态目录时才同时取得 `.crewvane-lock`，避免 Agent 配置
-目录、序列目录等普通锁继续产生旧名。
-
-`~/.crewvane` 与 `appData/Crewvane` 同样采用复制、校验、写标记、保留旧目录的
-策略。应用数据迁移在 Electron 读取工作区、Hook、Webhook 或 Session 配置之前完成；
-失败继续使用旧目录。独立 `install.sh` 也执行同样的目录复制校验，失败时使用旧
-安装目录继续升级，不将未完成的目录标为当前版本。
-
-旧主题的 `crewvane.theme` 与侧栏键会读取一次并写回 `atte.*`。旧的受管 Skill、
-Hook 所有权标记和 `minimumCrewvane` 清单仍受支持；旧 `crewvane` shim 只有确认
-属于旧 Atte/Crewvane 安装器后才会移除，任意同名用户文件不会被删除。
-旧 Herdr 插件记录 `dev.crewvane` 不再被新版使用，也不再写入事件；新版只注册
-`dev.atte`。如果 Herdr 中仍显示旧插件条目，可以手动移除，不影响目标与工作区数据。
-
-## 回滚
-
-1. 关闭 Atte 与所有正在写工作区的 Agent / CLI，避免旧版和新版本同时写入。
-2. 保留两个目录作为备份；若要回到旧版本，将当前 `.atte` 改名保存，例如
-   `.atte.after-upgrade`，再把原 `.crewvane` 保持或恢复为该名称。不要删除旧目录。
-3. macOS 应用数据同理：退出应用后保存 `appData/Atte`，让旧版继续读取原
-   `appData/Crewvane`。独立安装目录保存 `~/.atte`，旧 `~/.crewvane` 仍在。
-4. 用旧版安装包重新安装旧 CLI 与 Skills。当前 Atte 不提供 `crewvane` 别名，
-   不能靠继续调用旧命令完成回滚。
-5. 若已安装新的独立 CLI shim，回滚旧安装器前先移除 `~/.local/bin/atte`；旧版
-   `~/.local/bin/crewvane` 只应由旧安装器重新创建。
-
-回滚针对的是文件目录；在 Atte 中已经新增或更新的业务状态，旧版本不一定支持。
-因此迁移期间产生的 `.atte` 必须保留供恢复与排查，不能用旧目录覆盖后声称新
-写入也已回滚。若迁移失败后一直使用旧目录，则无需执行目录回滚。
-
-## 验证
-
-`packages/core/test/state-migration.test.ts` 覆盖复制校验、旧目录保留、事件原字节、
-旧附件、旧清单/协议字段与失败回退；`compatibility.test.ts` 覆盖新环境变量优先和
-嵌套字段改写；`storage-lock.test.ts` 覆盖新旧锁所有权、普通锁不写旧名及跨工作区
-重入。Bot、Hook 和旧能力包清单各有真实调用回归；`legacy-cli.test.ts` 验证只删除
-受管旧 shim；Skill 安装器测试验证只迁移受管旧 Skill。升级报告记录本轮实际验证及
-受限项目，不以静态检查代替安装验收。
+- `packages/core/test/workspace-v5.test.ts`：v4 → v5、v2/v3 迁移、备份冲突与失败
+  停止、幂等读取、旧交付/实验事项/Orca 只读映射。
+- `cli/test/hook-input.test.ts` 与 `cli/test/hook-ingest.test.ts`：超限、超时、
+  排空、正常投递、spool 与 fail-open。
+- `apps/desktop/test/agent-hook-manager.test.ts`：revision 3、提前退出、部分读取、
+  spawn 失败与受管 extension 收敛。
+- `pnpm test` 与 `./scripts/workspace-verify full`：仓库级回归。

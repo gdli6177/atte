@@ -51,11 +51,6 @@ try {
   const bundledSkills = join(stage, "atte-skills");
   await mkdir(bundledSkills, { recursive: true });
   await cp(join(here, "../../skills/atte"), join(bundledSkills, "atte"), { recursive: true });
-  await cp(
-    join(here, "../../skills/atte-local-pack-author"),
-    join(bundledSkills, "atte-local-pack-author"),
-    { recursive: true },
-  );
   const cliNode = join(stage, "cli-node");
   await cp(process.execPath, cliNode);
   const herdrBinary = await prepareHerdr();

@@ -1,194 +1,74 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  ArrowRight,
-  ArrowUpRight,
-  Bell,
-  BookOpen,
-  Bot,
-  Check,
-  ChevronRight,
-  CircleAlert,
-  Clock3,
-  Folder,
-  FolderPlus,
-  HardDrive,
-  Inbox,
-  LayoutList,
-  Moon,
-  NotebookPen,
-  Copy,
-  Download,
-  PackageOpen,
-  Plus,
-  RefreshCw,
-  Settings2,
-  Sparkles,
-  SquareTerminal,
-  Sun,
-  Trash2,
-  Wrench,
-  X,
-  Zap,
+  ArrowRight, ArrowUpRight, Check, ChevronRight, CircleAlert, Folder,
+  Inbox, LayoutList, Moon, Plus, Settings2, Sparkles, SquareTerminal, Sun, X,
 } from "lucide-react";
-import {
-  attentionGoals,
-  attentionKind,
-  initialState,
-  newId,
-} from "../../../packages/core/src/model.js";
-import { taskPoolGoals } from "../../../packages/core/src/task-pool.js";
+import { initialState } from "../../../packages/core/src/model.js";
+import { isReadOnlyGoal } from "../../../packages/core/src/retirement.js";
 import type {
-  AtteCommand,
-  AcceptanceMode,
-  AgentPreferences,
-  Goal,
-  GoalAttachment,
-  IntakeHandling,
-  LiveState,
-  Project,
-  ReleaseOnMerge,
-  ShipPolicy,
-  SkillPackView,
-  WorkspaceState,
+  AtteCommand, AgentPreferences, Goal, LiveState, ShipPolicy, WorkspaceState,
 } from "../../../packages/core/src/types.js";
-import { api, type BackendControlStatus } from "./api.js";
+import { api } from "./api.js";
 import { migratePreference } from "./storage-compat.js";
 type HerdrEnvironmentStatus = Awaited<ReturnType<typeof api.herdrStatus>>;
 import { GoalIntakeForm } from "./features/intake/GoalIntakeForm.js";
-import { AppearanceSettings } from "./features/settings/AppearanceSettings.js";
-import { OrcaInstallationCard } from "./features/settings/OrcaInstallationCard.js";
-import { BackendSelectionCard } from "./features/settings/BackendSelectionCard.js";
-import { TaskPool } from "./features/tasks/TaskPool.js";
+import { Settings, type SettingsAction } from "./features/settings/Settings.js";
 import { TaskDetail } from "./features/tasks/TaskDetail.js";
 import { useReminderClock } from "./features/tasks/useReminderClock.js";
 import { GoalDetail } from "./features/goals/GoalDetail.js";
 import { GoalAttentionCard } from "./features/goals/GoalAttentionCard.js";
-import { deleteFinishedGoals } from "./features/goals/batchGoalDeletion.js";
-import { goalEntryDestination, hasGoalScene } from "./features/goals/goalEntry.js";
-import { goalProgressLabel, presentSceneContext, sceneSyncPresentation } from "./features/goals/goalPresentation.js";
+import { AttentionHome } from "./features/goals/AttentionHome.js";
+import { GoalList } from "./features/goals/GoalList.js";
+import { attentionOverview } from "./features/goals/attentionOverview.js";
+import { goalEntryDestination } from "./features/goals/goalEntry.js";
+import { presentSceneContext } from "./features/goals/goalPresentation.js";
 import type { GoalDetailService } from "./features/goals/goalService.js";
 import {
-  Button,
-  BrandMark,
-  Checkbox,
-  ChoiceGroup,
-  EmptyState,
-  Field,
-  IconButton,
-  LoadingState,
-  Modal,
-  SectionHeading,
-  Select,
-  SettingsGroup,
-  SettingsSection,
-  StatusPill,
-  TextArea,
-  TextInput,
-  Toggle,
+  Button, BrandMark, Checkbox, Field, IconButton, Modal, TextArea, TextInput, Toggle,
 } from "./ui/index.js";
-import type { BadgeTone } from "./ui/index.js";
 import type { WebhookSettings } from "../electron/webhook-notifications.js";
-import type {
-  AgentHookAdapterStatus,
-  ManagedAdapterId,
-} from "../electron/agent-hook-manager.js";
+import type { AgentHookAdapterStatus } from "../electron/agent-hook-manager.js";
 import type { CoordinatorInboxStatus } from "../electron/coordinator-inbox.js";
 import "./style.css";
-const HerdrTerminal = lazy(() => import("./terminal.js").then((module) => ({ default: module.HerdrTerminal })));
-const pages = {
-  home: "注意力",
-  tasks: "待办池",
-  goals: "全部目标",
-  settings: "设置",
-} as const;
+
+const HerdrTerminal = lazy(() => import("./terminal.js").then(module => ({ default: module.HerdrTerminal })));
+const pages = { home: "注意力", items: "全部事项", settings: "设置" } as const;
 const statusLabel = {
-  backlog: "暂存",
-  active: "跟进中",
-  waiting: "等待外部",
-  review: "待验收",
-  completed: "已完成",
-  dropped: "已放弃",
+  backlog: "暂存", active: "跟进中", waiting: "等待外部", review: "待验收",
+  completed: "已完成", dropped: "已放弃",
 };
 const goalStatusOptions = Object.entries(statusLabel) as [Goal["status"], string][];
-const goalStatusTone: Record<Goal["status"], BadgeTone> = {
-  backlog: "neutral",
-  active: "mint",
-  waiting: "warm",
-  review: "accent",
-  completed: "neutral",
-  dropped: "neutral",
-};
-function goalRowTone(item: Goal): BadgeTone {
-  const kind = attentionKind(item);
-  if (kind === "decision") return "accent";
-  if (kind === "review") return "mint";
-  if (kind === "follow_up") return "warm";
-  if (kind === "intervention") return "danger";
-  if (item.recovery || item.watchdog?.contactedAt) return "warm";
-  return goalStatusTone[item.status];
-}
-const attentionLabel = {
-  decision: "需要你决定",
-  review: "等待你验收",
-  follow_up: "到点该跟进",
-  intervention: "会话需要介入",
-};
 const conciergeLiveLabel: Record<LiveState, string> = {
-  working: "管家处理中",
-  idle: "管家在线",
-  done: "管家已完成回合",
-  blocked: "管家等待处理",
-  unknown: "管家状态未知",
+  working: "管家处理中", idle: "管家在线", done: "管家已完成回合",
+  blocked: "管家等待处理", unknown: "管家状态未知",
 };
-const time = (value?: string) =>
-  value
-    ? new Intl.DateTimeFormat("zh-CN", {
-        month: "long",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(new Date(value))
-    : "";
+
 function App() {
-  const [state, setState] = useState<WorkspaceState>(initialState),
-    [workspace, setWorkspace] = useState<string>(),
-    [version, setVersion] = useState(""),
-    [page, setPage] = useState<keyof typeof pages>("home");
-  const [theme, setTheme] = useState<string>(
-      migratePreference(localStorage, "theme") === "light" ? "light" : "dark",
-    ),
-    [collapsed, setCollapsed] = useState(() =>
-      migratePreference(localStorage, "sidebar-collapsed") === "true");
-  const [projectId, setProjectId] = useState(""),
-    [query, setQuery] = useState(""),
-    [filter, setFilter] = useState("all");
-  const [modal, setModal] = useState<
-      "new" | "project" | "attention" | "goal" | "task" | "edit" | "delivery"
-      | "workspace" | "webhook" | ""
-    >(""),
-    [goalId, setGoalId] = useState("");
-  const [intakeHandling, setIntakeHandling] = useState<IntakeHandling>("concierge");
-  const [taskSection, setTaskSection] = useState<"later" | "self">("later");
-  const [batchMode, setBatchMode] = useState(false);
-  const [batchSelected, setBatchSelected] = useState<string[]>([]);
-  const [batchDeleting, setBatchDeleting] = useState(false);
-  const [error, setError] = useState(""),
-    [toast, setToast] = useState(""),
-    [busy, setBusy] = useState(false),
-    [pickingWorkspace, setPickingWorkspace] = useState(false),
-    [herdr, setHerdr] = useState<HerdrEnvironmentStatus>(),
-    [cli, setCli] = useState<any>(),
-    [skills, setSkills] = useState<any>(),
-    [agentHooks, setAgentHooks] = useState<AgentHookAdapterStatus[]>([]),
-    [coordinatorQueue, setCoordinatorQueue] = useState<CoordinatorInboxStatus>(),
-    [backendStatus, setBackendStatus] = useState<BackendControlStatus>(),
-    [webhook, setWebhook] = useState<WebhookSettings>({
-      enabled: false,
-      configured: false,
-      tokenConfigured: false,
-      statuses: goalStatusOptions.map(([value]) => value),
-    });
+  const [state, setState] = useState<WorkspaceState>(initialState);
+  const [workspace, setWorkspace] = useState<string>();
+  const [version, setVersion] = useState("");
+  const [page, setPage] = useState<keyof typeof pages>("home");
+  const [theme, setTheme] = useState<string>(migratePreference(localStorage, "theme") === "light" ? "light" : "dark");
+  const [collapsed, setCollapsed] = useState(() => migratePreference(localStorage, "sidebar-collapsed") === "true");
+  const [projectId, setProjectId] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [modal, setModal] = useState<"new" | "project" | "attention" | "goal" | "task" | "edit" | "delivery" | "workspace" | "webhook" | "">("");
+  const [goalId, setGoalId] = useState("");
+  const [intakeLater, setIntakeLater] = useState(false);
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [pickingWorkspace, setPickingWorkspace] = useState(false);
+  const [herdr, setHerdr] = useState<HerdrEnvironmentStatus>();
+  const [cli, setCli] = useState<Awaited<ReturnType<typeof api.cliStatus>>>();
+  const [skills, setSkills] = useState<Awaited<ReturnType<typeof api.skillsStatus>>>();
+  const [agentHooks, setAgentHooks] = useState<AgentHookAdapterStatus[]>([]);
+  const [coordinatorQueue, setCoordinatorQueue] = useState<CoordinatorInboxStatus>();
+  const [webhook, setWebhook] = useState<WebhookSettings>({
+    enabled: false, configured: false, tokenConfigured: false,
+    statuses: goalStatusOptions.map(([value]) => value),
+  });
   const [agentOptions, setAgentOptions] = useState<{ kind: string; installed: boolean }[]>([]);
   const [terminal, setTerminal] = useState<{ session: string; title: string; goalId?: string; visible: boolean }>();
   const stateRef = useRef(state);
@@ -211,47 +91,24 @@ function App() {
       setState(pending.state);
     });
   }
-  const goal = state.goals.find((item) => item.id === goalId),
-    project = state.projects.find((item) => item.id === projectId),
-    hasConciergeReference = Boolean(state.concierge.tabId || state.concierge.agent),
-    conciergeAvailable = state.concierge.status === "ready" && state.concierge.live?.reachable !== false,
-    conciergeLive = state.concierge.status === "ready" ? state.concierge.live?.state : undefined;
-  const activeCoordinatorAlerts = (coordinatorQueue?.alerts ?? []).filter(alert =>
-    state.goals.some(goal => goal.id === alert.goalId &&
-      !["completed", "dropped"].includes(goal.status)));
-  const coordinatorFailedCount = activeCoordinatorAlerts.filter(alert =>
-    alert.status === "failed").length;
-  const coordinatorUnconfirmedCount = activeCoordinatorAlerts.filter(alert =>
-    alert.status === "unconfirmed").length;
-  const conciergeQueueAlert = coordinatorFailedCount + coordinatorUnconfirmedCount;
+  const goal = state.goals.find(item => item.id === goalId);
+  const hasConciergeReference = Boolean(state.concierge.tabId || state.concierge.agent);
+  const conciergeAvailable = state.concierge.status === "ready" && state.concierge.live?.reachable !== false;
+  const conciergeLive = state.concierge.status === "ready" ? state.concierge.live?.state : undefined;
+  const activeAlerts = (coordinatorQueue?.alerts ?? []).filter(alert =>
+    state.goals.some(item => item.id === alert.goalId && !["completed", "dropped"].includes(item.status)));
+  const failedAlerts = activeAlerts.filter(alert => alert.status === "failed").length;
+  const unconfirmedAlerts = activeAlerts.filter(alert => alert.status === "unconfirmed").length;
+  const conciergeQueueAlert = failedAlerts + unconfirmedAlerts;
   const conciergeStatus = state.concierge.status === "ready"
     ? coordinatorQueue?.processing
       ? `管家处理中${coordinatorQueue.queued ? ` · ${coordinatorQueue.queued} 件排队` : ""}`
-      : coordinatorQueue?.queued
-        ? `管家在线 · ${coordinatorQueue.queued} 件排队`
-        : coordinatorFailedCount
-          ? `管家在线 · ${coordinatorFailedCount} 件待重试`
-          : coordinatorUnconfirmedCount
-            ? `管家在线 · ${coordinatorUnconfirmedCount} 件待核对`
+      : coordinatorQueue?.queued ? `管家在线 · ${coordinatorQueue.queued} 件排队`
+        : failedAlerts ? `管家在线 · ${failedAlerts} 件待重试`
+          : unconfirmedAlerts ? `管家在线 · ${unconfirmedAlerts} 件待核对`
             : conciergeLive ? conciergeLiveLabel[conciergeLive] : "管家在线"
     : state.concierge.status === "error" ? "管家需要恢复" : "管家已离线";
-  const attention = attentionGoals(state.goals),
-    taskPoolCount = taskPoolGoals(state.goals, "later").length + taskPoolGoals(state.goals, "self").length,
-    waiting = state.goals.filter(
-      (item) => item.status === "waiting" && !attention.includes(item),
-    );
-  const active = state.goals.filter((item) => item.status === "active" && item.mode === "concierge"),
-    selectedGoals = state.goals.filter(
-      (item) =>
-        (!projectId || item.projectId === projectId) &&
-        (filter === "all" ||
-          (filter === "attention"
-            ? attention.includes(item)
-            : item.status === filter)) &&
-        `${item.title} ${item.next}`
-          .toLowerCase()
-          .includes(query.toLowerCase()),
-    );
+  const { attention } = attentionOverview(state.goals);
   const sceneGoal = terminal?.goalId ? state.goals.find(item => item.id === terminal.goalId) : undefined;
   const sceneContext = sceneGoal ? presentSceneContext(sceneGoal, state) : undefined;
   useEffect(() => {
@@ -260,19 +117,15 @@ function App() {
   }, [theme]);
   useEffect(() => { localStorage.setItem("atte.sidebar-collapsed", String(collapsed)); }, [collapsed]);
   useEffect(() => {
-    api
-      .environment()
-      .then((env) => {
-        setWorkspace(env.workspace);
-        setVersion(env.version);
-        void refreshBackendStatus().catch(showError);
-        if (env.workspace) {
-          void api.coordinatorStatus().then(setCoordinatorQueue).catch(() => {});
-          return api.command({ type: "snapshot" }).then(applyState);
-        }
-      })
-      .catch(showError);
-    const unsubscribe = api.subscribe((event) => {
+    api.environment().then(async env => {
+      setWorkspace(env.workspace);
+      setVersion(env.version);
+      void refreshHerdr().catch(showError);
+      if (!env.workspace) return;
+      void api.coordinatorStatus().then(setCoordinatorQueue).catch(() => {});
+      applyState(await api.command({ type: "snapshot" }));
+    }).catch(showError);
+    const unsubscribe = api.subscribe(event => {
       if (event.state) applyState(event.state);
       if (event.workspace) setWorkspace(event.workspace);
       if (event.type === "refresh") {
@@ -282,35 +135,13 @@ function App() {
       }
       if (event.type === "diagnostic") setError(event.message);
       if (event.type === "herdr-status") setHerdr(event.status);
-      if (event.type === "backend-control") {
-        setBackendStatus(event.status);
-        if (event.status.control.selected === "herdr")
-          void api.herdrStatus().then(setHerdr).catch(showError);
-        else {
-          setHerdr(undefined);
-          setTerminal(undefined);
-        }
-      }
-      if (event.type === "backend-switch") {
-        setBackendStatus(current => current ? {
-          ...current,
-          journal: event.journal,
-          control: {
-            ...current.control,
-            phase: event.journal.phase === "recovery_required" ? "recovery_required" :
-              ["ready", "cancelled"].includes(event.journal.phase) ? "ready" : "switching",
-          },
-        } : current);
-      }
-      if (event.type === "orca-installation") {
-        setBackendStatus(current => current ? { ...current, orca: event.status } : current);
-      }
       if (event.type === "agent-runtime-status") setAgentHooks(event.status);
       if (event.type === "coordinator-status") setCoordinatorQueue(event.status);
       if (event.type === "cli-status") setCli(event.status);
       if (event.type === "open-goal") openGoal(event.goalId);
       if (event.type === "terminal-available") {
-        setTerminal(current => current?.session === event.session ? current : { session: event.session, title: event.title, visible: false });
+        setTerminal(current => current?.session === event.session
+          ? current : { session: event.session, title: event.title, visible: false });
       }
       if (event.type === "terminal-open") {
         setTerminal({ session: event.session, title: event.title, goalId: event.goalId, visible: true });
@@ -323,7 +154,6 @@ function App() {
     };
   }, []);
   useEffect(() => {
-    // Interface failures land in the same support report as main-process ones.
     const report = (summary: string) => {
       void api.reportRendererError(summary.slice(0, 4_000)).catch(() => {});
     };
@@ -342,14 +172,13 @@ function App() {
     };
   }, []);
   useEffect(() => {
-    if (page === "settings") {
-      void refreshBackendStatus().catch(showError);
-      void api.cliStatus().then(setCli).catch(showError);
-      void api.skillsStatus().then(setSkills).catch(showError);
-      void api.agentRuntimeStatus().then(setAgentHooks).catch(showError);
-      void api.agentChoices().then(setAgentOptions).catch(showError);
-      void api.webhookSettings().then(setWebhook).catch(showError);
-    }
+    if (page !== "settings") return;
+    void refreshHerdr().catch(showError);
+    void api.cliStatus().then(setCli).catch(showError);
+    void api.skillsStatus().then(setSkills).catch(showError);
+    void api.agentRuntimeStatus().then(setAgentHooks).catch(showError);
+    void api.agentChoices().then(setAgentOptions).catch(showError);
+    void api.webhookSettings().then(setWebhook).catch(showError);
   }, [page]);
   useEffect(() => {
     if (!error || modal) return;
@@ -360,80 +189,31 @@ function App() {
     setError(prefix + String(reason).replace(/^Error: /, "")
       .replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ""));
   }
-  async function refreshBackendStatus() {
-    const next = await api.backendStatus();
-    setBackendStatus(next);
-    if (next.control.selected === "herdr") setHerdr(await api.herdrStatus());
-    else {
-      setHerdr(undefined);
-      setTerminal(undefined);
-    }
+  async function refreshHerdr() {
+    const next = await api.herdrStatus();
+    setHerdr(next);
     return next;
   }
-  async function openScene(id?: string, forceEmbedded = false, recover = false) {
+  async function openScene(id?: string, recover = false) {
     if (busy) return;
-    setModal("");
-    setBusy(true); setError("");
-    try {
-      if (forceEmbedded) {
-        await api.openHerdr(id);
-        notify(`已打开内嵌轻现场${id ? "。" : "，关闭面板不会终止 Agent。"}`);
-      }
-      else {
-        const result = await api.openScene(id, recover);
-        if (result.mode === "embedded") {
-          notify(`已打开内嵌轻现场${id ? "。" : "，关闭面板不会终止 Agent。"}`);
-        } else if (result.mode === "native") {
-          notify(`已在 ${result.app} 中定位${id ? "目标现场" : "全局管家"}。`);
-        } else {
-          const label = result.lease.terminal === "iterm2"
-            ? "iTerm2"
-            : result.lease.terminal === "terminal" ? "Terminal" : "Ghostty";
-          notify(`已在 ${label} 打开${id ? "目标现场" : "全局管家"}。`);
-        }
-      }
-    }
-    catch (reason) { showError(reason); }
-    finally { setBusy(false); }
-  }
-  const batchSelectable = filter === "completed" || filter === "dropped";
-  const batchGoals = batchSelectable ? selectedGoals.filter(item => batchSelected.includes(item.id)) : [];
-  const allBatchSelected = selectedGoals.length > 0 && batchGoals.length === selectedGoals.length;
-  useEffect(() => {
-    setBatchMode(false);
-    setBatchSelected([]);
-  }, [filter, projectId, page, workspace]);
-  useEffect(() => { setBatchSelected([]); }, [query]);
-  function toggleBatch(id: string, checked: boolean) {
-    setBatchSelected(current => checked
-      ? [...new Set([...current, id])]
-      : current.filter(value => value !== id));
-  }
-  async function deleteSelectedGoals() {
-    if (busy || batchDeleting || !batchGoals.length) return;
-    if (!window.confirm(`永久删除选中的 ${batchGoals.length} 个已结束目标？附件和负责人现场会被清理，此操作不可撤销。`))
+    const item = id ? stateRef.current.goals.find(current => current.id === id) : undefined;
+    if (item && isReadOnlyGoal(item)) {
+      notify("这是只读历史，不再打开运行现场。");
       return;
-    setBatchDeleting(true);
+    }
+    setModal("");
     setBusy(true);
     setError("");
     try {
-      const result = await deleteFinishedGoals(batchGoals, command => api.command(command));
-      setBatchSelected(result.failed.map(item => item.goalId));
-      setBatchMode(result.failed.length > 0);
-      applyState(await api.command({ type: "snapshot" }));
-      const firstFailure = result.failed[0];
-      if (firstFailure) {
-        showError(firstFailure.reason,
-          `已删除 ${result.deleted.length} 个目标，${result.failed.length} 个未删除，已保留勾选。${firstFailure.title}：`);
-      } else {
-        notify(`已删除 ${result.deleted.length} 个已结束目标。`);
+      const result = await api.openScene(id, recover);
+      if (result.mode === "embedded") notify(`已打开内嵌轻现场${id ? "。" : "，关闭面板不会终止 Agent。"}`);
+      else {
+        const label = result.lease.terminal === "iterm2"
+          ? "iTerm2" : result.lease.terminal === "terminal" ? "Terminal" : "Ghostty";
+        notify(`已在 ${label} 打开${id ? "目标现场" : "全局管家"}。`);
       }
-    } catch (reason) {
-      showError(reason);
-    } finally {
-      setBatchDeleting(false);
-      setBusy(false);
-    }
+    } catch (reason) { showError(reason); }
+    finally { setBusy(false); }
   }
   function notify(text: string) {
     if (toastTimer.current !== undefined) clearTimeout(toastTimer.current);
@@ -447,47 +227,30 @@ function App() {
       const result = await api.command(command);
       applyState(await api.command({ type: "snapshot" }));
       return result;
-    } catch (reason) {
-      showError(reason);
-      throw reason;
-    } finally {
-      setBusy(false);
-    }
+    } catch (reason) { showError(reason); throw reason; }
+    finally { setBusy(false); }
   }
   const goalDetailService = useMemo<GoalDetailService>(() => ({
     command: execute,
-    importAttachments: (inputs) => api.importAttachments(inputs),
-    previewAttachment: (currentGoalId, attachmentId) =>
-      api.attachmentPreview(currentGoalId, attachmentId),
+    importAttachments: inputs => api.importAttachments(inputs),
+    previewAttachment: (currentGoalId, attachmentId) => api.attachmentPreview(currentGoalId, attachmentId),
     openAttachment: async (currentGoalId, attachmentId) => {
-      try {
-        await api.openAttachment(currentGoalId, attachmentId);
-      } catch (reason) {
-        showError(reason);
-      }
+      try { await api.openAttachment(currentGoalId, attachmentId); }
+      catch (reason) { showError(reason); }
     },
-    openHerdr: async (currentGoalId, recover) => {
-      await openScene(currentGoalId, false, recover);
+    openHerdr: async (currentGoalId, recover) => { await openScene(currentGoalId, recover); },
+    openUrl: async url => {
+      try { await api.openUrl(url); }
+      catch (reason) { showError(reason); }
     },
-    openUrl: async (url) => {
-      try {
-        await api.openUrl(url);
-      } catch (reason) {
-        showError(reason);
-      }
-    },
-    retryDispatch: async (currentGoalId) => {
+    retryDispatch: async currentGoalId => {
       setBusy(true);
       setError("");
       try {
         await api.dispatchGoal(currentGoalId);
         applyState(await api.command({ type: "snapshot" }));
-      } catch (reason) {
-        showError(reason);
-        throw reason;
-      } finally {
-        setBusy(false);
-      }
+      } catch (reason) { showError(reason); throw reason; }
+      finally { setBusy(false); }
     },
     restartGoal: async (currentGoalId, note) => {
       setBusy(true);
@@ -496,212 +259,123 @@ function App() {
         const result = await api.restartGoal(currentGoalId, note);
         applyState(await api.command({ type: "snapshot" }));
         return result;
-      } catch (reason) {
-        showError(reason);
-        throw reason;
-      } finally {
-        setBusy(false);
-      }
+      } catch (reason) { showError(reason); throw reason; }
+      finally { setBusy(false); }
     },
-    methodPacks: () => api.methodPacksStatus(),
   }), [busy]);
   async function pickWorkspace() {
-    if (pickingWorkspace || batchDeleting) return;
+    if (pickingWorkspace || busy) return;
     setPickingWorkspace(true);
     setError("");
     try {
       const selected = await api.selectWorkspace();
-      if (selected) {
-        setProjectId("");
-        setGoalId("");
-        setModal("");
-        setPage("home");
-        setWorkspace(selected);
-        applyState(await api.command({ type: "snapshot" }));
-        notify(selected === workspace ? "你已在这个工作区。" : `已打开工作区：${selected.split("/").filter(Boolean).at(-1)}`);
-      }
-    } catch (reason) {
-      showError(reason);
-    } finally {
-      setPickingWorkspace(false);
-    }
+      if (!selected) return;
+      setProjectId("");
+      setGoalId("");
+      setModal("");
+      setPage("home");
+      setWorkspace(selected);
+      applyState(await api.command({ type: "snapshot" }));
+      notify(selected === workspace ? "你已在这个工作区。"
+        : `已打开工作区：${selected.split("/").filter(Boolean).at(-1)}`);
+    } catch (reason) { showError(reason); }
+    finally { setPickingWorkspace(false); }
   }
   function openGoal(id: string) {
-    const item = stateRef.current.goals.find(goal => goal.id === id);
+    const item = stateRef.current.goals.find(current => current.id === id);
     if (!item) return;
     const destination = goalEntryDestination(item);
-    if (destination === "scene") {
-      void openScene(item.id);
-      return;
-    }
+    if (destination === "scene") { void openScene(item.id); return; }
     setGoalId(item.id);
     setModal(destination === "task" ? "task" : destination === "attention" ? "attention" : "goal");
   }
-  function attentionActionLabel(item: Goal) {
-    const kind = attentionKind(item);
-    if (kind === "review") return "查看并验收";
-    if (kind === "decision") return "作出决定";
-    if (kind === "follow_up") return "处理跟进";
-    if (item.attention?.source === "dispatch") return "恢复联系";
-    if (goalEntryDestination(item) === "attention") return "查看并处理";
-    return "进入现场";
-  }
-  function goalRowLabel(item: Goal) {
-    const destination = goalEntryDestination(item);
-    if (destination === "task") return ["completed", "dropped"].includes(item.status)
-      ? "查看记录" : item.status === "backlog" ? "尚未开始" : "我来做";
-    if (destination === "details" && (item.status === "completed" || item.status === "dropped")) return "查看记录";
-    if (destination === "scene") return goalProgressLabel(item);
-    if (destination === "attention") return attentionActionLabel(item);
-    return "查看目标";
-  }
-  function createIntake(handling: IntakeHandling = "concierge") {
-    setIntakeHandling(handling);
+  function createIntake(later = false) {
+    setIntakeLater(later);
     setError("");
     setModal("new");
   }
-  async function saveGoal(text: string, files: File[], handling: IntakeHandling) {
+  async function saveGoal(text: string, files: File[], handling: "concierge" | "later") {
     setBusy(true);
     setError("");
     try {
       const inputs = await Promise.all(files.map(async file => ({
-        name: file.name,
-        bytes: await file.arrayBuffer(),
+        name: file.name, bytes: await file.arrayBuffer(),
       })));
       const attachments = inputs.length ? await api.importAttachments(inputs) : [];
       const created = await api.command({
-        type: "goal.intake",
-        text,
-        handling,
-        projectId: projectId || undefined,
+        type: "goal.intake", text, handling, projectId: projectId || undefined,
         ...(attachments.length ? { attachments } : {}),
       }) as Goal;
       applyState(await api.command({ type: "snapshot" }));
       setGoalId(created.id);
       setModal(handling === "concierge" ? "goal" : "");
-      if (handling !== "concierge") {
-        setTaskSection(handling === "later" ? "later" : "self");
+      if (handling === "later") {
+        setFilter("backlog");
         setProjectId("");
-        setPage("tasks");
+        setPage("items");
       }
-      notify(handling === "later" ? "已记下，不会启动 Agent。" : handling === "self"
-        ? "已记到我来做，做完即可标记完成。" : "目标已保存，正在联系管家。");
-    } catch (reason) {
-      showError(reason);
-      throw reason;
-    } finally {
-      setBusy(false);
-    }
+      notify(handling === "later" ? "已记下，不会启动 Agent。" : "事项已保存，正在联系管家。");
+    } catch (reason) { showError(reason); throw reason; }
+    finally { setBusy(false); }
   }
-  const taskModal = Boolean(goal && (modal === "task" ||
-    modal === "goal" && goal.mode === "manual" && goal.status !== "review"));
+  async function settingsAction(action: SettingsAction) {
+    setBusy(true);
+    setError("");
+    try {
+      if (action === "herdr-check") {
+        const checked = await api.checkHerdrUpdate();
+        setHerdr(await api.herdrStatus());
+        notify(checked.detail?.startsWith("检查更新未完成") ? checked.detail
+          : checked.updateAvailable ? `发现 Herdr ${checked.latestVersion}，可在设置中更新。`
+            : checked.installed ? `Herdr ${checked.version} 已是当前版本。` : "Herdr 尚未安装。");
+      } else if (action === "herdr-install") {
+        const installed = await api.installHerdr();
+        setHerdr(await api.herdrStatus());
+        notify(installed.installed ? `Herdr ${installed.version ?? ""} 已就绪`
+          : "Herdr 更新未完成，当前可用版本与事项记录均未改变。");
+      } else if (action === "cli") {
+        notify((await api.installCli()).output);
+      } else if (action === "skills") {
+        const result = await api.installSkills();
+        setSkills(result.status);
+        notify(result.errors.length
+          ? `Skills 已更新；${result.errors.length} 个目录因已有同名技能而跳过。`
+          : "Atte Skills 已安装到检测到的 Agent。");
+      }
+      setAgentOptions(await api.agentChoices());
+      setAgentHooks(await api.agentRuntimeStatus());
+      setCli(await api.cliStatus());
+      if (workspace) applyState(await api.command({ type: "snapshot" }));
+    } catch (reason) { showError(reason); }
+    finally { setBusy(false); }
+  }
+  const taskModal = Boolean(goal && (modal === "task"
+    || modal === "goal" && goal.mode === "manual" && goal.status !== "review"));
   return (
     <div className={`app ${collapsed ? "collapsed" : ""}`}>
-      <a className="skip-link" href="#main-content">
-        跳到主要内容
-      </a>
+      <a className="skip-link" href="#main-content">跳到主要内容</a>
       <aside className="sidebar">
-        <div className="brand">
-          <BrandMark />
-          <div>
-            <strong>Atte</strong>
-            <span>The attention layer</span>
-          </div>
-        </div>
+        <div className="brand"><BrandMark /><div><strong>Atte</strong><span>The attention layer</span></div></div>
         <nav aria-label="主导航">
-          <button
-            aria-label="注意力"
-            aria-current={page === "home" ? "page" : undefined}
+          <button aria-label="注意力" aria-current={page === "home" ? "page" : undefined}
             className={page === "home" ? "active" : ""}
-            onClick={() => {
-              setPage("home");
-              setProjectId("");
-            }}
-          >
-            <Inbox />
-            <span>注意力</span>
-            {attention.length > 0 && (
-              <b aria-label={`${attention.length} 件需要处理`}>{attention.length}</b>
-            )}
+            onClick={() => { setPage("home"); setProjectId(""); }}>
+            <Inbox /><span>注意力</span>
+            {attention.length > 0 && <b aria-label={`${attention.length} 件需要处理`}>{attention.length}</b>}
           </button>
-          <button
-            className={page === "tasks" ? "active" : ""}
-            aria-label="待办池"
-            aria-current={page === "tasks" ? "page" : undefined}
-            title={`${taskPoolCount} 件待办`}
-            onClick={() => { setPage("tasks"); setProjectId(""); }}
-          >
-            <NotebookPen />
-            <span>待办池</span>
-            <b aria-label={`${taskPoolCount} 件待办`}>{taskPoolCount}</b>
+          <button aria-label="全部事项" aria-current={page === "items" ? "page" : undefined}
+            className={page === "items" ? "active" : ""}
+            onClick={() => { setPage("items"); setProjectId(""); }}>
+            <LayoutList /><span>全部事项</span>
           </button>
-          <button
-            className={page === "goals" && !projectId ? "active" : ""}
-            aria-label="全部目标"
-            aria-current={page === "goals" && !projectId ? "page" : undefined}
-            onClick={() => {
-              setPage("goals");
-              setProjectId("");
-            }}
-          >
-            <LayoutList />
-            <span>全部目标</span>
-          </button>
-          <button
-            className={page === "settings" ? "active" : ""}
-            aria-label="设置"
-            aria-current={page === "settings" ? "page" : undefined}
-            onClick={() => setPage("settings")}
-          >
-            <Settings2 />
-            <span>设置</span>
+          <button aria-label="设置" aria-current={page === "settings" ? "page" : undefined}
+            className={page === "settings" ? "active" : ""} onClick={() => setPage("settings")}>
+            <Settings2 /><span>设置</span>
           </button>
         </nav>
-        <div className="projects">
-          <small>项目</small>
-          {state.projects.map((item) => (
-            <button
-              key={item.id}
-              className={projectId === item.id ? "active" : ""}
-              aria-label={`打开项目：${item.name}`}
-              aria-current={projectId === item.id ? "page" : undefined}
-              title={`打开项目：${item.name}`}
-              onClick={() => {
-                setProjectId(item.id);
-                setPage("goals");
-              }}
-            >
-              <Folder />
-              <span>{item.name}</span>
-              <small>
-                {
-                  state.goals.filter(
-                    (goal) =>
-                      goal.projectId === item.id &&
-                      !["completed", "dropped"].includes(goal.status),
-                  ).length
-                }
-              </small>
-            </button>
-          ))}
-          <button
-            className="add-project"
-            aria-label="添加项目"
-            title={workspace ? "添加项目" : "先选择存储位置"}
-            disabled={!workspace}
-            onClick={() => setModal("project")}
-          >
-            <Plus />
-            <span>添加项目</span>
-          </button>
-        </div>
         <div className="concierge">
-          <div className="concierge-orb">
-            <BrandMark variant="mascot" decorative />
-            <i />
-          </div>
-          <strong>所有事，找管家。</strong>
-          <p>你负责方向，管家负责条理。</p>
+          <div className="concierge-orb"><BrandMark variant="mascot" decorative /><i /></div>
+          <strong>所有事，找管家。</strong><p>你负责方向，管家负责条理。</p>
           <button disabled={!workspace || busy} aria-label="找管家" onClick={() => void openScene()}>
             <SquareTerminal size={15} />
             <span>{busy ? "正在处理…" : conciergeAvailable ? "回到现场" : hasConciergeReference ? "恢复管家" : "找管家"}</span>
@@ -709,2641 +383,316 @@ function App() {
           </button>
         </div>
         <div className="sidebar-footer">
-          <button
-            aria-label={theme === "dark" ? "浅色模式" : "深色模式"}
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          >
+          <button aria-label={theme === "dark" ? "浅色模式" : "深色模式"}
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
             {theme === "dark" ? <Sun /> : <Moon />}
             <span>{theme === "dark" ? "浅色模式" : "深色模式"}</span>
           </button>
-          <button
-            className="sidebar-collapse"
-            onClick={() => setCollapsed(!collapsed)}
-            aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
-          >
-            <ChevronRight className="collapse-icon" />
-            <span>收起</span>
+          <button className="sidebar-collapse" onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}>
+            <ChevronRight className="collapse-icon" /><span>收起</span>
           </button>
         </div>
       </aside>
       <div className="main">
         <header className="topbar">
           <div className="topbar-context">
-            <span className="topbar-mark" aria-hidden="true">
-              <Sparkles size={16} />
-            </span>
-            <span>{project?.name ?? state.name}</span>
-            <span className="slash">/</span>
-            <strong>{pages[page]}</strong>
+            <span className="topbar-mark" aria-hidden="true"><Sparkles size={16} /></span>
+            <span>{state.projects.find(item => item.id === projectId)?.name ?? state.name}</span>
+            <span className="slash">/</span><strong>{pages[page]}</strong>
           </div>
           <div className="top-actions">
-            <button
-              type="button"
-              aria-atomic="true"
-              aria-live="polite"
-              className={`live-status live-status--${
-                coordinatorQueue?.processing
-                  ? "working"
-                  : conciergeQueueAlert
-                    ? "blocked"
-                    : conciergeLive ?? state.concierge.status
-              }`}
+            <button type="button" aria-atomic="true" aria-live="polite"
+              className={`live-status live-status--${coordinatorQueue?.processing ? "working"
+                : conciergeQueueAlert ? "blocked" : conciergeLive ?? state.concierge.status}`}
               disabled={!workspace || busy}
               title={hasConciergeReference ? "打开管家现场" : "准备并打开管家"}
-              onClick={() => void openScene()}
-            >
-              <i />
-              {conciergeStatus}
+              onClick={() => void openScene()}>
+              <i />{conciergeStatus}
             </button>
-            {page !== "settings" && (
-              <Button
-                variant="primary"
-                onClick={() => createIntake(page === "tasks" ? taskSection : "concierge")}
-                disabled={!workspace}
-                icon={<Plus size={16} />}
-              >
-                {page === "tasks" ? "记一件事" : "新目标"}
-              </Button>
-            )}
+            {page !== "settings" && <Button variant="primary"
+              onClick={() => createIntake(filter === "backlog")} disabled={!workspace}
+              icon={<Plus size={16} />}>{page === "items" && filter === "backlog" ? "先记一件事" : "新事项"}</Button>}
           </div>
         </header>
         <main id="main-content" tabIndex={-1}>
-        {error && (
-          <div className="error" role="alert">
-            <CircleAlert size={16} />
-            <span>{error}</span>
-            <IconButton label="关闭提示" onClick={() => setError("")}>
-              <X size={15} />
-            </IconButton>
-          </div>
-        )}
-        {state.recovery && (
-          <div className="recovery-notice" role="status" aria-live="polite">
+          {error && <div className="error" role="alert"><CircleAlert size={16} /><span>{error}</span>
+            <IconButton label="关闭提示" onClick={() => setError("")}><X size={15} /></IconButton></div>}
+          {state.recovery && <div className="recovery-notice" role="status" aria-live="polite">
             <CircleAlert size={18} />
-            <div>
-              <strong>旧版工作区已自动保护</strong>
+            <div><strong>旧版工作区已自动保护</strong>
               <p>{state.recovery.detail} 已创建兼容的新工作区，旧数据没有被删除。</p>
-              <code title={state.recovery.archivedPath}>{state.recovery.archivedPath}</code>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => void api.openRecoveryBackup().catch(showError)} icon={<Folder size={14} />}>
-              打开备份
+              <code title={state.recovery.archivedPath}>{state.recovery.archivedPath}</code></div>
+            <Button variant="secondary" size="sm"
+              onClick={() => void api.openRecoveryBackup().catch(showError)} icon={<Folder size={14} />}>打开备份</Button>
+            <IconButton label="关闭恢复提示" onClick={() => void execute({ type: "workspace.recovery.dismiss" })
+              .then(() => notify("旧版数据继续保留在备份目录中。")).catch(showError)}><X size={15} /></IconButton>
+          </div>}
+          {herdr && ["checking", "downloading", "error"].includes(herdr.phase) &&
+            <div className={`setup-status ${herdr.phase}`} role="status" aria-live="polite">
+              <SquareTerminal size={16} /><span>{herdr.detail || "正在检查 Herdr…"}</span>
+              {herdr.phase === "error" && <Button variant="secondary" size="sm"
+                onClick={() => void api.installHerdr().catch(showError)}>重试准备 Herdr</Button>}
+            </div>}
+          {!workspace && page !== "settings" ? page === "home" ? <section className="welcome">
+            <BrandMark variant="mascot" />
+            <span className="eyebrow">Atte · The attention layer</span>
+            <h1>把注意力留给重要的事。</h1>
+            <p>人只做拍板，Agent 并行推进。<br />只有真正需要你的时刻，才打扰你。</p>
+            <Button variant="primary" disabled={pickingWorkspace}
+              onClick={() => void pickWorkspace()} trailing={<ArrowRight size={17} />}>
+              {pickingWorkspace ? "正在准备工作区…" : "选择存储位置并开始"}
             </Button>
-            <IconButton
-              label="关闭恢复提示"
-              onClick={() => void execute({ type: "workspace.recovery.dismiss" })
-                .then(() => notify("旧版数据继续保留在备份目录中。"))
-                .catch(showError)}
-            >
-              <X size={15} />
-            </IconButton>
-          </div>
-        )}
-        {backendStatus?.control.selected !== "orca" && herdr &&
-          (herdr.phase === "checking" || herdr.phase === "downloading" || herdr.phase === "error") && (
-          <div className={`setup-status ${herdr.phase}`} role="status" aria-live="polite">
-            <SquareTerminal size={16} />
-            <span>{herdr.detail || "正在检查 Herdr…"}</span>
-            {herdr.phase === "error" && <Button variant="secondary" size="sm" onClick={() => {
-              void api.installHerdr().catch(showError);
-            }}>重试准备 Herdr</Button>}
-          </div>
-        )}
-          {!workspace && page !== "settings" ? (page === "home" ? (
-            <section className="welcome">
-              <BrandMark variant="mascot" />
-              <span className="eyebrow">Atte · The attention layer</span>
-              <h1>
-                把注意力留给重要的事。
-              </h1>
-              <p>
-                人只做拍板，Agent 并行推进。
-                <br />
-                只有真正需要你的时刻，才打扰你。
-              </p>
-              <Button
-                variant="primary"
-                disabled={pickingWorkspace}
-                onClick={() => void pickWorkspace()}
-                trailing={<ArrowRight size={17} />}
-              >
-                {pickingWorkspace ? "正在准备工作区…" : "选择存储位置并开始"}
-              </Button>
-            </section>
-          ) : (
-            <div className="content">
-              <section className="intro">
-                <h1>{pages[page]}</h1>
-                <p>{page === "tasks" ? "先记下，或安排由你推进的事项。" : "查看所有项目与个人事项的目标。"}</p>
-              </section>
-              <EmptyState
-                icon={<Folder />}
-                title="先选择存储位置"
-                description="选择本地存储位置后，就可以在这里记录和查看事项。"
-                action={<Button disabled={pickingWorkspace} onClick={() => void pickWorkspace()}>
-                  {pickingWorkspace ? "正在准备工作区…" : "选择存储位置"}
-                </Button>}
-              />
-            </div>
-          )) : page === "home" ? (
-            <div className="content home">
-              <section className="intro">
-                <div>
-                  <span className="eyebrow">
-                    {new Intl.DateTimeFormat("zh-CN", {
-                      month: "long",
-                      day: "numeric",
-                      weekday: "long",
-                    }).format(new Date())}
-                  </span>
-                  <h1>
-                    {attention.length ? (
-                      <>
-                        把注意力，<em>留给真正重要的事。</em>
-                      </>
-                    ) : (
-                      <>
-                        现在，<em>可以安心了。</em>
-                      </>
-                    )}
-                  </h1>
-                  <p>
-                    {attention.length
-                      ? `有 ${attention.length} 件事需要你。其余的事，管家会继续推进。`
-                      : "该你处理的事已经清零。去专注于你想做的事吧。"}
-                  </p>
-                </div>
-                <div className="pixel-scene" aria-hidden="true">
-                  <BrandMark variant="mascot" decorative />
-                </div>
-              </section>
-              <section className="attention-section">
-                <SectionHeading
-                  title="需要你处理"
-                  count={attention.length}
-                  description={
-                    attention.length
-                      ? "不必盯着其他会话"
-                      : "内部进展不会打扰你"
-                  }
-                />
-                {attention.length ? (
-                  <div className="attention-list">
-                    {attention.map((item) => {
-                      const kind = attentionKind(item)!;
-                      const sceneSync = sceneSyncPresentation(item);
-                      return (
-                        <button
-                          className={`attention-card ${kind}`}
-                          key={item.id}
-                          onClick={() => openGoal(item.id)}
-                        >
-                          <span className="attention-symbol">
-                            {kind === "review" ? (
-                              <Check />
-                            ) : kind === "follow_up" ? (
-                              <Clock3 />
-                            ) : (
-                              <Zap />
-                            )}
-                          </span>
-                          <div>
-                            <span className="card-label">
-                              {
-                                state.projects.find(
-                                  (p) => p.id === item.projectId,
-                                )?.name
-                              }{" "}
-                              · {sceneSync?.label || (kind === "intervention" && !hasGoalScene(item) ? "需要你处理" : attentionLabel[kind])}
-                            </span>
-                            <h3>{item.title}</h3>
-                            <p>{sceneSync?.summary || item.attention?.summary || item.next}</p>
-                          </div>
-                          <span className="card-link">
-                            <span className="card-link-label">
-                              {attentionActionLabel(item)}
-                            </span>
-                            <ArrowRight size={15} />
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <EmptyState
-                    inline
-                    tone="mint"
-                    icon={<Sparkles size={18} />}
-                    title="此刻，没有等你处理的事。"
-                    description={`${waiting.length ? `${waiting.length} 件等待外部` : "没有被搁置的事项"}${active.length ? `，${active.length} 件由管家跟进` : ""}。到了该出现的时候再告诉你。`}
-                  />
-                )}
-              </section>
-              {waiting.length > 0 && (
-                <section className="waiting-section">
-                  <SectionHeading
-                    title="等待外部"
-                    description="等外部联系人或机构处理，不用一直记着"
-                  />
-                  {waiting.map((item) => (
-                    <button
-                      className="waiting-row"
-                      key={item.id}
-                      onClick={() => openGoal(item.id)}
-                    >
-                      <Clock3 />
-                      <div>
-                        <strong>{item.title}</strong>
-                        <span>
-                          {item.waitingFor} · {item.next}
-                        </span>
-                      </div>
-                      <small>
-                        {item.remindAt
-                          ? `${time(item.remindAt)} 跟进`
-                          : "未设提醒"}
-                      </small>
-                      <ChevronRight />
-                    </button>
-                  ))}
-                </section>
-              )}
-              {active.length > 0 && (
-                <div className="running">
-                  <span className="pulse" />
-                  <span>
-                    <strong>{active.length} 个目标</strong>由管家跟进
-                  </span>
-                  <span>·</span>
-                  <span>{active.some(item => item.recovery) ? "空闲结果正在核对" : "有需要时再打扰你"}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    trailing={<ArrowUpRight size={13} />}
-                    onClick={() => {
-                      setFilter("active");
-                      setPage("goals");
-                    }}
-                  >
-                    查看进展
-                  </Button>
-                </div>
-              )}
-            </div>
-          ) : page === "tasks" ? (
-            <TaskPool goals={state.goals} open={openGoal} create={createIntake}
-              section={taskSection} onSection={setTaskSection} />
-          ) : page === "goals" ? (
-            <div className="content">
-              <section className="intro">
-                <div>
-                  <span className="eyebrow">
-                    {project ? "项目视角" : "全局视角"}
-                  </span>
-                  <h1>{project?.name ?? "每件事，都有下一步。"}</h1>
-                  <p>
-                    {project
-                      ? "同一个管家，继续统筹这里的一切。"
-                      : "不用记住哪个会话在做什么，这里保留下一步。"}
-                  </p>
-                </div>
-              </section>
-              <div className="filter-bar" role="group" aria-label="按目标状态筛选">
-                {(
-                  [
-                    ["all", "全部"],
-                    ["attention", "需要处理"],
-                    ["waiting", "等待外部"],
-                    ["active", "跟进中"],
-                    ["backlog", "暂存"],
-                    ["completed", "已完成"],
-                    ["dropped", "已放弃"],
-                  ] as [string, string][]
-                ).map(([value, label]) => (
-                  <button
-                    className={filter === value ? "active" : ""}
-                    key={value}
-                    type="button"
-                    aria-pressed={filter === value}
-                    disabled={batchDeleting}
-                    onClick={() => setFilter(value)}
-                  >
-                    {label}
-                  </button>
-                ))}
-                <TextInput
-                  aria-label="搜索目标"
-                  className="filter-search"
-                  placeholder="搜索目标…"
-                  disabled={batchDeleting}
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </div>
-              {batchSelectable && (
-                <div className="goal-batch-bar" role="group" aria-label="批量管理">
-                  {batchMode ? <>
-                    <span className="goal-batch-count" role="status">{batchDeleting ? "正在删除…" : `已选 ${batchGoals.length} 项`}</span>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={busy || batchDeleting || !selectedGoals.length}
-                      onClick={() => setBatchSelected(
-                        allBatchSelected ? [] : selectedGoals.map(item => item.id),
-                      )}
-                    >
-                      {allBatchSelected ? "取消全选" : "全选"}
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      disabled={busy || batchDeleting || !batchGoals.length}
-                      onClick={() => void deleteSelectedGoals()}
-                    >
-                      删除所选（{batchGoals.length}）
-                    </Button>
-                    <Button variant="ghost" size="sm" disabled={busy || batchDeleting} onClick={() => {
-                      setBatchMode(false);
-                      setBatchSelected([]);
-                    }}>退出批量</Button>
-                  </> : <>
-                    <span className="goal-batch-hint">只对已完成或已放弃的目标生效。</span>
-                    <Button variant="secondary" size="sm" disabled={busy || batchDeleting || !selectedGoals.length} onClick={() => setBatchMode(true)}>
-                      批量选择
-                    </Button>
-                  </>}
-                </div>
-              )}
-              <div className="goal-list">
-                {selectedGoals.length ? (
-                  selectedGoals.map((item) => batchMode && batchSelectable ? (
-                    <Checkbox
-                      className="goal-row goal-row-batch"
-                      key={item.id}
-                      aria-label={`批量选择 ${item.title}`}
-                      checked={batchSelected.includes(item.id)}
-                      disabled={busy || batchDeleting}
-                      onChange={event => toggleBatch(item.id, event.target.checked)}
-                      label={<>
-                        <span className={`goal-dot ${item.status}`} />
-                        <span className="goal-row-copy">
-                          <strong>{item.title}</strong>
-                          <span className="goal-row-next">{item.next}</span>
-                          <small>
-                            {state.projects.find(current => current.id === item.projectId)?.name ?? "个人事项"}
-                            <span aria-hidden="true">·</span>
-                            {item.owner}
-                            <span aria-hidden="true">·</span>
-                            {time(item.updatedAt)} 更新
-                          </small>
-                        </span>
-                        <StatusPill tone={goalRowTone(item)}>
-                          {goalRowLabel(item)}
-                        </StatusPill>
-                      </>}
-                    />
-                  ) : (
-                    <button
-                      className="goal-row"
-                      key={item.id}
-                      type="button"
-                      onClick={() => openGoal(item.id)}
-                    >
-                      <span className={`goal-dot ${item.status}`} />
-                      <div className="goal-row-copy">
-                        <strong>{item.title}</strong>
-                        <p>{item.next}</p>
-                        <small>
-                          {state.projects.find((currentProject) => currentProject.id === item.projectId)?.name ?? "个人事项"}
-                          <span aria-hidden="true">·</span>
-                          {item.owner}
-                          <span aria-hidden="true">·</span>
-                          {time(item.updatedAt)} 更新
-                        </small>
-                      </div>
-                      <StatusPill tone={goalRowTone(item)}>
-                        {goalRowLabel(item)}
-                      </StatusPill>
-                      <ChevronRight />
-                    </button>
-                  ))
-                ) : state.goals.length === 0 ? (
-                  <EmptyState
-                    className="goal-empty"
-                    icon={<Sparkles size={19} />}
-                    title="这里还没有目标"
-                    description="记录一件事，或把它交给管家。每一步都会留在这里。"
-                    action={
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        icon={<Plus size={14} />}
-                        onClick={() => createIntake()}
-                      >
-                        记录第一个目标
-                      </Button>
-                    }
-                  />
-                ) : projectId && !state.goals.some((goal) => goal.projectId === projectId) ? (
-                  <EmptyState
-                    className="goal-empty"
-                    icon={<Folder size={19} />}
-                    title="这个项目还没有目标"
-                    description="把第一件事交给管家，项目会从这里开始积累。"
-                    action={
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        icon={<Plus size={14} />}
-                        onClick={() => createIntake()}
-                      >
-                        记录第一个目标
-                      </Button>
-                    }
-                  />
-                ) : (
-                  <EmptyState
-                    className="goal-empty"
-                    icon={<Sparkles size={19} />}
-                    title="没有符合条件的目标"
-                    description="换个关键词，或清除筛选查看全部目标。"
-                    action={
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                          setQuery("");
-                          setFilter("all");
-                          setProjectId("");
-                        }}
-                      >
-                        清除筛选
-                      </Button>
-                    }
-                  />
-                )}
-              </div>
-            </div>
-          ) : (
-            <Settings
-              busy={busy}
-              state={state}
-              herdr={herdr}
-              cli={cli}
-              skills={skills}
-              agentHooks={agentHooks}
-              onAgentHooksChange={setAgentHooks}
-              notify={notify}
-              backendStatus={backendStatus}
-              setBackendStatus={setBackendStatus}
-              agentOptions={agentOptions}
-              webhook={webhook}
-              saveAgents={async (preferences: AgentPreferences) => {
-                await execute({ type: "agents.configure", preferences });
-                notify("Agent 偏好已保存，将用于新启动的会话。");
-              }}
-              savePolicy={async (projectId: string, policy: { shipPolicy: ShipPolicy; approvers: string[] }) => {
-                await execute({ type: "project.policy.set", projectId, policy, actor: "你" });
-                notify("项目上线策略已更新。");
-              }}
-              saveAutonomy={async (value: {
-                acceptance: AcceptanceMode;
-                paused: boolean;
-                maxRecoveryAttempts: number;
-                noProgressMinutes: number;
-              }) => {
-                await execute({
-                  type: "workspace.autonomy.set",
-                  ...value,
-                  actor: "你",
-                });
-                notify("工作区自主推进设置已更新。");
-              }}
-              saveProjectAutonomy={async (
-                projectId: string,
-                value: {
-                  acceptance: "inherit" | AcceptanceMode;
-                  releaseOnMerge: ReleaseOnMerge;
-                },
-              ) => {
-                await execute({
-                  type: "project.autonomy.set",
-                  projectId,
-                  ...value,
-                  actor: "你",
-                });
-                notify("项目自主目标设置已更新。");
-              }}
-              theme={theme}
-              setTheme={(value: string) => setTheme(value)}
-              onAction={async (action: string) => {
-                setBusy(true);
-                setError("");
-                try {
-                  if (action === "herdr-check") {
-                    const checked = await api.checkHerdrUpdate();
-                    setHerdr(await api.herdrStatus());
-                    notify(checked.detail?.startsWith("检查更新未完成")
-                      ? checked.detail
-                      : checked.updateAvailable
-                      ? `发现 Herdr ${checked.latestVersion}，可在设置中更新。`
-                      : checked.installed
-                        ? `Herdr ${checked.version} 已是当前版本。`
-                        : "Herdr 尚未安装。");
-                    return;
-                  }
-                  if (action === "herdr-install") {
-                    const installed = await api.installHerdr();
-                    setHerdr(await api.herdrStatus());
-                    notify(installed.installed
-                      ? `Herdr ${installed.version ?? ""} 已就绪`
-                      : "Herdr 更新未完成，当前可用版本与目标记录均未改变。");
-                  }
-                  if (action === "cli") {
-                    const result = await api.installCli();
-                    notify(result.output);
-                  }
-                  if (action === "skills") {
-                    const result = await api.installSkills();
-                    setSkills(result.status);
-                    notify(result.errors.length
-                      ? `Skills 已更新；${result.errors.length} 个目录因已有同名技能而跳过。`
-                      : "Atte Skills 已安装到检测到的 Agent。");
-                  }
-                  if (action === "agent-hooks") {
-                    setAgentHooks(await api.agentRuntimeStatus());
-                  }
-                  if (action === "concierge") await api.prepareConcierge();
-                  if (backendStatus?.control.selected === "herdr")
-                    setHerdr(await api.herdrStatus());
-                  setAgentOptions(await api.agentChoices());
-                  setAgentHooks(await api.agentRuntimeStatus());
-                  setCli(await api.cliStatus());
-                  if (workspace) applyState(await api.command({ type: "snapshot" }));
-                  if (action !== "herdr-install") notify("已准备就绪");
-                } catch (reason) {
-                  showError(reason);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-              openWebhook={() => setModal("webhook")}
-              version={version}
-              workspace={workspace ?? ""}
-              pickWorkspace={() => workspace ? setModal("workspace") : void pickWorkspace()}
-              openHerdr={() => void openScene(undefined, true)}
-            />
-          )}
+          </section> : <div className="content">
+            <section className="intro"><h1>{pages[page]}</h1><p>记录事项、查看进度和历史。</p></section>
+            <div className="welcome"><BrandMark variant="mascot" /></div>
+            <p className="muted">先选择存储位置后，就可以在这里记录和查看事项。</p>
+            <Button disabled={pickingWorkspace} onClick={() => void pickWorkspace()}>
+              {pickingWorkspace ? "正在准备工作区…" : "选择存储位置"}
+            </Button>
+          </div> : page === "home" ? <AttentionHome state={state} open={openGoal} showItems={nextFilter => {
+            setFilter(nextFilter);
+            setProjectId("");
+            setPage("items");
+          }} /> : page === "items" ? <GoalList state={state} projectId={projectId}
+            setProjectId={setProjectId} filter={filter} setFilter={setFilter} open={openGoal}
+            create={createIntake} addProject={() => setModal("project")} service={goalDetailService}
+            busy={busy} notify={notify} reportError={showError} /> : <Settings
+            busy={busy} state={state} herdr={herdr} cli={cli} skills={skills} agentHooks={agentHooks}
+            onAgentHooksChange={setAgentHooks} notify={notify} agentOptions={agentOptions} webhook={webhook}
+            saveAgents={async (preferences: AgentPreferences) => {
+              await execute({ type: "agents.configure", preferences });
+              notify("Agent 偏好已保存，将用于新启动的会话。");
+            }}
+            savePolicy={async (projectIdValue: string, policy: { shipPolicy: ShipPolicy; approvers: string[] }) => {
+              await execute({ type: "project.policy.set", projectId: projectIdValue, policy, actor: "你" });
+              notify("项目上线策略已更新。");
+            }}
+            theme={theme} setTheme={setTheme} onAction={settingsAction} version={version}
+            workspace={workspace ?? ""}
+            pickWorkspace={() => workspace ? setModal("workspace") : void pickWorkspace()}
+            openWebhook={() => setModal("webhook")} />}
         </main>
       </div>
-      {terminal && <Suspense fallback={null}><HerdrTerminal
-        session={terminal.session}
-        title={terminal.title}
-        goal={sceneContext}
-        theme={theme}
-        visible={terminal.visible && !modal}
+      {terminal && <Suspense fallback={null}><HerdrTerminal session={terminal.session}
+        title={terminal.title} goal={sceneContext} theme={theme} visible={terminal.visible && !modal}
         onClose={() => setTerminal(current => current ? { ...current, visible: false } : current)}
-        onOpenGoal={id => {
-          setGoalId(id);
-          setModal("goal");
-        }}
+        onOpenGoal={id => { setGoalId(id); setModal("goal"); }}
         onReturnToAttention={() => {
           setPage("home");
           setProjectId("");
           setTerminal(current => current ? { ...current, visible: false } : current);
-        }}
-      /></Suspense>}
-      {modal === "workspace" && <Modal title="工作区存储位置" description="这里只设置所有目标、提醒和管家的保存位置，不是选择项目。" error={error} onClose={() => setModal("")}>
-        <div className="workspace-location">
-          <Folder size={22} />
-          <div><strong>{workspace ? "当前工作区" : "先选择一个工作区文件夹"}</strong><p>{workspace || "建议创建一个专门的文件夹，例如 Documents/Atte。"}</p></div>
-        </div>
-        <p className="workspace-help">要处理某个代码项目，请在左侧「项目」旁点 + 添加。切换工作区后，将显示所选目录自己的目标和管家。</p>
+        }} /></Suspense>}
+      {modal === "workspace" && <Modal title="工作区存储位置"
+        description="这里只设置所有事项、提醒和管家的保存位置，不是选择项目。"
+        error={error} onClose={() => setModal("")}>
+        <div className="workspace-location"><Folder size={22} /><div>
+          <strong>{workspace ? "当前工作区" : "先选择一个工作区文件夹"}</strong>
+          <p>{workspace || "建议创建一个专门的文件夹，例如 Documents/Atte。"}</p></div></div>
+        <p className="workspace-help">切换工作区后，将显示所选目录自己的事项和管家。</p>
         <div className="form-actions">
           <Button variant="secondary" onClick={() => setModal("")}>返回设置</Button>
-          <Button variant="primary" disabled={pickingWorkspace || batchDeleting} onClick={() => void pickWorkspace()}>
+          <Button variant="primary" disabled={pickingWorkspace || busy} onClick={() => void pickWorkspace()}>
             {pickingWorkspace ? "正在打开工作区…" : workspace ? "选择其他工作区文件夹" : "选择工作区文件夹"}
           </Button>
         </div>
       </Modal>}
-      {modal === "webhook" && (
-        <Modal
-          title="Webhook 通知"
-          description="目标状态变化会发送；首次进入「需要你处理」时会另发注意力通知，去重记录跨重启保留。"
-          error={error}
-          onClose={() => setModal("")}
-        >
-          <form
-            className="ui-form webhook-form"
-            onSubmit={async event => {
-              event.preventDefault();
+      {modal === "webhook" && <Modal title="Webhook 通知"
+        description="状态变化会发送；首次进入注意力时会另发一次通知，去重记录跨重启保留。"
+        error={error} onClose={() => setModal("")}>
+        <form className="ui-form webhook-form" onSubmit={async event => {
+          event.preventDefault();
+          setBusy(true);
+          setError("");
+          const data = new FormData(event.currentTarget);
+          try {
+            const saved = await api.saveWebhook({
+              enabled: data.get("enabled") === "on", url: String(data.get("url") || ""),
+              token: String(data.get("token") || ""), clearToken: data.get("clearToken") === "on",
+              statuses: data.getAll("statuses")
+                .filter((value): value is string => typeof value === "string") as Goal["status"][],
+            });
+            const verified = saved.enabled ? await api.testWebhook() : saved;
+            setWebhook(verified);
+            setModal("");
+            notify(saved.enabled ? "Webhook 已保存，测试通知已送达。" : "Webhook 通知已暂停。");
+          } catch (reason) { showError(reason); }
+          finally { setBusy(false); }
+        }}>
+          <Toggle name="enabled" defaultChecked={webhook.enabled} disabled={busy}
+            label="状态更新和需要你处理时发送" />
+          <fieldset className="webhook-statuses"><legend>订阅这些状态变化</legend><div>
+            {goalStatusOptions.map(([value, label]) => <Checkbox name="statuses" value={value} key={value}
+              defaultChecked={webhook.statuses.includes(value)} disabled={busy} label={label} />)}
+          </div><small>全部取消后仍会接收注意力通知。</small></fieldset>
+          <Field label="Webhook 地址" hint={webhook.configured
+            ? `已配置 ${webhook.endpoint ?? ""}，留空保持不变`
+            : "远程地址必须使用 HTTPS，本机 localhost 可使用 HTTP。"}>
+            <TextInput name="url" type="url" required={!webhook.configured} disabled={busy}
+              placeholder={webhook.configured ? "留空保持不变" : "https://hooks.example.com/atte"} />
+          </Field>
+          <Field label="Bearer 令牌（可选）" hint={webhook.tokenConfigured
+            ? "令牌已保存，留空保持不变。" : "留空则不添加 Authorization。"}>
+            <TextInput name="token" type="password" autoComplete="new-password" disabled={busy}
+              placeholder={webhook.tokenConfigured ? "留空保持不变" : "留空则不添加 Authorization"} />
+          </Field>
+          {webhook.tokenConfigured && <Checkbox name="clearToken" disabled={busy} label="清除已保存的令牌" />}
+          <p className="ui-form__note">内容仅含工作区名称、事项标题、状态、摘要和 `goalId`，不包含聊天记录、附件或本机路径。</p>
+          <div className="modal-actions webhook-actions">
+            <Button variant="secondary" disabled={busy || !webhook.configured} onClick={async () => {
               setBusy(true);
               setError("");
-              const data = new FormData(event.currentTarget);
-              try {
-                const saved = await api.saveWebhook({
-                  enabled: data.get("enabled") === "on",
-                  url: String(data.get("url") || ""),
-                  token: String(data.get("token") || ""),
-                  clearToken: data.get("clearToken") === "on",
-                  statuses: data
-                    .getAll("statuses")
-                    .filter((value): value is string => typeof value === "string") as Goal["status"][],
-                });
-                const verified = saved.enabled ? await api.testWebhook() : saved;
-                setWebhook(verified);
-                setModal("");
-                notify(saved.enabled ? "Webhook 已保存，测试通知已送达。" : "Webhook 通知已暂停。");
-              } catch (reason) {
-                showError(reason);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <Toggle
-              name="enabled"
-              defaultChecked={webhook.enabled}
-              disabled={busy}
-              label="状态更新和需要你处理时发送"
-              description="目标状态变化会通知；决定、验收、到期跟进和升级事项另有注意力通知。普通聊天不会触发。"
-            />
-            <fieldset className="webhook-statuses">
-              <legend>订阅这些状态变化</legend>
-              <div>
-                {goalStatusOptions.map(([value, label]) => (
-                  <Checkbox
-                    name="statuses"
-                    value={value}
-                    defaultChecked={webhook.statuses.includes(value)}
-                    disabled={busy}
-                    label={label}
-                    key={value}
-                  />
-                ))}
-              </div>
-              <small>全部取消后仍会接收“需要你处理”的注意力通知。</small>
-            </fieldset>
-            <Field
-              label="Webhook 地址"
-              hint={
-                webhook.configured
-                  ? `已配置 ${webhook.endpoint ?? ""}，留空保持不变`
-                  : "远程地址必须使用 HTTPS，本机 localhost 可使用 HTTP。"
-              }
-            >
-              <TextInput
-                name="url"
-                type="url"
-                required={!webhook.configured}
-                disabled={busy}
-                placeholder={webhook.configured
-                  ? "留空保持不变"
-                  : "https://hooks.example.com/atte"}
-              />
-            </Field>
-            <Field
-              label="Bearer 令牌（可选）"
-              hint={webhook.tokenConfigured ? "令牌已保存，留空保持不变。" : "留空则不添加 Authorization。"}
-            >
-              <TextInput
-                name="token"
-                type="password"
-                autoComplete="new-password"
-                disabled={busy}
-                placeholder={webhook.tokenConfigured ? "留空保持不变" : "留空则不添加 Authorization"}
-              />
-            </Field>
-            {webhook.tokenConfigured && (
-              <Checkbox name="clearToken" disabled={busy} label="清除已保存的令牌" />
-            )}
-            <p className="ui-form__note">
-              通用 Webhook 收到 JSON；飞书、Lark 和企业微信机器人地址会自动使用文本消息格式。内容仅含工作区名称、目标标题、状态、摘要和 `goalId`，不包含聊天历史、附件或本机路径。
-            </p>
-            <div className="modal-actions webhook-actions">
-              <Button
-                variant="secondary"
-                disabled={busy || !webhook.configured}
-                onClick={async () => {
-                  setBusy(true);
-                  setError("");
-                  try {
-                    setWebhook(await api.testWebhook());
-                    notify("测试通知已送达 Webhook。");
-                  } catch (reason) {
-                    showError(reason);
-                    setWebhook(await api.webhookSettings().catch(() => webhook));
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                测试当前配置
-              </Button>
-              <Button type="submit" variant="primary" disabled={busy}>
-                {busy ? "正在保存…" : "保存设置"}
-              </Button>
-            </div>
-          </form>
-        </Modal>
-      )}
-      {modal === "new" && (
-        <GoalIntakeForm
-          error={error}
-          busy={busy}
-          initialHandling={intakeHandling}
-          onClose={() => setModal("")}
-          onSubmit={saveGoal}
-        />
-      )}
-      {taskModal && goal && goalEntryDestination(goal) !== "attention" && (
-        <TaskDetail key={goal.id} goal={goal} service={goalDetailService} busy={busy} error={error}
-          close={() => setModal("")} notify={notify} delegated={() => setModal("goal")} />
-      )}
-      {(modal === "attention" || taskModal && goal && goalEntryDestination(goal) === "attention") && goal && (
-        <GoalAttentionCard
-          key={goal.id}
-          goal={goal}
-          state={state}
-          service={goalDetailService}
-          busy={busy}
-          error={error}
-          onClose={() => setModal("")}
-          openDetails={() => setModal("goal")}
-          notify={notify}
-        />
-      )}
-      {modal === "project" && (
-        <Modal
-          error={error}
-          title="添加项目"
-          description="在这里创建项目并关联本机目录；目录可留空，仍由同一位管家统筹。"
-          onClose={() => setModal("")}
-        >
-          <form
-            className="ui-form"
-            onSubmit={async (event) => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              try {
-                await execute({
-                  type: "project.add",
-                  name: String(data.get("name")),
-                  path: String(data.get("path")) || undefined,
-                });
-                setModal("");
-                notify("项目已添加");
-              } catch {
-                /* execute reports the error in the modal. */
-              }
-            }}
-          >
-            <Field label="项目名称">
-              <TextInput
-                name="name"
-                required
-                autoFocus
-                placeholder="例如：数据平台"
-              />
-            </Field>
-            <Field
-              label="项目目录（可选）"
-              htmlFor="project-path"
-              connect={false}
-              hint="可留空，仍由同一位管家统筹。"
-            >
-              <div className="file-input">
-                <TextInput
-                  id="project-path"
-                  name="path"
-                  readOnly
-                  placeholder="选择本机目录"
-                  aria-describedby="project-path-message"
-                />
-                <Button
-                  variant="secondary"
-                  onClick={async () => {
-                    const selected = await api.selectProject();
-                    const input =
-                      document.querySelector<HTMLInputElement>(
-                        'input[name="path"]',
-                      );
-                    if (input && selected) input.value = selected;
-                  }}
-                >
-                  选择目录
-                </Button>
-              </div>
-            </Field>
-            <div className="modal-actions">
-              <Button type="submit" variant="primary" disabled={busy}>
-                添加项目
-              </Button>
-            </div>
-          </form>
-        </Modal>
-      )}
-      {modal === "goal" && !taskModal && goal && (
-        <GoalDetail
-          key={goal.id}
-          goal={goal}
-          error={error}
-          state={state}
-          onClose={() => setModal("")}
-          service={goalDetailService}
-          busy={busy}
-          removeAttachment={(attachmentId) => void execute({
-            type: "goal.attachment.remove",
-            goalId: goal.id,
-            attachmentId,
-            actor: "你",
-          }).then(() => notify("图片已删除，相关元数据也已清理。")).catch(() => {})}
-          deleteGoal={() => {
-            if (!window.confirm(`永久删除目标「${goal.title}」及其图片？项目决定账本会保留。`)) return;
-            void execute({ type: "goal.delete", goalId: goal.id, actor: "你" })
-              .then(() => {
-                setGoalId("");
-                setModal("");
-                notify("目标与关联图片已永久删除。");
-              })
-              .catch(() => {});
-          }}
-          edit={() => setModal("edit")}
-          submit={() => setModal("delivery")}
-          notify={notify}
-        />
-      )}
-      {modal === "edit" && goal && (
-        <GoalEditor
-          goal={goal}
-          error={error}
-          busy={busy}
-          execute={execute}
-          onClose={() => setModal("goal")}
-          onSaved={() => {
-            setModal("goal");
-            notify("下一步已更新");
-          }}
-        />
-      )}
-      {modal === "delivery" && goal && (
-        <DeliveryEditor
-          goal={goal}
-          error={error}
-          busy={busy}
-          execute={execute}
-          onClose={() => setModal("goal")}
-          onSaved={() => {
-            setModal("goal");
-            notify("成果已记录，请核对后验收");
-          }}
-        />
-      )}
-      {toast && (
-        <div className="toast" role="status">
-          <Check size={16} />
-          {toast}
-        </div>
-      )}
+              try { setWebhook(await api.testWebhook()); notify("测试通知已送达 Webhook。"); }
+              catch (reason) { showError(reason); setWebhook(await api.webhookSettings().catch(() => webhook)); }
+              finally { setBusy(false); }
+            }}>测试当前配置</Button>
+            <Button type="submit" variant="primary" disabled={busy}>{busy ? "正在保存…" : "保存设置"}</Button>
+          </div>
+        </form>
+      </Modal>}
+      {modal === "new" && <GoalIntakeForm error={error} busy={busy}
+        initialHandling={intakeLater ? "later" : "concierge"}
+        onClose={() => setModal("")} onSubmit={saveGoal} />}
+      {taskModal && goal && goalEntryDestination(goal) !== "attention" && <TaskDetail key={goal.id}
+        goal={goal} service={goalDetailService} busy={busy} error={error}
+        close={() => setModal("")} notify={notify} delegated={() => setModal("goal")} />}
+      {(modal === "attention" || taskModal && goal && goalEntryDestination(goal) === "attention") && goal &&
+        <GoalAttentionCard key={goal.id} goal={goal} state={state} service={goalDetailService}
+          busy={busy} error={error} onClose={() => setModal("")}
+          openDetails={() => setModal("goal")} notify={notify} />}
+      {modal === "project" && <Modal error={error} title="添加项目"
+        description="创建项目并关联本机目录；目录可留空，仍由同一位管家统筹。"
+        onClose={() => setModal("")}>
+        <form className="ui-form" onSubmit={async event => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          try {
+            await execute({
+              type: "project.add", name: String(data.get("name")),
+              path: String(data.get("path")) || undefined,
+            });
+            setModal("");
+            notify("项目已添加");
+          } catch {}
+        }}>
+          <Field label="项目名称"><TextInput name="name" required autoFocus placeholder="例如：数据平台" /></Field>
+          <Field label="项目目录（可选）" htmlFor="project-path" connect={false}
+            hint="可留空，仍由同一位管家统筹。">
+            <div className="file-input"><TextInput id="project-path" name="path" readOnly placeholder="选择本机目录" />
+              <Button variant="secondary" onClick={async () => {
+                const selected = await api.selectProject();
+                const input = document.querySelector<HTMLInputElement>('input[name="path"]');
+                if (input && selected) input.value = selected;
+              }}>选择目录</Button></div>
+          </Field>
+          <div className="modal-actions"><Button type="submit" variant="primary" disabled={busy}>添加项目</Button></div>
+        </form>
+      </Modal>}
+      {modal === "goal" && !taskModal && goal && <GoalDetail key={goal.id} goal={goal}
+        error={error} state={state} onClose={() => setModal("")} service={goalDetailService} busy={busy}
+        removeAttachment={attachmentId => void execute({
+          type: "goal.attachment.remove", goalId: goal.id, attachmentId, actor: "你",
+        }).then(() => notify("图片已删除，相关元数据也已清理。")).catch(() => {})}
+        deleteGoal={() => {
+          if (!window.confirm(`永久删除事项「${goal.title}」及其图片？项目决定账本会保留。`)) return;
+          void execute({ type: "goal.delete", goalId: goal.id, actor: "你" }).then(() => {
+            setGoalId("");
+            setModal("");
+            notify("事项与关联图片已永久删除。");
+          }).catch(() => {});
+        }}
+        edit={() => setModal("edit")} submit={() => setModal("delivery")} notify={notify} />}
+      {modal === "edit" && goal && <GoalEditor goal={goal} error={error} busy={busy}
+        execute={execute} onClose={() => setModal("goal")}
+        onSaved={() => { setModal("goal"); notify("下一步已更新"); }} />}
+      {modal === "delivery" && goal && <DeliveryEditor goal={goal} error={error} busy={busy}
+        execute={execute} onClose={() => setModal("goal")}
+        onSaved={() => { setModal("goal"); notify("成果已记录，请核对后验收"); }} />}
+      {toast && <div className="toast" role="status"><Check size={16} />{toast}</div>}
     </div>
   );
 }
+
 type GoalFormProps = {
-  goal: Goal;
-  error: string;
-  busy: boolean;
+  goal: Goal; error: string; busy: boolean;
   execute: (command: AtteCommand) => Promise<unknown>;
-  onClose: () => void;
-  onSaved: () => void;
+  onClose: () => void; onSaved: () => void;
 };
-function GoalEditor({
-  goal,
-  error,
-  busy,
-  execute,
-  onClose,
-  onSaved,
-}: GoalFormProps) {
+function GoalEditor({ goal, error, busy, execute, onClose, onSaved }: GoalFormProps) {
   const [arrangement, setArrangement] = useState(goal.status === "waiting" ? "waiting" : "active");
-  const localReminder = goal.remindAt
-    ? (() => {
-        const date = new Date(goal.remindAt);
-        return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-          .toISOString()
-          .slice(0, 16);
-      })()
-    : "";
-  return (
-    <Modal
-      title="编辑目标"
-      description="修改目标说明或接下来的安排。等待外部只适用于你和 Agent 之外的联系人或机构。"
-      error={error}
-      onClose={onClose}
-    >
-      <form
-        className="ui-form"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          try {
-            await execute({
-              type: "goal.update",
-              goalId: goal.id,
-              patch: {
-                title: String(data.get("title")),
-                description: String(data.get("description")),
-                next: String(data.get("next")),
-                owner: String(data.get("owner")),
-                ...(arrangement === "waiting" ? { waitingFor: String(data.get("waitingFor")) } : {}),
-                status:
-                  goal.status === "review"
-                    ? undefined
-                    : (arrangement as "active" | "waiting"),
-                remindAt: data.get("remindAt")
-                  ? new Date(String(data.get("remindAt"))).toISOString()
-                  : null,
-              },
-            });
-            onSaved();
-          } catch {
-            /* execute reports the error. */
-          }
-        }}
-      >
-        <Field label="目标名称" hint="改标题不会改变目标状态或验收记录。">
-          <TextInput
-            name="title"
-            defaultValue={goal.title}
-            maxLength={160}
-            required
-          />
+  const localReminder = goal.remindAt ? (() => {
+    const date = new Date(goal.remindAt);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+  })() : "";
+  return <Modal title="编辑事项"
+    description="修改事项说明或接下来的安排。等待外部只适用于你和 Agent 之外的联系人或机构。"
+    error={error} onClose={onClose}>
+    <form className="ui-form" onSubmit={async event => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      try {
+        await execute({ type: "goal.update", goalId: goal.id, patch: {
+          title: String(data.get("title")), description: String(data.get("description")),
+          next: String(data.get("next")), owner: String(data.get("owner")),
+          ...(arrangement === "waiting" ? { waitingFor: String(data.get("waitingFor")) } : {}),
+          status: goal.status === "review" ? undefined : arrangement as "active" | "waiting",
+          remindAt: data.get("remindAt") ? new Date(String(data.get("remindAt"))).toISOString() : null,
+        }});
+        onSaved();
+      } catch {}
+    }}>
+      <Field label="事项名称" hint="改标题不会改变状态或验收记录。">
+        <TextInput name="title" defaultValue={goal.title} maxLength={160} required />
+      </Field>
+      <Field label="背景与完成标准"><TextArea name="description" defaultValue={goal.description} required /></Field>
+      <div className="ui-form__grid">
+        {goal.status !== "review" && <Field label="当前安排">
+          <select className="ui-input ui-select" name="status" value={arrangement}
+            onChange={event => setArrangement(event.target.value)}>
+            <option value="active">继续推进</option><option value="waiting">等待外部</option>
+          </select>
+        </Field>}
+        <Field label="负责人"><TextInput name="owner" defaultValue={goal.owner} required /></Field>
+        {arrangement === "waiting" && <Field label="外部等待对象" hint="例如 YR、法务或供应商。">
+          <TextInput name="waitingFor" defaultValue={goal.waitingFor} maxLength={120} required />
+        </Field>}
+        <Field label="跟进提醒" hint="到提醒时间会进入注意力。">
+          <TextInput name="remindAt" type="datetime-local" defaultValue={localReminder} />
         </Field>
-        <Field label="背景与完成标准">
-          <TextArea
-            name="description"
-            defaultValue={goal.description}
-            required
-          />
-        </Field>
-        <div className="ui-form__grid">
-          {goal.status !== "review" && (
-            <Field label="当前安排">
-              <Select name="status" value={arrangement} onChange={event => setArrangement(event.target.value)}>
-                <option value="active">继续推进</option>
-                <option value="waiting">等待外部</option>
-              </Select>
-            </Field>
-          )}
-          <Field label="负责人">
-            <TextInput name="owner" defaultValue={goal.owner} required />
-          </Field>
-          {arrangement === "waiting" && (
-            <Field label="外部等待对象" hint="例如 YR、法务或供应商；需要你处理或 Agent 协调不属于等待外部。">
-              <TextInput name="waitingFor" defaultValue={goal.waitingFor} maxLength={120} required />
-            </Field>
-          )}
-          <Field label="跟进提醒" hint="到提醒时间会进入注意力面板。">
-            <TextInput
-              name="remindAt"
-              type="datetime-local"
-              defaultValue={localReminder}
-            />
-          </Field>
-        </div>
-        <Field label="下一步">
-          <TextArea name="next" defaultValue={goal.next} required />
-        </Field>
-        <div className="modal-actions">
-          <Button type="submit" variant="primary" disabled={busy}>
-            保存更新
-          </Button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-function DeliveryEditor({
-  goal,
-  error,
-  busy,
-  execute,
-  onClose,
-  onSaved,
-}: GoalFormProps) {
-  return (
-    <Modal
-      title="提交成果"
-      description="写下实际成果与已完成的检查，供最终验收。"
-      error={error}
-      onClose={onClose}
-    >
-      <form
-        className="ui-form"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          try {
-            await execute({
-              type: "goal.review",
-              goalId: goal.id,
-              actor: "你",
-              delivery: {
-                summary: String(data.get("summary")),
-                location: String(data.get("location")) || undefined,
-                checks: [
-                  {
-                    name: String(data.get("checkName")),
-                    command: String(data.get("checkCommand")),
-                    result: "passed",
-                    note: String(data.get("checkNote")),
-                  },
-                ],
-              },
-            });
-            onSaved();
-          } catch {
-            /* execute reports the error. */
-          }
-        }}
-      >
-        <Field label="成果摘要">
-          <TextArea name="summary" placeholder="实际完成了什么？" required />
-        </Field>
-        <Field label="成果位置（可选）">
-          <TextInput
-            name="location"
-            placeholder="文件位置、文档或其他可核对的位置"
-          />
-        </Field>
-        <div className="ui-form__grid">
-          <Field label="检查名称">
-            <TextInput
-              name="checkName"
-              placeholder="例如：人工核对审批结果"
-              required
-            />
-          </Field>
-          <Field label="实际检查操作">
-            <TextInput
-              name="checkCommand"
-              placeholder="实际执行的命令或人工检查步骤"
-              required
-            />
-          </Field>
-        </div>
-        <Field label="通过依据" hint="未检查通过时请继续处理，不要提交验收。">
-          <TextArea
-            name="checkNote"
-            placeholder="写下实际观察到的结果"
-            required
-          />
-        </Field>
-        <div className="modal-actions">
-          <Button type="submit" variant="primary" disabled={busy}>
-            提交验收
-          </Button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-function Settings({
-  busy,
-  state,
-  herdr,
-  cli,
-  skills,
-  agentHooks,
-  onAgentHooksChange,
-  notify,
-  backendStatus,
-  setBackendStatus,
-  theme,
-  setTheme,
-  onAction,
-  workspace,
-  pickWorkspace,
-  openHerdr,
-  agentOptions,
-  webhook,
-  saveAgents,
-  savePolicy,
-  saveAutonomy,
-  saveProjectAutonomy,
-  openWebhook,
-  version,
-}: any) {
-  const [attachCopyState, setAttachCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const attachCopyTimer = useRef<number | undefined>(undefined);
-  const [diagnosticCopy, setDiagnosticCopy] = useState<"idle" | "copied" | "failed">("idle");
-  const diagnosticCopyTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(diagnosticCopyTimer.current), []);
-  async function copyDiagnostics() {
-    window.clearTimeout(diagnosticCopyTimer.current);
-    try {
-      await api.writeClipboardText(await api.diagnosticsReport());
-      setDiagnosticCopy("copied");
-      notify("诊断日志已复制，可直接粘贴给维护者排查。");
-    } catch (error) {
-      setDiagnosticCopy("failed");
-      notify(`复制诊断日志失败：${error instanceof Error ? error.message : String(error)}`);
-    }
-    diagnosticCopyTimer.current = window.setTimeout(() => setDiagnosticCopy("idle"), 4_000);
-  }
-  useEffect(() => {
-    setAttachCopyState("idle");
-    window.clearTimeout(attachCopyTimer.current);
-  }, [herdr?.session]);
-  useEffect(() => () => window.clearTimeout(attachCopyTimer.current), []);
-  async function copyAttachCommand() {
-    if (!herdr?.session) return;
-    try {
-      await api.writeClipboardText(`herdr session attach ${herdr.session}`);
-      setAttachCopyState("copied");
-      window.clearTimeout(attachCopyTimer.current);
-      attachCopyTimer.current = window.setTimeout(() => setAttachCopyState("idle"), 2200);
-    } catch {
-      setAttachCopyState("failed");
-    }
-  }
-  return (
-    <div className="content settings">
-      <section className="intro">
-        <div>
-          <span className="eyebrow">Atte · The attention layer</span>
-          <h1>只设置必要的。</h1>
-          <p>选择真实工作现场，保留你已有的终端、CLI、模型与工作方式。</p>
-        </div>
-      </section>
-      <nav className="settings-navigation" aria-label="设置分组">
-        <a href="#settings-general" onClick={event => {
-          event.preventDefault();
-          const section = document.getElementById("settings-general");
-          section?.scrollIntoView({ block: "start" });
-          section?.focus({ preventScroll: true });
-        }}>工作区与外观</a>
-        <a href="#settings-scenes" onClick={event => {
-          event.preventDefault();
-          const section = document.getElementById("settings-scenes");
-          section?.scrollIntoView({ block: "start" });
-          section?.focus({ preventScroll: true });
-        }}>执行现场</a>
-        <a href="#settings-agents" onClick={event => {
-          event.preventDefault();
-          const section = document.getElementById("settings-agents");
-          section?.scrollIntoView({ block: "start" });
-          section?.focus({ preventScroll: true });
-        }}>Agent 与工作方法</a>
-        <a href="#settings-authority" onClick={event => {
-          event.preventDefault();
-          const section = document.getElementById("settings-authority");
-          section?.scrollIntoView({ block: "start" });
-          section?.focus({ preventScroll: true });
-        }}>授权与自主推进</a>
-        <a href="#settings-notifications" onClick={event => {
-          event.preventDefault();
-          const section = document.getElementById("settings-notifications");
-          section?.scrollIntoView({ block: "start" });
-          section?.focus({ preventScroll: true });
-        }}>通知</a>
-      </nav>
-      <p className="settings-save-hint">修改字段后点击“保存”；安装、检测与更换工作区按按钮说明执行。</p>
-      <div className="settings-groups">
-        <SettingsGroup id="settings-general" title="工作区与外观" description="选择数据位置、界面主题，查看本地存储。">
-          <SettingsSection
-            icon={<Folder />}
-            title="工作区存储位置"
-            description="目标保存在此目录的 .atte 中。切换工作区后，界面会显示该目录自己的目标。"
-          >
-            <div className="settings-facts">
-              <code>{workspace || "尚未选择存储位置"}</code>
-            </div>
-            <div className="ui-settings-card__actions">
-              <Button variant="secondary" size="sm" onClick={() => void pickWorkspace()}>
-                {workspace ? "更换工作区" : "选择存储位置"}
-              </Button>
-            </div>
-          </SettingsSection>
-          <AppearanceSettings theme={theme} onSave={value => {
-            setTheme(value);
-            notify("外观已保存。");
-          }} />
-          <StorageMaintenance />
-        </SettingsGroup>
-        <SettingsGroup id="settings-scenes" title="执行现场" description="选择会话后端，设置打开方式并管理运行时。">
-          <BackendSelectionCard
-            status={backendStatus}
-            onStatusChange={setBackendStatus}
-          />
-          {backendStatus?.control.selected === "herdr" && (
-            <SceneSettingsEditor busy={busy} notify={notify} />
-          )}
-          {backendStatus?.control.selected === "herdr" && <SettingsSection
-            wide
-            icon={<SquareTerminal />}
-            title="Herdr 运行时"
-            description="Herdr 负责当前执行现场与全局管家。更新会保留现有目标；正在运行的版本不会在检查阶段被替换。"
-          >
-            <div className="settings-facts">
-              {herdr?.session && (
-                <div className="external-herdr-command" role="group" aria-label="在外部终端打开同一 Herdr 会话">
-                  <div>
-                    <strong>在 iTerm2 / Terminal 中打开同一现场</strong>
-                    <p>裸跑 herdr 默认连接 default Session，不会自动显示这个工作区；复制下面的命令才能进入 Atte 当前 Session。</p>
-                    <code>herdr session attach {herdr.session}</code>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={<Copy size={14} />}
-                    aria-label="复制外部终端 attach 命令"
-                    onClick={() => void copyAttachCommand()}
-                  >
-                    {attachCopyState === "copied" ? "已复制" : attachCopyState === "failed" ? "复制失败" : "复制命令"}
-                  </Button>
-                </div>
-              )}
-              {herdr?.executable && <code>{herdr.executable}</code>}
-            </div>
-            <div className="settings-inline">
-              {herdr?.installed ? (
-                <span className="settings-status ready">
-                  <i />
-                  已安装 {herdr.version}
-                  {herdr.latestVersion ? ` · 最新 ${herdr.latestVersion}` : ""}
-                  {herdr.plugin?.phase === "ready" ? " · 注意力面板已接入" : ""}
-                </span>
-              ) : (
-                <LoadingState label={herdr?.detail || "正在检测运行环境…"} />
-              )}
-              {herdr?.plugin?.phase === "error" && (
-                <span className="ui-field__error">{herdr.plugin.detail}</span>
-              )}
-            </div>
-            {herdr?.detail && (
-              <p
-                className={herdr.phase === "error" ? "ui-field__error" : "muted"}
-                role={herdr.phase === "error" ? "alert" : "status"}
-                aria-live="polite"
-              >
-                {herdr.detail}
-              </p>
-            )}
-            <div className="ui-settings-card__actions">
-              <Button
-                variant={herdr?.updateAvailable ? "primary" : "secondary"}
-                size="sm"
-                icon={herdr?.updateAvailable ? <Download size={14} /> : <RefreshCw size={14} />}
-                disabled={busy || herdr?.phase === "checking" || herdr?.phase === "downloading"}
-                onClick={() => void onAction(
-                  herdr?.updateAvailable || !herdr?.installed ? "herdr-install" : "herdr-check",
-                )}
-              >
-                {herdr?.phase === "downloading"
-                  ? "正在更新…"
-                  : herdr?.phase === "checking"
-                    ? "正在检查…"
-                    : !herdr?.installed
-                      ? "安装 Herdr"
-                      : herdr.updateAvailable
-                        ? `更新 Herdr`
-                        : "检查更新"}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={busy || !workspace}
-                onClick={() => void onAction("concierge")}
-              >
-                {busy ? "正在准备…" : "准备管家"}
-              </Button>
-              <Button variant="ghost" size="sm" disabled={busy || !workspace} onClick={openHerdr}>
-                内嵌轻现场
-              </Button>
-            </div>
-          </SettingsSection>}
-          <OrcaInstallationCard />
-        </SettingsGroup>
-        <SettingsGroup id="settings-agents" title="Agent 与工作方法" description="管理执行命令、生命周期接入、命令行与可复用方法。">
-          <AgentPreferencesEditor
-            key={workspace}
-            preferences={state.agents ?? { concierge: "codex" }}
-            options={agentOptions}
-            busy={busy || !workspace}
-            onSave={saveAgents}
-          />
-          <AgentRuntimeSettings
-            adapters={agentHooks ?? []}
-            busy={busy}
-            onChange={onAgentHooksChange}
-            notify={notify}
-          />
-          <MethodLibrary busy={busy} notify={notify} workspace={workspace} />
-          <SettingsSection
-            icon={<Zap />}
-            title="Atte 命令行"
-            description="管家通过它读写当前案卷，不能列出或修改其他目标。应用内置，无需另外安装 Node。"
-          >
-            <div className="settings-facts">
-              <code>{cli?.path}</code>
-            </div>
-            <div className="ui-settings-card__actions">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={busy}
-                onClick={() => void onAction("cli")}
-              >
-                {cli?.installed ? "重新安装" : "安装到 ~/.local/bin"}
-              </Button>
-            </div>
-          </SettingsSection>
-          <SettingsSection
-            icon={<Bot />}
-            title="让外部 Agent 会使用 Atte"
-            description="安装随应用打包的 Atte Skill。Codex、Claude Code、Cursor 或其他读取通用 Agent Skills 目录的工具，可以直接提交目标、查看目标并追加说明。"
-          >
-            {skills?.targets?.length ? (
-              <div className="skill-targets">
-                {skills.targets.map((target: any) => (
-                  <small
-                    key={target.id}
-                    className={target.phase === "conflict" ? "conflict" : target.phase}
-                    title={target.path}
-                  >
-                    {target.label}
-                    <i />
-                    {target.phase === "installed" ? "已安装"
-                      : target.phase === "outdated" ? `可更新 ${target.managedVersion ?? ""}`
-                        : target.phase === "conflict" ? "已有同名 Skill，已保护"
-                          : "未安装"}
-                  </small>
-                ))}
-              </div>
-            ) : (
-              <LoadingState label="正在检测 Agent Skills 目录…" />
-            )}
-            <div className="ui-settings-card__actions">
-              <span className="settings-status">
-                {skills ? `${skills.installed}/${skills.available} 已就绪` : ""}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={busy}
-                onClick={() => void onAction("skills")}
-              >
-                {skills?.targets?.length && skills.installed === skills.available
-                  ? "重新安装 Skills"
-                  : "安装 / 更新 Skills"}
-              </Button>
-            </div>
-          </SettingsSection>
-        </SettingsGroup>
-        <SettingsGroup id="settings-authority" title="授权与自主推进" description="管理项目上线策略、决定账本与实验验收授权。">
-          <GovernanceEditor
-            projects={state.projects}
-            decisions={state.decisions ?? []}
-            busy={busy || !workspace}
-            onSave={savePolicy}
-          />
-          <ExperimentalAutonomySettings
-            state={state}
-            busy={busy || !workspace}
-            onSaveWorkspace={saveAutonomy}
-            onSaveProject={saveProjectAutonomy}
-          />
-        </SettingsGroup>
-        <SettingsGroup id="settings-notifications" title="通知" description="管理需要你时的提醒与状态变化通知。">
-          <SettingsSection
-            wide
-            icon={<Bell />}
-            title="需要你时，主动通知"
-            description="系统通知默认开启；可接一个 Webhook，同步目标状态变化，并把决定、验收、到期跟进和真正需要介入的事项推到你的工作流。"
-          >
-            <div className="settings-facts">
-              {webhook.configured && (
-                <p>
-                  {webhook.endpoint} · {webhook.enabled ? "已启用" : "已暂停"}
-                  {webhook.tokenConfigured ? " · Bearer 认证" : ""}
-                  {" · "}
-                  {webhook.statuses.length ? `${webhook.statuses.length} 种状态` : "不订阅状态变化"}
-                </p>
-              )}
-              {webhook.lastSuccessAt && <p>最近送达：{time(webhook.lastSuccessAt)}</p>}
-              {webhook.lastError && (
-                <p className="ui-field__error">
-                  上次发送失败：{webhook.lastError}
-                  {webhook.lastErrorAt ? ` · ${time(webhook.lastErrorAt)}` : ""}
-                </p>
-              )}
-            </div>
-            <div className="ui-settings-card__actions">
-              <Button variant="secondary" size="sm" onClick={openWebhook}>
-                {webhook.configured ? "管理 Webhook" : "配置 Webhook"}
-              </Button>
-            </div>
-          </SettingsSection>
-        </SettingsGroup>
-        <SettingsSection
-          icon={<Wrench />}
-          title="排查与反馈"
-          description="遇到异常时复制脱敏诊断，粘贴给维护者即可定位问题。"
-        >
-          <p className="muted">
-            报告包含版本、系统环境、会话后端状态与最近错误，不包含目标正文、消息、附件、终端输出、Webhook 地址或凭据；绝对路径会替换为 ~。
-            也可从顶部菜单 Atte → 复制诊断日志 获取。
-          </p>
-          <div className="ui-settings-card__actions">
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<Copy size={14} />}
-              onClick={() => void copyDiagnostics()}
-            >
-              {diagnosticCopy === "copied" ? "已复制" : diagnosticCopy === "failed" ? "复制失败，请重试" : "复制诊断日志"}
-            </Button>
-          </div>
-        </SettingsSection>
-        <SettingsSection icon={<Bot />} title="关于 Atte" description="The attention layer">
-          <div className="about-mark"><BrandMark variant="icon" /></div>
-          <div className="settings-facts">
-            <p>人只做拍板，Agent 并行推进。管家把决定、验收和需要介入的事项带到你面前。</p>
-            <p>当前版本：{version}</p>
-          </div>
-        </SettingsSection>
-        <p className="settings-foot">
-          Atte {version} · The attention layer · {state.projects.length} 个项目 ·{" "}
-          {state.goals.length} 个目标
-        </p>
       </div>
-    </div>
-  );
+      <Field label="下一步"><TextArea name="next" defaultValue={goal.next} required /></Field>
+      <div className="modal-actions"><Button type="submit" variant="primary" disabled={busy}>保存更新</Button></div>
+    </form>
+  </Modal>;
 }
-function SceneSettingsEditor({
-  busy,
-  notify,
-}: {
-  busy: boolean;
-  notify: (message: string) => void;
-}) {
-  const [status, setStatus] = useState<
-    Awaited<ReturnType<typeof api.sceneSettings>>
-  >();
-  const [openWith, setOpenWith] = useState<"external" | "embedded">("external");
-  const [terminal, setTerminal] = useState<"auto" | "iterm2" | "terminal" | "ghostty">("auto");
-  const [saving, setSaving] = useState(false);
-  const [failure, setFailure] = useState("");
-  useEffect(() => {
-    void api.sceneSettings()
-      .then(value => {
-        setStatus(value);
-        setOpenWith(value.settings.openWith);
-        setTerminal(value.settings.terminal);
-      })
-      .catch(error => setFailure(String(error).replace(
-        /^Error invoking remote method '[^']+': (?:Error: )?/,
-        "",
-      )));
-  }, []);
-  const dirty = Boolean(status &&
-    (openWith !== status.settings.openWith || terminal !== status.settings.terminal));
-  async function save() {
-    setSaving(true);
-    setFailure("");
-    try {
-      const value = await api.saveSceneSettings({ openWith, terminal });
-      setStatus(value);
-      setOpenWith(value.settings.openWith);
-      setTerminal(value.settings.terminal);
-      notify("工作现场设置已保存。");
-    } catch (error) {
-      setFailure(String(error).replace(
-        /^Error invoking remote method '[^']+': (?:Error: )?/,
-        "",
-      ));
-    } finally {
-      setSaving(false);
-    }
-  }
-  async function test() {
-    setSaving(true);
-    setFailure("");
-    try {
-      const lease = await api.testSceneSettings();
-      const label = lease.terminal === "iterm2"
-        ? "iTerm2"
-        : lease.terminal === "terminal" ? "Terminal" : "Ghostty";
-      notify(`已在 ${label} 打开当前工作现场。`);
-    } catch (error) {
-      setFailure(String(error).replace(
-        /^Error invoking remote method '[^']+': (?:Error: )?/,
-        "",
-      ));
-    } finally {
-      setSaving(false);
-    }
-  }
-  const terminalOptions = [
-    { value: "auto" as const, label: "自动选择" },
-    ...(status?.terminals ?? []).map(item => ({
-      value: item.id,
-      label: `${item.label}${item.installed ? "" : "（未安装）"}`,
-      disabled: !item.installed,
-    })),
-  ];
-  return (
-    <SettingsSection
-      wide
-      icon={<SquareTerminal />}
-      title="工作现场"
-      description="真实终端保留图片粘贴、组合键、输入法和完整 Herdr 交互。内嵌轻现场适合快速查看和简单文字输入。"
-    >
-      <div className="scene-settings-panel">
-        <div>
-          <strong>“回到现场”默认打开方式</strong>
-          <ChoiceGroup
-            label="默认打开方式"
-            value={openWith}
-            disabled={busy || saving || !status}
-            options={[
-              { value: "external", label: "外部终端（推荐）" },
-              { value: "embedded", label: "内嵌轻现场" },
-            ]}
-            onChange={setOpenWith}
-          />
-          <p>
-            {openWith === "external"
-              ? "使用你熟悉的真实终端，Atte 只负责定位同一 Herdr Session 和目标 Tab。"
-              : "不离开 Atte，复杂快捷键或图片输入可随时切到外部终端。"}
-          </p>
-        </div>
-        <div>
-          <strong>优先使用的终端</strong>
-          <div className="scene-terminal-options" role="group" aria-label="优先使用的终端">
-            {terminalOptions.map(option => (
-              <button
-                key={option.value}
-                type="button"
-                disabled={busy || saving || !status || ("disabled" in option && option.disabled)}
-                aria-pressed={terminal === option.value}
-                onClick={() => {
-                  setTerminal(option.value);
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <p>
-            当前选择：
-            {status?.resolved
-              ? status.terminals.find(item => item.id === status.resolved)?.label
-              : terminal === "auto" ? "等待检测可用终端" : "所选终端不可用"}
-          </p>
-        </div>
+function DeliveryEditor({ goal, error, busy, execute, onClose, onSaved }: GoalFormProps) {
+  return <Modal title="提交成果" description="写下实际成果与已完成的检查，供最终验收。"
+    error={error} onClose={onClose}>
+    <form className="ui-form" onSubmit={async event => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      try {
+        await execute({ type: "goal.review", goalId: goal.id, actor: "你", delivery: {
+          summary: String(data.get("summary")), location: String(data.get("location")) || undefined,
+          checks: [{
+            name: String(data.get("checkName")), command: String(data.get("checkCommand")),
+            result: "passed", note: String(data.get("checkNote")),
+          }],
+        }});
+        onSaved();
+      } catch {}
+    }}>
+      <Field label="成果摘要"><TextArea name="summary" placeholder="实际完成了什么？" required /></Field>
+      <Field label="成果位置（可选）"><TextInput name="location" placeholder="文件位置、文档或其他可核对的位置" /></Field>
+      <div className="ui-form__grid">
+        <Field label="检查名称"><TextInput name="checkName" placeholder="例如：人工核对审批结果" required /></Field>
+        <Field label="实际检查操作"><TextInput name="checkCommand" placeholder="实际执行的命令或人工检查步骤" required /></Field>
       </div>
-      <div className="settings-facts">
-        <p>当前生效：{status?.settings.openWith === "embedded" ? "内嵌轻现场" : "外部终端"} · {status?.settings.terminal ?? "检测中"}</p>
-        <p>
-          Terminal 可不用自动化权限直接启动。iTerm2 首次打开或精确定位已有窗口时，macOS 可能请求“自动化”权限；拒绝后不会丢失目标或 Herdr Session，可继续使用内嵌轻现场。
-        </p>
-      </div>
-      {failure && <p className="ui-field__error" role="alert">{failure}</p>}
-      <div className="ui-settings-card__actions">
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={busy || saving || !dirty}
-          onClick={() => void save()}
-        >
-          {saving ? "正在保存…" : "保存工作现场"}
-        </Button>
-        <span className="settings-status" role="status">{dirty ? "有未保存的更改" : "已保存"}</span>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={busy || saving || dirty || !status}
-          onClick={() => void test()}
-        >
-          {saving ? "正在打开…" : "测试打开现场"}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy || saving}
-          onClick={() => void api.openHerdr().catch(error => setFailure(String(error)))}
-        >
-          打开内嵌轻现场
-        </Button>
-      </div>
-    </SettingsSection>
-  );
-}
-function formatBytes(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
-  const value = bytes / 1024 ** index;
-  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
-}
-type MethodPackPreview = NonNullable<
-  Awaited<ReturnType<typeof api.previewMethodPack>>
->;
-const methodPackStatus: Record<SkillPackView["status"], string> = {
-  builtin: "内置",
-  ready: "可用",
-  disabled: "已停用",
-  missing: "需要修复",
-  "needs-approval": "有脚本待授权",
-};
-
-function MethodLibrary({
-  busy,
-  notify,
-  workspace,
-}: {
-  busy: boolean;
-  notify: (message: string) => void;
-  workspace: string;
-}) {
-  const [packs, setPacks] = useState<SkillPackView[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [working, setWorking] = useState("");
-  const [failure, setFailure] = useState("");
-  const [preview, setPreview] = useState<MethodPackPreview>();
-  const [approvedScripts, setApprovedScripts] = useState<string[]>([]);
-
-  async function refresh() {
-    setFailure("");
-    if (!workspace) {
-      setPacks([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      setPacks(await api.methodPacksStatus());
-    } catch (reason) {
-      setFailure(errorText(reason));
-    } finally {
-      setLoading(false);
-    }
-  }
-  useEffect(() => {
-    void refresh();
-  }, [workspace]);
-
-  async function choosePack() {
-    setFailure("");
-    setWorking("preview");
-    try {
-      const selected = await api.previewMethodPack();
-      if (selected) {
-        setPreview(selected);
-        setApprovedScripts([]);
-      }
-    } catch (reason) {
-      setFailure(errorText(reason));
-    } finally {
-      setWorking("");
-    }
-  }
-  async function installPreview() {
-    if (!preview) return;
-    setWorking("install");
-    setFailure("");
-    try {
-      const installed = await api.installMethodPack(
-        preview.path,
-        approvedScripts,
-      );
-      setPreview(undefined);
-      await refresh();
-      notify(`已安装工作方法「${installed.name}」`);
-    } catch (reason) {
-      setFailure(errorText(reason));
-    } finally {
-      setWorking("");
-    }
-  }
-  async function mutate(
-    pack: SkillPackView,
-    action: "approve" | "disable" | "enable" | "remove",
-    scriptIds: string[] = [],
-  ) {
-    if (
-      action === "remove" &&
-      !window.confirm(
-        `移除「${pack.name}」？已挂载它的目标会暂停启动，直到重新安装或从目标移除。`,
-      )
-    )
-      return;
-    setWorking(`${action}:${pack.id}`);
-    setFailure("");
-    try {
-      setPacks(await api.mutateMethodPack(
-        pack.id,
-        action,
-        scriptIds,
-      ));
-      notify(
-        action === "approve"
-          ? `已授权「${pack.name}」当前版本的脚本`
-          : action === "remove"
-            ? `已移除「${pack.name}」`
-            : action === "disable"
-              ? `已停用「${pack.name}」`
-              : `已启用「${pack.name}」`,
-      );
-    } catch (reason) {
-      setFailure(errorText(reason));
-    } finally {
-      setWorking("");
-    }
-  }
-  async function copyAuthorPrompt() {
-    try {
-      await api.writeClipboardText(
-        `请使用 atte-local-pack-author，把我接下来描述的工作方法创建成 Atte 本地能力包。先问我真正缺少的信息，使用 atte skill draft / validate 创建草稿，展示名称、适用范围、步骤、检查清单和 script SHA-256；得到我明确确认后再 install。工作区：${workspace}`,
-      );
-      notify("创建说明已复制，可发给任意已安装 Atte Skills 的 Agent。");
-    } catch (reason) {
-      setFailure(errorText(reason));
-    }
-  }
-
-  const localPacks = packs.filter(pack => pack.source === "local"),
-    builtinPacks = packs.filter(pack => pack.source === "builtin"),
-    previewScripts = preview?.manifest.scripts ?? [];
-  return (
-    <>
-      <SettingsSection
-        wide
-        icon={<BookOpen />}
-        title="工作方法"
-        description="方法告诉负责人和复核者该按什么流程工作。安装和授权都由你决定；目标只使用自己挂载的方法。"
-      >
-        {!workspace ? (
-          <p className="muted">先选择存储位置，再安装或管理工作方法。</p>
-        ) : loading ? (
-          <LoadingState label="正在检查本地工作方法…" />
-        ) : localPacks.length ? (
-          <div className="method-pack-list">
-            {localPacks.map(pack => {
-              const pendingScripts = pack.scripts.filter(script =>
-                !script.approved);
-              return (
-                <article className="method-pack-card" key={pack.id}>
-                  <header>
-                    <span className="method-pack-mark" aria-hidden="true">
-                      <PackageOpen size={17} />
-                    </span>
-                    <div>
-                      <strong>{pack.name}</strong>
-                      <small>{pack.id} · {pack.version}</small>
-                    </div>
-                    <span className={`method-pack-status ${pack.status}`}>
-                      {methodPackStatus[pack.status]}
-                    </span>
-                  </header>
-                  <p>{pack.description || pack.detail || "这个能力包缺少可读说明。"}</p>
-                  <div className="method-pack-meta">
-                    <span>适用于 {pack.roles.map(role =>
-                      role === "owner" ? "负责人" : role === "verifier" ? "复核者" : "管家").join("、")}</span>
-                    {pack.referenceCount > 0 && <span>{pack.referenceCount} 份参考</span>}
-                    {pack.scripts.length > 0 && (
-                      <span>{pack.scripts.filter(script => script.approved).length}/{pack.scripts.length} 个脚本已授权</span>
-                    )}
-                  </div>
-                  {pendingScripts.length > 0 && (
-                    <div className="method-script-list">
-                      {pendingScripts.map(script => (
-                        <div className="method-script-row" key={script.id}>
-                          <div>
-                            <strong>{script.description}</strong>
-                            <code>{script.sha256}</code>
-                            {script.approvalInvalidated && <small>脚本内容变化，旧授权已失效</small>}
-                          </div>
-                          <Button
-                            size="sm"
-                            disabled={Boolean(busy || working)}
-                            onClick={() => void mutate(pack, "approve", [script.id])}
-                          >
-                            授权当前版本
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <footer>
-                    <Button
-                      variant={pack.status === "disabled" ? "secondary" : "ghost"}
-                      size="sm"
-                      disabled={Boolean(busy || working || pack.status === "missing")}
-                      onClick={() => void mutate(
-                        pack,
-                        pack.status === "disabled" ? "enable" : "disable",
-                      )}
-                    >
-                      {working === `${pack.status === "disabled" ? "enable" : "disable"}:${pack.id}`
-                        ? "正在保存…"
-                        : pack.status === "disabled" ? "启用" : "停用"}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      icon={<Trash2 size={13} />}
-                      disabled={Boolean(busy || working)}
-                      onClick={() => void mutate(pack, "remove")}
-                    >
-                      移除
-                    </Button>
-                  </footer>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <EmptyState
-            inline
-            icon={<PackageOpen />}
-            title="还没有本地工作方法"
-            description="把一个重复流程、评审清单或团队 SOP 变成方法。安装后，可在目标详情中单独挂载。"
-            action={(
-              <>
-                <Button
-                  size="sm"
-                  icon={<Sparkles size={14} />}
-                  onClick={() => void copyAuthorPrompt()}
-                >
-                  让 Agent 创建
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<FolderPlus size={14} />}
-                  disabled={Boolean(busy || working)}
-                  onClick={() => void choosePack()}
-                >
-                  从文件夹安装
-                </Button>
-              </>
-            )}
-          />
-        )}
-        {!!builtinPacks.length && (
-          <details className="method-builtins">
-            <summary>
-              <span>
-                <BookOpen size={14} />
-                {builtinPacks.length} 个内置方法
-              </span>
-              <small>由 Atte 随版本维护，可查看，不占用目标的本地槽位。</small>
-            </summary>
-            <div>
-              {builtinPacks.map(pack => (
-                <article key={pack.id}>
-                  <strong>{pack.name}</strong>
-                  <span>{pack.description}</span>
-                </article>
-              ))}
-            </div>
-          </details>
-        )}
-        {failure && <p className="ui-field__error" role="alert">{failure}</p>}
-        {!!localPacks.length && (
-          <div className="ui-settings-card__actions">
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<Sparkles size={14} />}
-              onClick={() => void copyAuthorPrompt()}
-            >
-              让 Agent 创建
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<FolderPlus size={14} />}
-              disabled={Boolean(busy || working)}
-              onClick={() => void choosePack()}
-            >
-              {working === "preview" ? "正在检查…" : "从文件夹安装"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<RefreshCw size={14} />}
-              disabled={loading || Boolean(working)}
-              onClick={() => void refresh()}
-            >
-              重新检查
-            </Button>
-          </div>
-        )}
-      </SettingsSection>
-      {preview && (
-        <Modal
-          wide
-          title="检查本地工作方法"
-          description="确认适用角色和执行边界后再安装。脚本默认不授权。"
-          onClose={() => {
-            if (!working) setPreview(undefined);
-          }}
-          error={failure}
-        >
-          <div className="method-preview">
-            <header>
-              <span className="method-pack-mark" aria-hidden="true">
-                <PackageOpen size={18} />
-              </span>
-              <div>
-                <h3>{preview.manifest.name}</h3>
-                <p>{preview.manifest.description}</p>
-                <small>
-                  {preview.manifest.id} · {preview.manifest.version} ·
-                  适用于 {preview.manifest.roles.map(role =>
-                    role === "owner" ? "负责人" : "复核者").join("、")}
-                </small>
-              </div>
-            </header>
-            <div className="method-preview-facts">
-              <span>{preview.files.length} 个文件</span>
-              <span>{formatBytes(preview.totalBytes)}</span>
-              <span>{preview.manifest.references?.length ?? 0} 份参考</span>
-              <code title={preview.digest}>SHA-256 {preview.digest.slice(0, 16)}…</code>
-            </div>
-            <section>
-              <strong>入口说明预览</strong>
-              <pre>{preview.entryPreview}</pre>
-            </section>
-            {preview.references.length > 0 && (
-              <section>
-                <strong>参考文件</strong>
-                <p>这些内容会在目标挂载后进入负责人或复核者上下文。</p>
-                <div className="method-preview-references">
-                  {preview.references.map(reference => (
-                    <details key={reference.path}>
-                      <summary>
-                        <span>{reference.path}</span>
-                        <small>{reference.characters} 字符</small>
-                      </summary>
-                      <pre>{reference.content}</pre>
-                    </details>
-                  ))}
-                </div>
-              </section>
-            )}
-            {previewScripts.length > 0 && (
-              <section>
-                <strong>可选脚本</strong>
-                <p>脚本只在你勾选并安装后获得当前内容摘要的授权；内容变化会自动失效。</p>
-                <div className="method-preview-scripts">
-                  {previewScripts.map(script => (
-                    <Checkbox
-                      key={script.id}
-                      label={script.description}
-                      description={<code>{script.sha256}</code>}
-                      checked={approvedScripts.includes(script.id)}
-                      onChange={event => {
-                        setApprovedScripts(current =>
-                          event.target.checked
-                            ? [...new Set([...current, script.id])]
-                            : current.filter(id => id !== script.id));
-                      }}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-            <div className="modal-actions">
-              <Button
-                variant="ghost"
-                disabled={Boolean(working)}
-                onClick={() => setPreview(undefined)}
-              >
-                取消
-              </Button>
-              <Button
-                variant="primary"
-                disabled={Boolean(working)}
-                onClick={() => void installPreview()}
-              >
-                {working === "install"
-                  ? "正在安装…"
-                  : approvedScripts.length
-                    ? "安装并授权所选脚本"
-                    : "仅安装说明"}
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
-    </>
-  );
-}
-
-function errorText(value: unknown) {
-  return String(value).replace(
-    /^Error invoking remote method '[^']+': (?:Error: )?/,
-    "",
-  );
-}
-function StorageMaintenance() {
-  const [status, setStatus] = useState<
-    Awaited<ReturnType<typeof api.cacheMaintenanceStatus>>
-  >();
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [failure, setFailure] = useState("");
-  async function refresh() {
-    setFailure("");
-    try {
-      setStatus(await api.cacheMaintenanceStatus());
-    } catch (reason) {
-      setFailure(String(reason).replace(
-        /^Error invoking remote method '[^']+': (?:Error: )?/,
-        "",
-      ));
-    }
-  }
-  useEffect(() => {
-    void refresh();
-  }, []);
-  async function clean() {
-    setBusy(true);
-    setFailure("");
-    setMessage("");
-    try {
-      const result = await api.cleanCache();
-      setStatus(result.status);
-      setMessage(`已释放 ${formatBytes(result.removedBytes)}，清理 ${result.removedFiles} 个缓存文件。`);
-      if (result.warnings.length)
-        setFailure(`${result.warnings.length} 个文件正在使用或无法删除，已安全跳过。`);
-    } catch (reason) {
-      setFailure(String(reason).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ""));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <SettingsSection
-      wide
-      icon={<HardDrive />}
-      title="缓存与本地维护"
-      description="每天自动清理 30 天未用的渲染缓存与日志，并删除退出后遗留超过 24 小时的临时文件。已结束目标的附件仍按 30 天规则清理；不会删除目标、Agent 会话或旧工作区备份。"
-    >
-      <div className="settings-inline">
-        <span className="settings-status">
-          <i />
-          {status ? `${formatBytes(status.totalBytes)} · ${status.totalFiles} 个缓存文件` : "正在扫描…"}
-        </span>
-        {status && <span>{formatBytes(status.staleBytes)} 可在自动维护中释放</span>}
-      </div>
-      {message && <p className="ui-field__hint">{message}</p>}
-      {failure && <p className="ui-field__error">{failure}</p>}
-      <div className="ui-settings-card__actions">
-        <Button
-          variant="ghost"
-          size="sm"
-          icon={<RefreshCw size={14} />}
-          disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            void refresh().finally(() => setBusy(false));
-          }}
-        >
-          重新扫描
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={<Trash2 size={14} />}
-          disabled={busy || !status}
-          onClick={() => void clean()}
-        >
-          {busy ? "正在清理…" : "清理缓存"}
-        </Button>
-      </div>
-    </SettingsSection>
-  );
-}
-const shipPolicyLabels: Record<ShipPolicy, string> = {
-  "external-approval": "外部审批（默认）",
-  auto: "检查通过后自动合并与上线",
-  "auto-merge-manual-deploy": "自动合并，上线前审批",
-};
-const acceptanceLabels: Record<AcceptanceMode, string> = {
-  "human-review": "人工验收",
-  "auto-with-verification": "独立复核后自动验收",
-};
-const releaseOnMergeLabels: Record<ReleaseOnMerge, string> = {
-  unknown: "尚未确认（禁止自主合并）",
-  never: "合并不触发生产发布",
-  production: "合并会触发生产发布",
-};
-function AutonomySettings({
-  state,
-  busy,
-  onSaveWorkspace,
-  onSaveProject,
-}: {
-  state: WorkspaceState;
-  busy: boolean;
-  onSaveWorkspace: (value: {
-    acceptance: AcceptanceMode;
-    paused: boolean;
-    maxRecoveryAttempts: number;
-    noProgressMinutes: number;
-  }) => Promise<void>;
-  onSaveProject: (
-    projectId: string,
-    value: {
-      acceptance: "inherit" | AcceptanceMode;
-      releaseOnMerge: ReleaseOnMerge;
-    },
-  ) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState<string>(),
-    autonomy = state.autonomy;
-  return (
-    <SettingsSection
-      wide
-      icon={<Sparkles />}
-      title="自主推进与验收授权"
-      description="默认人工验收。只有明确启用后，目标才会在独立复核与证据门禁都满足时自动完成；人始终保留最终裁决权。"
-    >
-      <form
-        className="autonomy-settings-form"
-        key={`workspace-${autonomy.revision}`}
-        onSubmit={async event => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          try {
-            await onSaveWorkspace({
-              acceptance: String(data.get("acceptance")) as AcceptanceMode,
-              paused: data.get("paused") === "on",
-              maxRecoveryAttempts: Number(data.get("maxRecoveryAttempts")),
-              noProgressMinutes: Number(data.get("noProgressMinutes")),
-            });
-          } catch {
-            /* The parent shows the server error. */
-          }
-        }}
-      >
-        <Field label="工作区默认验收方式">
-          <Select name="acceptance" defaultValue={autonomy.acceptance} disabled={busy}>
-            {Object.entries(acceptanceLabels).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="默认恢复次数" hint="同一候选没有新证据时会更早停止自动重试。">
-          <TextInput
-            name="maxRecoveryAttempts"
-            type="number"
-            min={1}
-            max={20}
-            defaultValue={autonomy.maxRecoveryAttempts}
-            disabled={busy}
-          />
-        </Field>
-        <Field label="无进展检测（分钟）" hint="只用于发现长时间没有结构化写回的现场。">
-          <TextInput
-            name="noProgressMinutes"
-            type="number"
-            min={5}
-            max={10080}
-            defaultValue={autonomy.noProgressMinutes}
-            disabled={busy}
-          />
-        </Field>
-        <label className="autonomy-pause-control">
-          <input
-            name="paused"
-            type="checkbox"
-            defaultChecked={autonomy.paused}
-            disabled={busy}
-          />
-          <span>
-            <strong>全局暂停自主续跑</strong>
-            <small>不会强制终止当前 Agent 回合；只停止新的自动续跑。</small>
-          </span>
-        </label>
-        <Button type="submit" variant="primary" size="sm" disabled={busy}>
-          保存工作区设置
-        </Button>
-      </form>
-
-      <div className="autonomy-project-list">
-        {state.projects.map(project => {
-          const projectAutonomy = project.autonomy,
-            open = editing === project.id;
-          return (
-            <div key={project.id} className="autonomy-project-row">
-              <div>
-                <strong>{project.name}</strong>
-                <span>
-                  {projectAutonomy?.acceptance === "inherit" || !projectAutonomy
-                    ? `继承工作区：${acceptanceLabels[autonomy.acceptance]}`
-                    : acceptanceLabels[projectAutonomy.acceptance]}
-                </span>
-                <small>{releaseOnMergeLabels[project.releaseOnMerge ?? "unknown"]}</small>
-              </div>
-              {!open ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => setEditing(project.id)}
-                >
-                  配置项目覆盖
-                </Button>
-              ) : (
-                <form
-                  key={`${project.id}-${projectAutonomy?.revision ?? 0}`}
-                  onSubmit={async event => {
-                    event.preventDefault();
-                    const data = new FormData(event.currentTarget);
-                    try {
-                      await onSaveProject(project.id, {
-                        acceptance: String(data.get("acceptance")) as "inherit" | AcceptanceMode,
-                        releaseOnMerge: String(data.get("releaseOnMerge")) as ReleaseOnMerge,
-                      });
-                      setEditing(undefined);
-                    } catch {
-                      /* The parent shows the server error. */
-                    }
-                  }}
-                >
-                  <Field label="项目验收覆盖">
-                    <Select
-                      name="acceptance"
-                      defaultValue={projectAutonomy?.acceptance ?? "inherit"}
-                      disabled={busy}
-                    >
-                      <option value="inherit">继承工作区</option>
-                      {Object.entries(acceptanceLabels).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <Field label="合并与生产发布关系">
-                    <Select
-                      name="releaseOnMerge"
-                      defaultValue={project.releaseOnMerge ?? "unknown"}
-                      disabled={busy}
-                    >
-                      {Object.entries(releaseOnMergeLabels).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <div className="policy-actions">
-                    <Button variant="secondary" size="sm" disabled={busy} onClick={() => setEditing(undefined)}>
-                      取消
-                    </Button>
-                    <Button type="submit" variant="primary" size="sm" disabled={busy}>
-                      保存项目设置
-                    </Button>
-                  </div>
-                </form>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </SettingsSection>
-  );
-}
-function ExperimentalAutonomySettings(props: {
-  state: WorkspaceState;
-  busy: boolean;
-  onSaveWorkspace: (value: {
-    acceptance: AcceptanceMode;
-    paused: boolean;
-    maxRecoveryAttempts: number;
-    noProgressMinutes: number;
-  }) => Promise<void>;
-  onSaveProject: (
-    projectId: string,
-    value: {
-      acceptance: "inherit" | AcceptanceMode;
-      releaseOnMerge: ReleaseOnMerge;
-    },
-  ) => Promise<void>;
-}) {
-  const hasExperimentalGoal = props.state.goals.some(goal =>
-    Boolean(goal.brief || goal.autonomy ||
-      goal.kind === "discovery" || goal.kind === "release"),
-  );
-  const [open, setOpen] = useState(hasExperimentalGoal);
-  return (
-    <details
-      className="experimental-settings"
-      open={open}
-      onToggle={event => setOpen(event.currentTarget.open)}
-    >
-      <summary>
-        <span>
-          <Sparkles size={15} />
-          实验功能 · 自主推进与自动验收
-        </span>
-        <small>默认关闭；普通目标仍由你和管家按现有流程推进。</small>
-      </summary>
-      <AutonomySettings {...props} />
-    </details>
-  );
-}
-function GovernanceEditor({
-  projects,
-  decisions,
-  busy,
-  onSave,
-}: {
-  projects: Project[];
-  decisions: WorkspaceState["decisions"];
-  busy: boolean;
-  onSave: (projectId: string, policy: { shipPolicy: ShipPolicy; approvers: string[] }) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState<string>();
-  return (
-    <SettingsSection
-      wide
-      icon={<Settings2 />}
-      title="上线策略与决定账本"
-      description="默认要求外部审批。自动策略只跳过审批，不跳过检查；删数据、停服、花钱、外部发消息、改产品方向、新建或轮换密钥、改权限、修改上线策略始终会进入注意力。"
-    >
-      <span className="settings-status">{decisions.length} 条已记住的决定</span>
-      <div className="policy-list">
-        {projects.map(project => {
-          const open = editing === project.id;
-          return (
-            <div className="policy-row" key={project.id}>
-              <div>
-                <strong>{project.name}</strong>
-                <span>{shipPolicyLabels[project.policy.shipPolicy]}</span>
-                {project.policy.approvers.length > 0 && (
-                  <small>审批人：{project.policy.approvers.join("、")}</small>
-                )}
-              </div>
-              {!open ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => setEditing(project.id)}
-                >
-                  配置
-                </Button>
-              ) : (
-                <form
-                  key={`${project.id}-${project.policy.revision}`}
-                  onSubmit={async event => {
-                    event.preventDefault();
-                    const data = new FormData(event.currentTarget);
-                    try {
-                      await onSave(project.id, {
-                        shipPolicy: String(data.get("shipPolicy")) as ShipPolicy,
-                        approvers: String(data.get("approvers"))
-                          .split(/[\n,，、]/).map(value => value.trim()).filter(Boolean),
-                      });
-                      setEditing(undefined);
-                    } catch {
-                      /* The parent shows the server error. */
-                    }
-                  }}
-                >
-                  <Field label="上线策略">
-                    <Select name="shipPolicy" defaultValue={project.policy.shipPolicy} disabled={busy}>
-                      {Object.entries(shipPolicyLabels).map(([value, label]) => (
-                        <option value={value} key={value}>{label}</option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <Field label="外部审批人（可选）">
-                    <TextInput
-                      name="approvers"
-                      defaultValue={project.policy.approvers.join("、")}
-                      placeholder="例如：YR、平台组"
-                      disabled={busy}
-                    />
-                  </Field>
-                  <div className="policy-actions">
-                    <Button variant="secondary" size="sm" disabled={busy} onClick={() => setEditing(undefined)}>
-                      取消
-                    </Button>
-                    <Button type="submit" variant="primary" size="sm" disabled={busy}>
-                      保存策略
-                    </Button>
-                  </div>
-                </form>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </SettingsSection>
-  );
-}
-function AgentRuntimeSettings({
-  adapters,
-  busy,
-  onChange,
-  notify,
-}: {
-  adapters: AgentHookAdapterStatus[];
-  busy: boolean;
-  onChange: (adapters: AgentHookAdapterStatus[]) => void;
-  notify: (text: string) => void;
-}) {
-  const [working, setWorking] = useState<ManagedAdapterId>();
-  const [failure, setFailure] = useState("");
-  const labels = {
-    "not-installed": "未检测",
-    installed: "已接入",
-    "waiting-trust": "等待信任",
-    disabled: "已停用",
-    unsupported: "版本不支持",
-    conflict: "配置冲突",
-    error: "接入失败",
-  } as const;
-  async function operate(
-    id: ManagedAdapterId,
-    action: "install" | "disable" | "uninstall" | "refresh",
-  ) {
-    setWorking(id);
-    setFailure("");
-    try {
-      await api.configureAgentRuntime(id, action);
-      const next = await api.agentRuntimeStatus();
-      onChange(next);
-      notify(action === "disable"
-        ? "已停用 Hook；该 Agent 仍可使用当前会话后端与巡检状态。"
-        : action === "uninstall"
-          ? "已移除 Atte 管理的 Hook，其他用户 Hook 保持不变。"
-          : "Agent Hook 已更新。");
-    } catch (reason) {
-      setFailure(String(reason).replace(
-        /^Error invoking remote method '[^']+': (?:Error: )?/,
-        "",
-      ));
-    } finally {
-      setWorking(undefined);
-    }
-  }
-  return (
-    <SettingsSection
-      wide
-      icon={<Bot />}
-      title="Agent 接入"
-      description="检测到兼容 Agent 后自动安装受管 Hook。Hook 只证明会话、回合和阻塞等生命周期；目标完成、外部等待、找人决定和验收仍由 Atte CLI 结构化写回。"
-    >
-      <div className="agent-runtime-list">
-        {adapters.length ? adapters.map(adapter => {
-          const active = ["installed", "waiting-trust"].includes(adapter.status);
-          return (
-            <div className="agent-runtime-row" key={adapter.id}>
-              <div className="agent-runtime-identity">
-                <span className="agent-runtime-mark"><Bot size={15} aria-hidden="true" /></span>
-                <div>
-                  <strong>{adapter.label}</strong>
-                  <small
-                    title={adapter.configPath}
-                  >
-                    {adapter.version ? `${adapter.version} · ` : ""}
-                    {adapter.status === "not-installed" && adapter.command
-                      ? "未接入" : labels[adapter.status]}
-                  </small>
-                </div>
-              </div>
-              <div className="agent-runtime-detail">
-                <span>
-                  {adapter.status === "waiting-trust"
-                    ? "在 Codex 中打开 /hooks 并信任 Atte 的条目后开始生效。"
-                    : adapter.status === "not-installed"
-                      ? adapter.command ? "已检测到本机 CLI，可安装受管 Hook。" : "未检测到本机 CLI。"
-                      : adapter.status === "installed"
-                        ? "生命周期事件已就绪。"
-                        : adapter.detail || "可安装受管生命周期 Hook。"}
-                </span>
-                <small
-                  className="agent-runtime-events"
-                  title={adapter.events.join(" · ")}
-                >
-                  {adapter.events.join(" · ")}
-                </small>
-                {adapter.lastEventAt && <small>最近事件：{time(adapter.lastEventAt)}</small>}
-              </div>
-              <div className="agent-runtime-actions">
-                {active ? (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy || Boolean(working)}
-                      onClick={() => void operate(adapter.id, "disable")}
-                    >
-                      停用
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy || Boolean(working)}
-                      onClick={() => void operate(adapter.id, "uninstall")}
-                    >
-                      卸载
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={busy || Boolean(working) || !adapter.command}
-                    onClick={() => void operate(
-                      adapter.id,
-                      ["conflict", "error", "unsupported"].includes(adapter.status)
-                        ? "refresh" : "install",
-                    )}
-                  >
-                    {working === adapter.id ? "处理中…"
-                      : adapter.status === "disabled" ? "恢复接入" : "检查并接入"}
-                  </Button>
-                )}
-              </div>
-            </div>
-          );
-        }) : <LoadingState label="正在检测本机 Agent…" />}
-      </div>
-      {failure && <p className="ui-field__error" role="alert">{failure}</p>}
-      <p className="ui-field__hint">
-        Codex 官方 Hook 需要你在其 Hook 审查界面信任后才会运行。Atte 不会绕过信任流程，也不会覆盖你已有 Hooks 或 OMP extensions。
-      </p>
-    </SettingsSection>
-  );
-}
-function AgentPreferencesEditor({ preferences, options, busy, onSave }: {
-  preferences: AgentPreferences;
-  options: { kind: string; installed: boolean }[];
-  busy: boolean;
-  onSave: (preferences: AgentPreferences) => Promise<void>;
-}) {
-  const [commands, setCommands] = useState(preferences);
-  useEffect(() => { setCommands(preferences); }, [preferences.concierge, preferences.owner, preferences.worker]);
-  const installed = options.filter(option => option.installed);
-  return (
-    <SettingsSection
-      wide
-      icon={<Bot />}
-      title="Agent 启动命令"
-      description="填写每个角色的启动命令，可附带模型等原生参数。Atte 不替换 CLI，也不借用 Codex 等运行时专属的沙箱参数；已有会话继续工作，新会话使用保存后的命令。"
-    >
-      <form
-        className="ui-form"
-        onSubmit={async event => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          try {
-            await onSave({
-              concierge: String(data.get("concierge")),
-              owner: String(data.get("owner")) || undefined,
-              worker: String(data.get("worker")) || undefined,
-            });
-          } catch {
-            /* Parent keeps the existing preferences and displays the error. */
-          }
-        }}
-      >
-        <div className="agent-role-grid ui-form__grid">
-          {(["concierge", "owner", "worker"] as const).map((role, index) => (
-            <Field label={`${["管家", "负责人", "工人"][index]}启动命令`} key={role}>
-              <TextInput
-                name={role}
-                list="installed-agent-commands"
-                value={commands[role] ?? ""}
-                onChange={event => setCommands(current => ({ ...current, [role]: event.target.value }))}
-                placeholder={role === "concierge" ? "codex" : role === "owner" ? "留空跟随管家" : "留空跟随负责人"}
-                required={role === "concierge"}
-                maxLength={2000}
-                disabled={busy}
-                spellCheck={false}
-              />
-            </Field>
-          ))}
-        </div>
-        <datalist id="installed-agent-commands">
-          {installed.map(option => <option key={option.kind} value={option.kind} />)}
-        </datalist>
-        <div className="ui-form__footer">
-          <p className="ui-form__note">
-            填写本机任意交互式 CLI 和参数，例如 codex --model gpt-5、npx --yes my-agent。支持绝对路径与 ~/ 路径；切换 Herdr 或 Orca 后仍使用同一条命令。管家案卷边界由 Atte CLI 约束，不是操作系统文件沙箱。环境变量和 shell 表达式请放入自己的启动脚本。
-          </p>
-          <Button type="submit" variant="secondary" disabled={busy}>
-            保存偏好
-          </Button>
-        </div>
-      </form>
-    </SettingsSection>
-  );
+      <Field label="通过依据" hint="未检查通过时请继续处理，不要提交验收。">
+        <TextArea name="checkNote" placeholder="写下实际观察到的结果" required />
+      </Field>
+      <div className="modal-actions"><Button type="submit" variant="primary" disabled={busy}>提交验收</Button></div>
+    </form>
+  </Modal>;
 }
 createRoot(document.getElementById("root")!).render(<App />);
