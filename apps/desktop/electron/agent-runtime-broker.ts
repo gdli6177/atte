@@ -8,7 +8,7 @@ import type {
   Goal,
   WorkspaceService,
 } from "../../../packages/core/src/index.js";
-import { agentReceiptMarker, agentRuntimeSocketPath, workspaceDataDirectory } from "../../../packages/core/src/index.js";
+import { agentReceiptMarker, agentRuntimeSocketPath, progressBasis, workspaceDataDirectory } from "../../../packages/core/src/index.js";
 import type { AgentHookManager, ManagedAdapterId } from "./agent-hook-manager.js";
 
 const MAX_REQUEST_BYTES = 1_000_000;
@@ -316,10 +316,7 @@ export class AgentRuntimeBroker {
     }) as { updated?: boolean; goal?: Goal };
     if (!result.updated || !result.goal) return;
     this.options.onChanged?.(result.goal);
-    const basis = [...result.goal.activities]
-      .reverse()
-      .find(activity => activity.kind !== "watchdog")?.at ??
-      result.goal.createdAt;
+    const basis = progressBasis(result.goal);
     try {
       await this.options.notifyConcierge(
         result.goal,

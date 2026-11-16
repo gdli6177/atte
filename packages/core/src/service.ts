@@ -1,4 +1,5 @@
 import { WorkspaceStore, newId } from "./store.js";
+import { progressBasis } from "./watchdog.js";
 import {
   cleanupOrphanAttachmentFiles,
   removeAttachmentFiles,
@@ -871,6 +872,15 @@ export class WorkspaceService {
           if (!item.scene || item.scene.bindingId !== command.bindingId || item.scene.attemptId !== command.attemptId)
             throw new Error("scene_identity_mismatch: 原现场已经变化，不能恢复。");
           item.sceneHistory = [...(item.sceneHistory ?? []), item.scene].slice(-20);
+          if (item.agentRuntime) {
+            const retired: NonNullable<Goal["attemptHistory"]>[number] = {
+              attemptId: item.agentRuntime.attempt.attemptId,
+              agent: item.agentRuntime.attempt.agent,
+              scene: structuredClone(item.scene), retiredAt: nowIso(),
+              reason: "superseded",
+            };
+            item.attemptHistory = [...(item.attemptHistory ?? []), retired].slice(-20);
+          }
           delete item.scene;
           delete item.sceneLaunch;
           delete item.live;
@@ -3178,10 +3188,7 @@ export class WorkspaceService {
             : "负责人结束回合并收到一次提醒后，仍未提交结构化结果。";
           item.watchdog = {
             reason: "protocol_missing",
-            basis: [...item.activities]
-              .reverse()
-              .find(activity => activity.kind !== "watchdog")?.at ??
-              item.createdAt,
+            basis: progressBasis(item),
             detectedAt: at,
           };
           activity(item, "watchdog",

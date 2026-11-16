@@ -175,3 +175,30 @@ test("a successful newer retry clears the dashboard's actionable failure count",
   assert.deepEqual(status.alerts, []);
   assert.equal(status.queued, 0);
 });
+
+test("the same request id never becomes a second row after coalescing", async () => {
+  const { root, inbox } = await fixture();
+  await inbox.enqueue({ goalId: "goal_dedupe", requestId: "human", kind: "feedback", priority: "human" });
+  const first = await inbox.enqueue({ goalId: "goal_dedupe", requestId: "watchdog-1", kind: "watchdog", priority: "background" });
+  assert.equal(first.status, "coalesced");
+  for (let index = 0; index < 3; index += 1)
+    await inbox.enqueue({ goalId: "goal_dedupe", requestId: "watchdog-1", kind: "watchdog", priority: "background" });
+  const stored = JSON.parse(await readFile(join(root, ".atte", "coordinator-inbox.json"), "utf8"));
+  assert.equal(stored.items.filter(item => item.requestId === "watchdog-1").length, 1);
+});
+
+test("an unconfirmed delivery expires instead of staying actionable forever", async () => {
+  const { root, inbox } = await fixture();
+  await inbox.enqueue({ goalId: "goal_expire", requestId: "delivery-1", kind: "feedback", priority: "human" });
+  const item = await inbox.claimNext();
+  await inbox.finish(item!.id, "unconfirmed", "投递确认超时");
+  const path = join(root, ".atte", "coordinator-inbox.json");
+  const stored = JSON.parse(await readFile(path, "utf8"));
+  stored.items[0].finishedAt = new Date(Date.now() - 31 * 60_000).toISOString();
+  await writeFile(path, JSON.stringify(stored));
+  const reopened = await CoordinatorInbox.open(root);
+  const status = await reopened.status();
+  assert.equal(status.unconfirmed, 0);
+  assert.equal(status.alerts.length, 0);
+  assert.equal(status.expired, 1);
+});

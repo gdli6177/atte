@@ -4,6 +4,7 @@ import {
   attentionGoals,
   attentionRequest,
   importAttachmentFiles,
+  workspaceDataDirectory,
   type AtteCommand,
   type GoalAttachment,
   type HerdrReference,
@@ -28,6 +29,63 @@ import {
 } from "../../packages/sessions/src/index.js";
 import { environmentValue } from "../../packages/core/src/index.js";
 const exec = promisify(execFile);
+declare const __ATTE_VERSION__: string | undefined;
+const cliVersion = typeof __ATTE_VERSION__ === "string" ? __ATTE_VERSION__ : "0.0.0-dev";
+async function doctorReport(service: WorkspaceService) {
+  const state = await service.read(), directory = workspaceDataDirectory(service.root);
+  const size = async (name: string) =>
+    await stat(join(directory, name)).then(info => info.size).catch(() => 0);
+  const inbox = await readFile(join(directory, "coordinator-inbox.json"), "utf8")
+    .then(raw => JSON.parse(raw) as { items?: Array<{ status?: string; goalId?: string;
+      requestId?: string; kind?: string; detail?: string; finishedAt?: string }> })
+    .catch(() => undefined);
+  const counts: Record<string, number> = { total: inbox?.items?.length ?? 0 };
+  for (const item of inbox?.items ?? []) counts[item.status ?? "unknown"] = (counts[item.status ?? "unknown"] ?? 0) + 1;
+  const issues = state.goals.flatMap(goal => {
+    const items: Array<{ goalId: string; title: string; kind: string; detail: string }> = [];
+    if (goal.attention?.kind === "intervention")
+      items.push({ goalId: goal.id, title: goal.title, kind: "attention", detail: goal.attention.summary });
+    if (goal.dispatch && ["failed", "unconfirmed"].includes(goal.dispatch.status))
+      items.push({ goalId: goal.id, title: goal.title, kind: `dispatch_${goal.dispatch.status}`,
+        detail: goal.dispatch.detail ?? "派发结果未确认" });
+    if (goal.live?.reachable === false)
+      items.push({ goalId: goal.id, title: goal.title, kind: "scene_unreachable",
+        detail: `负责人现场不可达（最后核对 ${goal.live.checkedAt}）` });
+    if (goal.agentRuntime?.receipt?.reminderError)
+      items.push({ goalId: goal.id, title: goal.title, kind: "reminder_error",
+        detail: goal.agentRuntime.receipt.reminderError });
+    if (goal.watchdog?.lastError)
+      items.push({ goalId: goal.id, title: goal.title, kind: "watchdog_error", detail: goal.watchdog.lastError });
+    return items;
+  }).slice(-10);
+  return {
+    version: cliVersion,
+    workspace: service.root,
+    backend: state.backendBinding ? {
+      selected: state.backendBinding.backend,
+      epoch: state.backendBinding.epoch,
+    } : null,
+    state: {
+      goals: state.goals.length,
+      open: state.goals.filter(goal => !["completed", "dropped", "backlog"].includes(goal.status)).length,
+      attention: attentionGoals(state.goals).length,
+      bytes: await size("state.json"),
+      eventsBytes: await size("events.jsonl"),
+    },
+    inbox: counts,
+    deadScenes: state.goals
+      .filter(goal => goal.live?.reachable === false && (goal.scene || goal.herdr))
+      .map(goal => ({
+        goalId: goal.id, title: goal.title,
+        backend: goal.scene?.backend ?? "herdr",
+        attemptId: goal.scene?.attemptId,
+        pid: goal.scene?.process?.pid,
+        paneId: goal.herdr?.paneId,
+        checkedAt: goal.live?.checkedAt,
+      })),
+    issues,
+  };
+}
 async function managedRuntime(workspace: string, managedContext: ReturnType<typeof managedSessionContext>) {
   const directory = environmentValue(process.env, "CONTROL_DIRECTORY")?.trim();
   if (!directory) throw new Error("受管 CLI 缺少 Atte 后端控制目录；请从 Atte 桌面或已接入的负责人现场运行。");
@@ -58,6 +116,8 @@ const usage = `Atte — The attention layer
 
 人的消息入口（保存原话，不从文本推断批准或完成）：
   atte status [--json]
+  atte doctor [--json]（只读：版本、后端、状态库、收件箱积压与异常现场）
+  atte delivery REQUEST_ID [--json]（查询一次协调投递的当前状态）
   atte attention [--json]
   atte board [--new] [--once]
   atte scene focus [GOAL_ID]（只定位已登记现场；省略 ID 回到管家）
@@ -585,9 +645,25 @@ export async function run(argv: string[], io = { out: console.log, error: consol
       if (group === "status") {
         const state = await service.read(), goal = state.goals.find(item => item.id === coordinatorCase);
         if (!goal) throw new Error("当前案卷不存在或已结束");
-        result = { name: state.name, agents: state.agents ?? { concierge: "codex" },
-          project: state.projects.find(project => project.id === goal.projectId) };
+        result = {
+          name: state.name, agents: state.agents ?? { concierge: "codex" },
+          project: state.projects.find(project => project.id === goal.projectId),
+          goal: {
+            id: goal.id, title: goal.title, status: goal.status, next: goal.next,
+            owner: goal.owner, attention: goal.attention ?? null,
+            dispatch: goal.dispatch ?? null, watchdog: goal.watchdog ?? null,
+            scene: goal.scene ? {
+              bindingId: goal.scene.bindingId, backend: goal.scene.backend,
+              attemptId: goal.scene.attemptId, pid: goal.scene.process?.pid,
+            } : null,
+            live: goal.live ?? null,
+          },
+        };
         coordinatorRead = true;
+      } else if (group === "doctor") {
+        // Read-only diagnostics; no case is selected or changed.
+      } else if (group === "delivery") {
+        // Read-only receipt lookup, limited to the current case below.
       } else if (group === "goal" && action === "show") {
         const goalId = target ?? args.one("id");
         assertCoordinatorCase(coordinatorCase, goalId);
@@ -626,6 +702,21 @@ export async function run(argv: string[], io = { out: console.log, error: consol
     }
     if (!coordinatorRead && !verifierRead) {
       if (group === "status") result = await service.read();
+      else if (group === "doctor") result = await doctorReport(service);
+      else if (group === "delivery") {
+        const requestId = args.positional[1];
+        if (!requestId) throw new Error("请提供要查询的 requestId");
+        const raw = await readFile(join(workspaceDataDirectory(service.root), "coordinator-inbox.json"), "utf8")
+          .catch(() => { throw new Error("当前工作区还没有协调收件箱记录"); });
+        const inbox = JSON.parse(raw) as { items?: Array<Record<string, unknown>> };
+        const matches = (inbox.items ?? []).filter(item => item.requestId === requestId);
+        if (coordinatorCase && matches.some(item => item.goalId !== coordinatorCase))
+          throw new Error("只能查询当前案卷的投递");
+        if (!matches.length) throw new Error(`没有找到请求 ${requestId} 的投递记录`);
+        result = matches.map(item => ({ id: item.id, goalId: item.goalId, requestId: item.requestId,
+          kind: item.kind, status: item.status, enqueuedAt: item.enqueuedAt,
+          finishedAt: item.finishedAt, attempts: item.attempts, detail: item.detail }));
+      }
       else if (group === "attention") result = attentionGoals((await service.read()).goals);
       else if (group === "ask") {
         const attachments = await importAttachmentFiles(service.root, args.all("attachment"));
@@ -1305,8 +1396,17 @@ export async function run(argv: string[], io = { out: console.log, error: consol
       io.out(`${current.name} · ${current.project?.name ?? "个人事项"} · 当前复核目标 · ${current.goal.status}\n${current.goal.next}`);
     }
     else if (group === "status" && coordinatorRead) {
-      const current = result as { name: string; project?: { name?: string } };
-      io.out(`${current.name} · ${current.project?.name ?? "个人事项"} · 当前案卷`);
+      const current = result as { name: string; project?: { name?: string };
+        goal: { status: string; next: string; owner: string } };
+      io.out(`${current.name} · ${current.project?.name ?? "个人事项"} · 当前案卷 · ${current.goal.status}\n${current.goal.next} · ${current.goal.owner}`);
+    }
+    else if (group === "doctor") {
+      const report = result as Awaited<ReturnType<typeof doctorReport>>;
+      io.out(`${report.workspace}\nAtte ${report.version} · ${report.backend?.selected ?? "未选择后端"} epoch ${report.backend?.epoch ?? "-"}` +
+        `\n目标 ${report.state.open} 个进行中 / ${report.state.goals} 个 · 注意力 ${report.state.attention} · 状态 ${Math.round(report.state.bytes / 1024)} KB` +
+        `\n收件箱：排队 ${report.inbox.queued ?? 0} · 未确认 ${report.inbox.unconfirmed ?? 0} · 失败 ${report.inbox.failed ?? 0} · 过期 ${report.inbox.expired ?? 0}` +
+        (report.deadScenes.length ? `\n不可达现场 ${report.deadScenes.length} 个：${report.deadScenes.map(item => item.goalId).join(", ")}` : "\n没有已标记不可达的现场") +
+        (report.issues.length ? `\n最近问题：\n${report.issues.map(item => `- ${item.kind} ${item.goalId} ${item.detail}`).join("\n")}` : ""));
     }
     else if (group === "event" && action === "herdr") {
       const current = result as { matched: number };

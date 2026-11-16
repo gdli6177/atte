@@ -11,11 +11,17 @@ const BUSINESS_WRITES = new Set([
   "progress", "waiting", "decision", "delivery", "resolved", "review", "blocked",
 ]);
 export interface WatchdogRequest { goalId: string; reason: WatchdogReason; basis: string }
+const NON_OWNER_ACTORS = new Set(["系统", "你", "管家", "concierge", "巡检"]);
 function latestProgress(goal: Goal) {
   return goal.activities.filter(activity => activity.kind !== "watchdog").at(-1);
 }
-function progressAt(goal: Goal) {
-  return latestProgress(goal)?.at ?? goal.createdAt;
+// Staleness measures the owner's own last write, not any workspace write.
+// A concierge reconciliation note is bookkeeping; letting it move the basis
+// would postpone the check forever and let each note trigger another round.
+export function progressBasis(goal: Goal) {
+  const owner = goal.activities.filter(activity =>
+    activity.kind !== "watchdog" && !NON_OWNER_ACTORS.has(activity.actor)).at(-1);
+  return owner?.at ?? goal.dispatch?.at ?? goal.agentRuntime?.attempt.startedAt ?? goal.createdAt;
 }
 function ownerReportedCurrentDispatch(goal: Goal) {
   const dispatchedAt = Date.parse(
@@ -59,6 +65,9 @@ function escalateReview(
   if (!watch.contactedAt || now - Date.parse(watch.contactedAt) < ESCALATE_AFTER || watch.escalatedAt)
     return;
   watch.escalatedAt = at;
+  // An unresolved card already asks the same person for the same thing.
+  // Escalating again would duplicate the request, not raise its priority.
+  if (goal.attention) return;
   const progress = latestProgress(goal);
   const lastProgress = progress
     ? `${progress.actor}：${concise(progress.text)}`
@@ -75,7 +84,7 @@ function reasonFor(
   now: number,
   staleAfter: number,
 ): WatchdogReason | undefined {
-  const age = now - Date.parse(progressAt(goal));
+  const age = now - Date.parse(progressBasis(goal));
   if (goal.agentRuntime?.receipt?.status === "protocol_missing")
     return "protocol_missing";
   if (!goal.scene && !goal.herdr?.paneId && !goal.herdr?.agent && goal.dispatch?.status !== "pending" &&
@@ -111,7 +120,7 @@ export function inspectWatchdog(
   for (const goal of goals) {
     if (!inspectable(goal) ||
       (goal.attention && goal.attention.source !== "watchdog" && goal.attention.source !== "live")) continue;
-    const reason = reasonFor(goal, now, staleAfter), basis = progressAt(goal);
+    const reason = reasonFor(goal, now, staleAfter), basis = progressBasis(goal);
     const contactedAt = Date.parse(goal.watchdog?.contactedAt ?? "");
     const liveCheckedAt = Date.parse(goal.live?.checkedAt ?? "");
     // A concierge's reconciliation note is a semantic write and therefore
@@ -133,8 +142,12 @@ export function inspectWatchdog(
       continue;
     }
     if (!goal.watchdog || goal.watchdog.reason !== reason || goal.watchdog.basis !== basis) {
+      const previousReason = goal.watchdog?.reason;
       goal.watchdog = { reason, basis, detectedAt: at };
-      if (goal.attention?.source === "watchdog" || goal.attention?.source === "live") goal.attention = null;
+      // Keep a card that still describes the same issue; only a new kind of
+      // problem replaces it. Resolved issues are cleared above.
+      if ((goal.attention?.source === "watchdog" || goal.attention?.source === "live") &&
+        previousReason && previousReason !== reason) goal.attention = null;
       if (reason === "settled" && goal.live?.reachable && ["idle", "done"].includes(goal.live.state))
         goal.recovery = goal.live.state as "idle" | "done";
       else delete goal.recovery;
@@ -150,13 +163,17 @@ export function inspectWatchdog(
 }
 export function reportWatchdog(goal: Goal, at: string, basis: string, outcome: "contacted" | "failed", detail?: string) {
   const watch = goal.watchdog;
-  if (!watch || !inspectable(goal) || watch.basis !== basis || progressAt(goal) !== basis) return;
+  if (!watch || !inspectable(goal) || watch.basis !== basis || progressBasis(goal) !== basis) return;
   watch.attemptedAt = at;
   if (outcome === "contacted") {
     watch.contactedAt ??= at;
     delete watch.lastError;
     delete goal.recovery;
-    if (goal.attention?.source === "watchdog" && !watch.escalatedAt) goal.attention = null;
+    // A retry clears only the failure card this patrol created. A pre-existing
+    // human-facing card still describes the unresolved issue and stays until a
+    // later inspection finds the owner healthy or the user answers it.
+    if (goal.attention?.source === "watchdog" &&
+      goal.attention.summary.startsWith("巡检未能联系管家")) goal.attention = null;
     record(goal, at, "已请管家核查负责人及下一步，暂不打扰你。");
   } else {
     watch.lastError = detail || "管家暂时不可达";

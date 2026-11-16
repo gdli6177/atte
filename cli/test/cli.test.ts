@@ -872,7 +872,9 @@ test("coordinator CLI is limited to the current case and cannot read or mutate a
     const status = await call(root, ["status"]);
     assert.equal(status.code, 0, status.stderr);
     assert.equal(status.json.name, "我的工作台");
-    assert.deepEqual(Object.keys(status.json).sort(), ["agents", "name", "project"]);
+    assert.deepEqual(Object.keys(status.json).sort(), ["agents", "goal", "name", "project"]);
+    assert.equal(status.json.goal.id, first.id);
+    assert.equal(status.json.goal.scene, null);
 
     const current = await call(root, ["goal", "show", first.id]);
     assert.equal(current.code, 0, current.stderr);
@@ -951,4 +953,72 @@ test("spawned CLI updates an item and rejects a late update after cancellation",
   assert.equal(personal.id, deferred.id);
   assert.equal(personal.mode, "manual");
   assert.equal(personal.status, "active");
+});
+
+test("doctor reports version, inbox backlog and unreachable scenes without changing state", async () => {
+  const root = await fixture("atte-cli-doctor-");
+  const service = new WorkspaceService(root);
+  const goal = await service.execute({ type: "goal.intake", text: "诊断示例" }) as Goal;
+  await service.execute({
+    type: "backend.register",
+    binding: { installationId: "installation", backend: "herdr", epoch: 1,
+      scopeGeneration: "scope-doctor", status: "active" },
+  });
+  await service.execute({
+    type: "scene.bind", goalId: goal.id,
+    scene: {
+      version: 1, backend: "herdr", installationId: "installation", backendEpoch: 1,
+      bindingId: "binding-doctor", attemptId: "attempt-doctor",
+      runtimeId: "runtime", runtimeGeneration: "generation",
+      locator: { kind: "herdr", session: "atte-doctor", workspaceId: "w1", tabId: "w1:t2", paneId: "w1:p2" },
+    },
+  });
+  await service.execute({
+    type: "scene.observe",
+    scenes: [{ bindingId: "binding-doctor",
+      presence: { state: "unknown", checkedAt: new Date().toISOString(), reachable: false } }],
+  });
+  await mkdir(join(root, ".atte"), { recursive: true });
+  await writeFile(join(root, ".atte/coordinator-inbox.json"), JSON.stringify({
+    version: 1, sequence: 2, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    context: { epoch: 1, startedAt: new Date().toISOString(), completedCases: 0, estimatedChars: 0 },
+    items: [
+      { id: "a", sequence: 1, goalId: goal.id, requestId: "r1", kind: "watchdog",
+        priority: "background", status: "queued", enqueuedAt: new Date().toISOString(), attempts: 0 },
+      { id: "b", sequence: 2, goalId: goal.id, requestId: "r2", kind: "feedback",
+        priority: "human", status: "unconfirmed", enqueuedAt: new Date().toISOString(), attempts: 1 },
+    ],
+  }));
+  const before = await service.read();
+  const result = await call(root, ["doctor"]);
+  assert.equal(result.code, 0);
+  assert.equal(typeof result.json.version, "string");
+  assert.equal(result.json.workspace, root);
+  assert.equal(result.json.inbox.queued, 1);
+  assert.equal(result.json.inbox.unconfirmed, 1);
+  assert.equal(result.json.deadScenes.length, 1);
+  assert.equal(result.json.deadScenes[0].goalId, goal.id);
+  const after = await service.read();
+  assert.deepEqual(after, before, "doctor is read-only");
+});
+
+test("delivery lookup reports the terminal status of one request", async () => {
+  const root = await fixture("atte-cli-delivery-");
+  const goal = (await call(root, ["ask", "投递查询"])).json as Goal;
+  await mkdir(join(root, ".atte"), { recursive: true });
+  await writeFile(join(root, ".atte/coordinator-inbox.json"), JSON.stringify({
+    version: 1, sequence: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    context: { epoch: 1, startedAt: new Date().toISOString(), completedCases: 0, estimatedChars: 0 },
+    items: [{ id: "coord_1", sequence: 1, goalId: goal.id, requestId: "owner-send-1",
+      kind: "feedback", priority: "human", status: "expired",
+      enqueuedAt: new Date().toISOString(), finishedAt: new Date().toISOString(),
+      attempts: 1, detail: "投递结果长时间未确认，已按过期关闭；没有重发，请以现场为准。" }],
+  }));
+  const found = await call(root, ["delivery", "owner-send-1"]);
+  assert.equal(found.code, 0, found.stderr);
+  assert.equal(found.json[0].status, "expired");
+  assert.equal(found.json[0].goalId, goal.id);
+  const missing = await call(root, ["delivery", "owner-send-missing"]);
+  assert.equal(missing.code, 1);
+  assert.match(missing.stderr, /没有找到请求/);
 });

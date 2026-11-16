@@ -316,6 +316,50 @@ test("timestamp correlation IDs remain safe, stable and idempotent", async t => 
   assert.equal(f.sent.filter(item => item.deliveryId === first.deliveryId).length, 1);
 });
 
+test("a verified exited owner scene is superseded instead of blocking a relaunch", async t => {
+  const f = await fixture(t);
+  const first = await f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-first" });
+  await assert.rejects(
+    f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-live" }),
+    /已有负责人现场/,
+    "a live scene still refuses a second owner",
+  );
+  const dead = {
+    ...f.adapter,
+    inspect: async (scene: SceneReferenceV1) => ({
+      bindingId: scene.bindingId, identity: "match" as const, reachable: false,
+      state: (scene.bindingId === first.scene.bindingId ? "exited" : "idle") as "exited" | "idle",
+      observedAt: new Date().toISOString(), source: "backend" as const,
+    }),
+    inspectMany: async (scenes: SceneReferenceV1[]) => Promise.all(scenes.map(scene => dead.inspect(scene))),
+  };
+  const runtime = new SessionRuntime({ ...f.runtime.options, adapter: async () => dead });
+  const second = await runtime.launchOwner({ goalId: f.goal.id, name: "owner-second" });
+  assert.notEqual(second.scene.attemptId, first.scene.attemptId);
+  const held = (await f.service.read()).goals.find(goal => goal.id === f.goal.id)!;
+  assert.equal(held.scene?.attemptId, second.scene.attemptId);
+  assert.equal(held.attemptHistory?.[0]?.attemptId, first.scene.attemptId);
+  assert.equal(held.attemptHistory?.[0]?.reason, "superseded");
+});
+
+test("an owner that exits during launch is cleaned up instead of leaving a dead scene", async t => {
+  const f = await fixture(t);
+  const dead = {
+    ...f.adapter,
+    inspect: async (scene: SceneReferenceV1) => ({
+      bindingId: scene.bindingId, identity: "match" as const, reachable: false,
+      state: "exited" as const, observedAt: new Date().toISOString(), source: "backend" as const,
+    }),
+    inspectMany: async (scenes: SceneReferenceV1[]) => Promise.all(scenes.map(scene => dead.inspect(scene))),
+  };
+  const runtime = new SessionRuntime({ ...f.runtime.options, adapter: async () => dead });
+  await assert.rejects(runtime.launchOwner({ goalId: f.goal.id, name: "owner-dead" }), /launch_failed/);
+  const goal = (await f.service.read()).goals.find(item => item.id === f.goal.id)!;
+  assert.equal(goal.scene, undefined, "a verified crash must not leave a scene that blocks the next launch");
+  assert.equal(goal.attemptHistory?.at(-1)?.reason, "superseded");
+  assert.equal(goal.attemptHistory?.at(-1)?.attemptId, goal.attemptHistory?.at(-1)?.attemptId);
+});
+
 test("native resume never replaces a wrapper and preserves configured argv", async t => {
   const f = await fixture(t);
   await f.service.execute({ type: "agents.configure", preferences: {

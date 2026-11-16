@@ -1,6 +1,6 @@
 {
   "name": "@atte/cli",
-  "version": "0.13.7",
+  "version": "0.13.8",
   "description": "Atte — The attention layer CLI",
   "license": "MIT",
   "type": "module",
@@ -9,6 +9,6 @@
   "dependencies": {
     "string-argv": "^0.3.2"
   },
-  "scripts": { "atte": "tsx src/main.ts", "build": "esbuild src/main.ts --bundle --platform=node --format=cjs --target=node20 --outfile=dist/atte.cjs", "prepack": "pnpm build", "test": "tsx --test test/*.test.ts", "typecheck": "tsc --noEmit" },
+  "scripts": { "atte": "tsx src/main.ts", "build": "node build.mjs", "prepack": "pnpm build", "test": "tsx --test test/*.test.ts", "typecheck": "tsc --noEmit" },
   "devDependencies": { "@types/node": "^22.20.0", "typescript": "^5.9.3", "esbuild": "^0.25.0" }
 }
