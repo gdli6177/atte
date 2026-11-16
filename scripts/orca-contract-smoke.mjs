@@ -39,8 +39,12 @@ const detection = await detectOrcaApplication(appPath);
 assert.equal(detection.status, "compatible", detection.detail);
 const expectedVersion = process.env.ATTE_TEST_ORCA_VERSION;
 if (expectedVersion) assert.equal(detection.version, expectedVersion);
+let activations = 0;
 const adapter = new OrcaAdapter({
   appPath, directory: join(root, "control"),
+  // The real desktop raises the user's Orca window; this isolated contract trial
+  // must never steal focus, so record the activation request instead.
+  activate: async () => { activations++; },
   environment: { ...process.env, ORCA_USER_DATA_PATH: profile },
   shellEnvironment: { ZDOTDIR: shell },
   detect: async () => detection,
@@ -96,6 +100,7 @@ try {
   assert.deepEqual(discovered[0].scene, scene);
   assert.deepEqual((await adapter.create(request)).scene, scene, "Repeated create reuses the original receipt.");
   for (let i = 0; i < 20; i++) assert.equal((await adapter.focus(scene)).status, "focused");
+  assert.equal(activations, 20, "every return-to-scene raises the application window");
   await assert.rejects(access(join(cwd, ".git")));
   const closed = await adapter.close(scene);
   assert.equal(closed.status, "stopped", closed.detail);
@@ -105,7 +110,7 @@ try {
     detectionBasis: "application-identity-and-cli-contract",
     passed: true, alias: true, unicodeCwd: true,
     longPATH: facts.pathEntries, receivedBytes: received.length, exactlyOnce: true,
-    focused: 20, closed, nativeResume: await adapter.captureResume(scene),
+    focused: 20, activations, closed, nativeResume: await adapter.captureResume(scene),
   };
   await writeFile(join(root, "manifest.json"), JSON.stringify(summary, null, 2));
   console.log(JSON.stringify({ ...summary, evidence: root }));
