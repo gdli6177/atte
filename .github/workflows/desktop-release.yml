@@ -41,6 +41,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
       - run: pnpm test:first-launch
       - run: pnpm test:diagnostics
+      - run: pnpm test:semantic
       - run: pnpm test:atte-ui
       - run: pnpm test:desktop
       - run: pnpm test:methods

@@ -1,6 +1,6 @@
 {
   "name": "atte",
-  "version": "0.13.3",
+  "version": "0.13.5",
   "description": "Atte — The attention layer",
   "license": "MIT",
   "type": "module",
@@ -22,6 +22,7 @@
     "test:desktop": "tsx scripts/desktop-smoke.mjs",
     "test:first-launch": "tsx scripts/first-launch-smoke.mjs",
     "test:diagnostics": "tsx scripts/diagnostics-smoke.mjs",
+    "test:semantic": "tsx scripts/semantic-write-smoke.mjs",
     "test:atte-ui": "tsx scripts/atte-ui-smoke.mjs",
     "test:methods": "node scripts/method-library-smoke.mjs",
     "test:terminal": "node scripts/herdr-terminal-smoke.mjs",

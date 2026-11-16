@@ -89,6 +89,32 @@ import { prepareBackendHandoffCase } from "./backend-handoff-case.js";
 import { SessionCommandHost } from "./session-command-host.js";
 import { legacyCliPaths, removeOwnedLegacyCli } from "./legacy-cli.js";
 import { compactPath, Diagnostics } from "./diagnostics.js";
+import { OwnerWriteObserver } from "./owner-write-observer.js";
+/** Owner CLI processes write state directly; the watcher must start coordination. */
+const ownerWrites = new OwnerWriteObserver({
+  onWrite(goal, activityId) {
+    if (!root) return;
+    const target = new WorkspaceService(root);
+    void (async () => {
+      // The CLI already wrote on disk. Queue a coordinator case of its own
+      // instead of inventing a pending goal dispatch: a failed delivery must
+      // stay a queue alert, never a goal-level failure the user has to clear.
+      const { inbox, dispatcher } = await ensureCoordinatorInbox();
+      await inbox.enqueue({
+        goalId: goal.id,
+        requestId: `owner-write-${activityId}`,
+        kind: "owner_write",
+        priority: "normal",
+      });
+      await dispatcher.drain();
+      if (!root) return;
+      broadcastSnapshot(await target.read(), root);
+      broadcastCoordinatorStatus(await (await ensureCoordinatorInbox()).inbox.status());
+    })().catch(error => {
+      diagnostics.record("session", "owner-write-notify", error);
+    });
+  },
+});
 const exec = promisify(execFile);
 let window: BrowserWindow, tray: Tray, root: string | undefined, service: WorkspaceService | undefined, syncing = false, quitting = false;
 let stateWatcher: FSWatcher | undefined, stateRefreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -801,6 +827,35 @@ async function executeCoordinatorItem(
     return { status: "cancelled", detail: "工作区已切换，本次收件未发送。" };
   if (!await sessionControl.canDispatch())
     return { status: "deferred", detail: "现场交接或更新期间已保留通知，完成后继续派发。" };
+  if (item.kind === "owner_write") {
+    // A managed owner wrote through its own CLI. Deliver that case without
+    // touching goal.dispatch: the write already happened and is not a failed
+    // send the user must retry.
+    const current = (await target.read()).goals.find(goal => goal.id === item.goalId);
+    if (!current || current.mode !== "concierge" ||
+      ["completed", "dropped", "backlog"].includes(current.status))
+      return { status: "cancelled", detail: "目标已结束、已接管或不存在。" };
+    try {
+      const runtime = sessionRuntime(target.root);
+      const concierge = await prepareConcierge(target);
+      const site = (await runtime.inspect([concierge]))[0];
+      if (site?.identity === "match" && ["working", "blocked"].includes(site.state))
+        return { status: "deferred", detail: "管家仍在处理上一案卷，负责人写回已保留并稍后送达。" };
+      await writeCoordinatorScope(target.root, item.goalId, item.requestId);
+      const result = await runtime.notifyGoal(current, undefined, undefined, item.requestId);
+      if (result.receipt.status === "rejected")
+        throw new Error(result.receipt.detail ?? "管家现场拒绝本次写回通知。");
+      return {
+        status: result.receipt.status === "unknown" ? "unconfirmed" : "sent",
+        detail: "负责人写回已交给管家核对。",
+        estimatedChars: Math.min(20_000, current.next.length + JSON.stringify(current.activities.slice(-8)).length + 3_000),
+      };
+    } catch (error) {
+      if (error instanceof SessionError && error.code === "backend_busy")
+        return { status: "deferred", detail: error.message };
+      throw error;
+    }
+  }
   if (item.kind === "watchdog") {
     if (!item.watchdogReason || !item.watchdogBasis)
       return { status: "cancelled", detail: "巡检请求缺少原因或基准，已取消。" };
@@ -1786,6 +1841,7 @@ async function openWorkspace(path: string) {
     },
   });
   root = canonical; service = opened;
+  ownerWrites.seed(initialState);
   diagnostics.record("workspace", "open", `${canonical} · backend=${backendControl.selected}`);
   lastSnapshotSignature = undefined;
   const recovered = await inbox.recoverInterrupted();
@@ -1857,6 +1913,7 @@ async function synchronize() {
     if (await sessionControl.canDispatch()) await autonomyScheduler?.tick();
     state = await target.read();
     deliverGoalStatusChanges(target, state, workspace);
+    ownerWrites.observe(state);
     await deliverAttentionNotifications(target, state, workspace);
     if (!await sessionControl.canDispatch()) {
       broadcastSnapshot(state, workspace);
@@ -2131,15 +2188,6 @@ app.whenReady().then(async () => {
       void reconcileSceneReply(target, command.goalId, {
         requestSceneReply: goal => requestNeutralSceneReply(target.root, goal),
       }, { graceMs: 0 }).catch(() => {});
-    }
-    if (command.type === "goal.intake" || command.type === "goal.message" || (command.type === "goal.create" && command.input.mode === "concierge") ||
-      command.type === "goal.followup" || command.type === "goal.delegate" || (command.type === "goal.resume" && command.mode === "concierge") ||
-      command.type === "goal.resolve" ||
-      (command.type === "goal.progress" && command.actor === "你" && (result as import("../../../packages/core/src/index.js").Goal).mode === "concierge")) {
-      const item = result as import("../../../packages/core/src/index.js").Goal;
-      if (item.dispatch?.status === "pending") void dispatchGoal(target, item.id).catch((error) => {
-        if (root === target.root) window.webContents.send("atte:event", { type: "diagnostic", message: String(error) });
-      });
     }
     if (["goal.accept", "goal.complete", "goal.drop"].includes(command.type)) {
       const item = result as import("../../../packages/core/src/index.js").Goal;
