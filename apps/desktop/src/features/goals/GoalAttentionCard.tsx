@@ -22,6 +22,7 @@ import type { GoalReplyMode } from "./GoalReplyComposer.js";
 import { presentGoal, time } from "./goalPresentation.js";
 import type { GoalDetailService } from "./goalService.js";
 import { attentionRequest } from "../../../../../packages/core/src/model.js";
+import { formatDecisionText } from "./decisionText.js";
 import { IconButton } from "../../ui/index.js";
 
 export function GoalAttentionCard({
@@ -78,7 +79,7 @@ export function GoalAttentionCard({
                 view.dueFollowUp ? <Clock3 size={18} /> : <CircleAlert size={18} />}
               <div>
                 <small>{view.label}</small>
-                <h2>{goal.attention?.summary || (goal.status === "review" ? "核对实际成果后验收" : goal.next)}</h2>
+                <h2>{formatDecisionText(goal.attention?.summary || (goal.status === "review" ? "核对实际成果后验收" : goal.next))}</h2>
                 {!view.sceneSync && <p>{view.detail}</p>}
               </div>
             </section>
@@ -86,7 +87,7 @@ export function GoalAttentionCard({
             {view.needsDecision && !view.sceneSync && view.contextActivity && (
               <section className="goal-handoff attention-evidence" aria-label="决定依据">
                 <header><span><Bot size={14} /></span><div><strong>{view.contextActivity.actor}</strong><small>负责人交接 · {time(view.contextActivity.at)}</small></div></header>
-                <p>{view.contextActivity.text}</p>
+                <p>{formatDecisionText(view.contextActivity.text)}</p>
               </section>
             )}
             {goal.status === "review" && <GoalDeliveryEvidence goal={goal} service={service} />}

@@ -392,7 +392,7 @@ h1 em { color: var(--accent); font-style: normal; }
 .attention-action-focus > svg { margin-top: var(--size-3); color: var(--secondary); }
 .attention-action-focus > div { min-width: 0; }
 .attention-action-focus small { display: block; margin-bottom: var(--space-1); color: var(--secondary); font-size: var(--fs-caption); font-weight: var(--weight-medium); }
-.attention-action-focus h2 { margin: 0; font-size: var(--fs-subtitle); font-weight: var(--weight-semibold); line-height: var(--leading-body); overflow-wrap: anywhere; white-space: pre-wrap; }
+.attention-action-focus h2 { margin: 0; font-size: var(--fs-body-strong); font-weight: var(--weight-medium); line-height: var(--leading-body); text-wrap: pretty; overflow-wrap: anywhere; white-space: pre-wrap; }
 .attention-action-focus p { margin: var(--space-2) 0 0; color: var(--secondary); font-size: var(--fs-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
 .attention-action-focus.review { --status-color: var(--mint); }
 .attention-action-focus.waiting { --status-color: var(--warm); }
