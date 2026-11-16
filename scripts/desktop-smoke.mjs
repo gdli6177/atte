@@ -911,7 +911,8 @@ try {
   await service.execute({ type: "goal.drop", goalId: droppedBatch.id, note: "验证已放弃筛选" });
   await page.getByRole("button", { name: "已放弃", exact: true }).click();
   await page.getByRole("button", { name: "批量选择", exact: true }).click();
-  await page.getByRole("checkbox", { name: "批量选择 批量移出验证", exact: true }).check();
+  await page.locator(".goal-row-batch").filter({ hasText: "批量移出验证" }).locator(".ui-checkbox__box").click();
+  await expect(page.getByRole("checkbox", { name: "批量选择 批量移出验证", exact: true })).toBeChecked();
   page.once("dialog", dialog => void dialog.accept());
   await page.getByRole("button", { name: "删除所选（1）", exact: true }).click();
   await expect.poll(async () => (await service.read()).goals.some(item => item.id === droppedBatch.id)).toBe(false);
