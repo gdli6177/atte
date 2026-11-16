@@ -334,3 +334,51 @@ test("native resume never replaces a wrapper and preserves configured argv", asy
   assert.match(script, /custom-wrapper.*--original/);
   assert.doesNotMatch(script, /old-session/);
 });
+
+async function writeForeignScene(
+  f: { workspace: string; service: WorkspaceService; config: { installationId: string } },
+  goalId: string,
+  backend: "herdr" | "orca",
+  handoff: boolean,
+) {
+  const path = join(f.workspace, ".atte", "state.json");
+  const raw = JSON.parse(await readFile(path, "utf8"));
+  const goal = raw.goals.find((item: Goal) => item.id === goalId);
+  goal.scene = {
+    version: 1, backend, installationId: f.config.installationId, backendEpoch: 0,
+    runtimeId: `${backend}-runtime`, runtimeGeneration: `${backend}-generation`,
+    bindingId: `${backend}-binding`, attemptId: `${backend}-attempt`,
+    locator: backend === "herdr"
+      ? { kind: "herdr", session: "old", workspaceId: "w1", tabId: "t1", paneId: "p1" }
+      : { kind: "orca", repoId: "r1", worktreeId: "r1::/tmp/w", terminalHandle: "term-1",
+        executionHostId: "local", incarnationId: "inc-1" },
+  };
+  if (handoff) goal.backendHandoff = {
+    operationId: "handoff-op", status: "skipped", method: "deferred", at: new Date().toISOString(),
+  };
+  else delete goal.backendHandoff;
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+}
+
+test("a scene left on the previous backend is retired after a handoff and replaced on the current one", async t => {
+  const f = await fixture(t);
+  await writeForeignScene(f, f.goal.id, "orca", true);
+  const before = (await f.service.read()).goals[0]!;
+  assert.equal(before.scene?.backend, "orca");
+  const recovered = await f.runtime.recoverOwnerForConsultation(f.goal.id);
+  assert.equal(recovered.scene.backend, "herdr", "the current backend owns the new scene");
+  assert.equal(f.created.length, 1);
+  const goal = (await f.service.read()).goals[0]!;
+  assert.equal(goal.scene?.backend, "herdr");
+  assert.equal(goal.sceneHistory?.some(scene => scene.backend === "orca"), true);
+});
+
+test("a foreign-backend scene without a handoff is refused with an actionable message", async t => {
+  const f = await fixture(t);
+  await writeForeignScene(f, f.goal.id, "orca", false);
+  await assert.rejects(f.runtime.recoverOwnerForConsultation(f.goal.id), /另一个会话后端/);
+  assert.equal(f.created.length, 0, "no second owner is created while the old scene is unverified");
+  const goal = (await f.service.read()).goals[0]!;
+  assert.equal(goal.scene?.backend, "orca");
+});

@@ -436,15 +436,28 @@ export class SessionRuntime {
     const state = await this.service.read(), goal = state.goals.find(item => item.id === goalId);
     if (!goal || goal.mode !== "concierge" || ["completed", "dropped", "backlog"].includes(goal.status))
       throw new Error("该事项当前不能恢复现场。");
-    if (goal.scene) {
+    const control = await this.options.control.status();
+    let scene = goal.scene;
+    if (scene && (scene.backend !== control.selected || scene.backendEpoch !== control.epoch)) {
+      // A backend switch leaves the old reference behind. It belongs to another
+      // runtime, so this adapter cannot verify it; the handoff already stopped
+      // that scene, which is the only case where it may be retired here.
+      if (!goal.backendHandoff)
+        throw new SessionError("scene_identity_mismatch",
+          "该现场属于另一个会话后端；请先完成后端交接，再恢复现场。原有目标和记录不会被修改。");
+      await this.service.execute({ type: "scene.retire", goalId,
+        bindingId: scene.bindingId, attemptId: scene.attemptId });
+      scene = undefined;
+    }
+    if (scene) {
       const { adapter } = await this.adapter();
-      const observed = await adapter.inspect(goal.scene);
+      const observed = await adapter.inspect(scene);
       if (observed.identity === "match" && observed.reachable && observed.state !== "exited")
-        return { scene: goal.scene };
+        return { scene };
       if (observed.identity !== "match" || observed.state !== "exited")
         throw new SessionError("scene_identity_mismatch", "原现场尚未确认停止；未创建新负责人，请重新连接或核实原现场。");
       await this.service.execute({ type: "scene.retire", goalId,
-        bindingId: goal.scene.bindingId, attemptId: goal.scene.attemptId });
+        bindingId: scene.bindingId, attemptId: scene.attemptId });
     }
     return this.launchOwner({ goalId, name: `owner-${goalId.replace(/[^a-z0-9]/gi, "").slice(-8).toLowerCase()}`,
       consultationOnly: true });
