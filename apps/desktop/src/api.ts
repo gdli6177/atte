@@ -82,6 +82,8 @@ export interface DesktopApi {
     action: "install" | "disable" | "uninstall" | "refresh",
   ): Promise<AgentHookAdapterStatus>;
   readClipboardText(): Promise<string>;
+  diagnosticsReport(): Promise<string>;
+  reportRendererError(summary: string): Promise<void>;
   readClipboardContent(): Promise<
     { kind: "text"; text: string } | { kind: "image" } | { kind: "empty" }
   >;

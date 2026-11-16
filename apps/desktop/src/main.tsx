@@ -27,6 +27,7 @@ import {
   SquareTerminal,
   Sun,
   Trash2,
+  Wrench,
   X,
   Zap,
 } from "lucide-react";
@@ -315,6 +316,25 @@ function App() {
       unsubscribe();
       if (stateFrame.current !== undefined) cancelAnimationFrame(stateFrame.current);
       if (toastTimer.current !== undefined) clearTimeout(toastTimer.current);
+    };
+  }, []);
+  useEffect(() => {
+    // Interface failures land in the same support report as main-process ones.
+    const report = (summary: string) => {
+      void api.reportRendererError(summary.slice(0, 4_000)).catch(() => {});
+    };
+    const onError = (event: ErrorEvent) => report(
+      `window-error: ${event.message} @ ${event.filename ?? "-"}:${event.lineno ?? 0}:${event.colno ?? 0}`,
+    );
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason as { stack?: unknown; message?: unknown } | undefined;
+      report(`unhandled-rejection: ${String(reason?.stack ?? reason?.message ?? event.reason)}`);
+    };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
     };
   }, []);
   useEffect(() => {
@@ -1709,6 +1729,21 @@ function Settings({
 }: any) {
   const [attachCopyState, setAttachCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const attachCopyTimer = useRef<number | undefined>(undefined);
+  const [diagnosticCopy, setDiagnosticCopy] = useState<"idle" | "copied" | "failed">("idle");
+  const diagnosticCopyTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(diagnosticCopyTimer.current), []);
+  async function copyDiagnostics() {
+    window.clearTimeout(diagnosticCopyTimer.current);
+    try {
+      await api.writeClipboardText(await api.diagnosticsReport());
+      setDiagnosticCopy("copied");
+      notify("诊断日志已复制，可直接粘贴给维护者排查。");
+    } catch (error) {
+      setDiagnosticCopy("failed");
+      notify(`复制诊断日志失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    diagnosticCopyTimer.current = window.setTimeout(() => setDiagnosticCopy("idle"), 4_000);
+  }
   useEffect(() => {
     setAttachCopyState("idle");
     window.clearTimeout(attachCopyTimer.current);
@@ -2004,6 +2039,26 @@ function Settings({
             </div>
           </SettingsSection>
         </SettingsGroup>
+        <SettingsSection
+          icon={<Wrench />}
+          title="排查与反馈"
+          description="遇到异常时复制脱敏诊断，粘贴给维护者即可定位问题。"
+        >
+          <p className="muted">
+            报告包含版本、系统环境、会话后端状态与最近错误，不包含目标正文、消息、附件、终端输出、Webhook 地址或凭据；绝对路径会替换为 ~。
+            也可从顶部菜单 Atte → 复制诊断日志 获取。
+          </p>
+          <div className="ui-settings-card__actions">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Copy size={14} />}
+              onClick={() => void copyDiagnostics()}
+            >
+              {diagnosticCopy === "copied" ? "已复制" : diagnosticCopy === "failed" ? "复制失败，请重试" : "复制诊断日志"}
+            </Button>
+          </div>
+        </SettingsSection>
         <SettingsSection icon={<Bot />} title="关于 Atte" description="The attention layer">
           <div className="about-mark"><BrandMark variant="icon" /></div>
           <div className="settings-facts">

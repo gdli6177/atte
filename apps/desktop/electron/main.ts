@@ -88,6 +88,7 @@ import {
 import { prepareBackendHandoffCase } from "./backend-handoff-case.js";
 import { SessionCommandHost } from "./session-command-host.js";
 import { legacyCliPaths, removeOwnedLegacyCli } from "./legacy-cli.js";
+import { compactPath, Diagnostics } from "./diagnostics.js";
 const exec = promisify(execFile);
 let window: BrowserWindow, tray: Tray, root: string | undefined, service: WorkspaceService | undefined, syncing = false, quitting = false;
 let stateWatcher: FSWatcher | undefined, stateRefreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -99,6 +100,25 @@ let lastSnapshotSignature: string | undefined;
 let automaticCacheCleanupStarted = false;
 let cacheMaintenanceQueue: Promise<unknown> = Promise.resolve();
 const here = __dirname;
+const diagnostics = new Diagnostics({
+  version: () => app.getVersion(),
+  directory: () => app.getPath("userData"),
+  home: () => app.getPath("home"),
+});
+diagnostics.installProcessHandlers();
+/** Records every handler failure once, without altering what the caller sees. */
+function watchIpcFailures(): void {
+  const handle = ipcMain.handle.bind(ipcMain);
+  ipcMain.handle = ((channel: string, listener: (...args: unknown[]) => unknown) =>
+    handle(channel, async (event, ...args) => {
+      try {
+        return await listener(event, ...args);
+      } catch (error) {
+        diagnostics.record("ipc", channel, error);
+        throw error;
+      }
+    })) as typeof ipcMain.handle;
+}
 function trayIcon() {
   const variant = nativeTheme.shouldUseDarkColors ? "atte-tray-reversed" : "atte-tray",
     image = nativeImage.createFromPath(join(here, "assets", `${variant}-16.png`));
@@ -1226,6 +1246,64 @@ async function backendControlStatus() {
   }, { goals: 0, scenes: 0 });
   return { control, journal, workspaces, orca, impact };
 }
+async function diagnosticsReport(): Promise<string> {
+  const facts: string[] = [];
+  const attempt = async (label: string, read: () => Promise<string> | string) => {
+    try { facts.push(`${label}: ${await read()}`); }
+    catch (error) {
+      facts.push(`${label}: 读取失败 (${error instanceof Error ? error.message : String(error)})`);
+    }
+  };
+  await attempt("工作区", () => root ? compactPath(root, app.getPath("home")) : "未选择");
+  await attempt("会话后端", async () => {
+    const status = await backendControlStatus();
+    return `${status.control.selected} · phase=${status.control.phase} · epoch=${status.control.epoch}` +
+      ` · workspaces=${status.workspaces.length} · orca=${status.orca.detection.status}` +
+      (status.orca.detection.version ? ` ${status.orca.detection.version}` : "");
+  });
+  await attempt("Herdr", async () => {
+    const status = await herdrStatus();
+    return `installed=${Boolean(status.installed)} · version=${status.version ?? "-"}` +
+      ` · latest=${status.latestVersion ?? "-"} · phase=${status.phase}` +
+      ` · plugin=${status.plugin?.phase ?? "-"}`;
+  });
+  await attempt("CLI", async () => {
+    const status = await cliStatus();
+    return `installed=${status.installed}`;
+  });
+  await attempt("Skills", async () => {
+    const status = await skillsStatus();
+    return `installed=${status.installed}/${status.available}`;
+  });
+  await attempt("Agent 接入", async () => {
+    const adapters = await agentRuntimeStatus();
+    return adapters.length
+      ? adapters.map(adapter => `${adapter.id}=${adapter.status}/${adapter.installed ? "installed" : "absent"}`).join(" · ")
+      : "无";
+  });
+  await attempt("协调收件箱", async () => {
+    const status = await (await ensureCoordinatorInbox()).inbox.status();
+    return `queued=${status.queued} · processing=${Boolean(status.processing)} · alerts=${status.alerts.length}`;
+  });
+  await attempt("工作区状态", async () => {
+    if (!service) return "未打开";
+    const state = await service.read();
+    return `version=${state.version} · projects=${state.projects.length} · goals=${state.goals.length}` +
+      ` · attention=${attentionGoals(state.goals).length} · concierge=${state.concierge.status}`;
+  });
+  const separators = "─".repeat(24);
+  return [
+    diagnostics.report().trimEnd(),
+    "",
+    `环境快照（${new Date().toISOString()}）`,
+    separators,
+    ...facts,
+    "",
+    "说明：报告不包含目标正文、消息、附件、终端输出、Webhook 地址或凭据；绝对路径已替换为 ~。",
+    "",
+  ].join("\n");
+}
+
 function backendSwitchHooks() {
   return {
     adapter: backendAdapter,
@@ -1508,9 +1586,14 @@ async function switchSessionBackend(backend: "herdr" | "orca") {
   }
   const hooks = backendSwitchHooks();
   backendSwitchAbort = new AbortController();
+  diagnostics.record("backend", "switch-requested", `${current.selected} → ${backend}`);
   try {
     const journal = await sessionControl.switchTo(backend, hooks, backendSwitchAbort.signal);
+    diagnostics.record("backend", "switch-result", `${journal?.phase ?? "no-op"}${journal?.detail ? ` · ${journal.detail}` : ""}`);
     return await finishBackendTransition(journal);
+  } catch (error) {
+    diagnostics.record("backend", "switch-failed", error);
+    throw error;
   } finally { backendSwitchAbort = undefined; }
 }
 async function retrySessionBackendSwitch() {
@@ -1703,6 +1786,7 @@ async function openWorkspace(path: string) {
     },
   });
   root = canonical; service = opened;
+  diagnostics.record("workspace", "open", `${canonical} · backend=${backendControl.selected}`);
   lastSnapshotSignature = undefined;
   const recovered = await inbox.recoverInterrupted();
   for (const { item, detail } of recovered) {
@@ -1985,10 +2069,18 @@ app.whenReady().then(async () => {
   app.dock?.setIcon(nativeImage.createFromPath(join(here, "assets/atte-app-icon.png")));
   process.env.PATH = (await tools.paths()).join(":");
   const width = Number(environmentValue(process.env, "TEST_WINDOW_WIDTH")), height = Number(environmentValue(process.env, "TEST_WINDOW_HEIGHT"));
+  await diagnostics.enable();
+  diagnostics.record("app", "ready", `${app.getVersion()} · Electron ${process.versions.electron}`);
+  watchIpcFailures();
   window = new BrowserWindow({ width: Number.isFinite(width) && width >= 900 ? width : 1440, height: Number.isFinite(height) && height >= 700 ? height : 960, minWidth: 900, minHeight: 700, title: "Atte", titleBarStyle: "hiddenInset", backgroundColor: WINDOW_BACKGROUND, icon: join(here, "assets/atte-app-icon.png"), webPreferences: { preload: join(here, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" })); window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   window.on("close", (event) => { if (!quitting) { event.preventDefault(); window.hide(); } });
+  window.webContents.on("render-process-gone", (_event, details) =>
+    diagnostics.record("renderer", "render-process-gone", `${details.reason} (exit ${details.exitCode})`));
+  window.webContents.on("unresponsive", () => diagnostics.record("renderer", "unresponsive"));
+  window.webContents.on("did-fail-load", (_event, code, description, url) =>
+    diagnostics.record("renderer", "did-fail-load", `${code} ${description}`));
   ipcMain.handle("atte:environment", (event) => { sender(event); return { workspace: root, version: app.getVersion() }; });
   ipcMain.handle("atte:import-attachments", async (event, inputs: { name: string; bytes: ArrayBuffer }[]) => {
     sender(event);
@@ -2203,6 +2295,15 @@ app.whenReady().then(async () => {
       throw new Error("Agent 接入参数无效");
     return configureAgentRuntime(id, action);
   });
+  ipcMain.handle("atte:diagnostics-report", async event => {
+    sender(event);
+    return diagnosticsReport();
+  });
+  ipcMain.handle("atte:diagnostics-render-error", (event, summary: unknown) => {
+    sender(event);
+    if (typeof summary !== "string" || summary.length > 4_000) throw new Error("诊断信息无效");
+    diagnostics.record("renderer", "window-error", summary);
+  });
   ipcMain.handle("atte:clipboard-read", (event) => { sender(event); return clipboard.readText(); });
   ipcMain.handle("atte:clipboard-write", async (event, value: unknown) => {
     sender(event);
@@ -2285,7 +2386,26 @@ app.whenReady().then(async () => {
   nativeTheme.on("updated", () => {
     if (tray && !tray.isDestroyed()) tray.setImage(trayIcon());
   });
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "Atte", submenu: [{ role: "about" }, { type: "separator" }, { role: "hide" }, { role: "quit" }] }, { role: "editMenu" }, { role: "viewMenu" }]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "Atte", submenu: [
+      { role: "about" },
+      { type: "separator" },
+      {
+        label: "复制诊断日志",
+        click: async () => {
+          try {
+            await clipboard.writeText(await diagnosticsReport());
+            await dialog.showMessageBox({ type: "info", message: "诊断日志已复制",
+              detail: "已复制脱敏报告，可直接粘贴给维护者排查；不包含目标正文、终端内容与凭据。" });
+          } catch (error) {
+            await dialog.showMessageBox({ type: "error", message: "复制诊断日志失败",
+              detail: error instanceof Error ? error.message : String(error) });
+          }
+        },
+      },
+      { type: "separator" },
+      { role: "hide" },
+      { role: "quit" },
+    ] }, { role: "editMenu" }, { role: "viewMenu" }]));
   await window.loadURL(rendererURL);
   if (environmentValue(process.env, "TEST_SKIP_HERDR_SETUP") !== "1")
     void prepareHerdrCompanions().catch(() => { /* persistent readiness error is shown by the renderer */ });

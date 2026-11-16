@@ -43,6 +43,9 @@ contextBridge.exposeInMainWorld("atte", {
   configureAgentRuntime: (id: string, action: "install" | "disable" | "uninstall" | "refresh") =>
     ipcRenderer.invoke("atte:agent-runtime-action", id, action),
   readClipboardText: () => ipcRenderer.invoke("atte:clipboard-read"),
+  diagnosticsReport: () => ipcRenderer.invoke("atte:diagnostics-report") as Promise<string>,
+  reportRendererError: (summary: string) =>
+    ipcRenderer.invoke("atte:diagnostics-render-error", summary) as Promise<void>,
   readClipboardContent: () => ipcRenderer.invoke("atte:clipboard-content"),
   writeClipboardText: (value: string) => ipcRenderer.invoke("atte:clipboard-write", value),
   sceneSettings: () => ipcRenderer.invoke("atte:scene-settings"),
