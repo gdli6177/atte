@@ -236,14 +236,14 @@ h1 em { color: var(--accent); font-style: normal; }
 .goal-batch-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-4) 0 var(--space-2); }
 .goal-batch-hint, .goal-batch-count { color: var(--muted); font-size: var(--fs-meta); }
 .goal-batch-count { color: var(--secondary); }
-.goal-row.goal-row-batch { grid-template-columns: auto var(--size-10) minmax(0,1fr) minmax(var(--size-90), auto); cursor: default; }
-.goal-row-batch .ui-checkbox { flex: none; }
-.goal-row-batch .ui-checkbox .ui-checkbox__copy { position: absolute; width: var(--size-1); height: var(--size-1); padding: 0; margin: calc(-1 * var(--size-1)); overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.goal-row.goal-row-batch { grid-template-columns: var(--size-18) minmax(0,1fr); align-items: center; }
+.goal-row-batch .ui-checkbox__copy { min-width: 0; }
+.goal-row-batch .ui-checkbox__copy > span { display: grid; grid-template-columns: var(--size-10) minmax(0,1fr) minmax(var(--size-90), auto); align-items: center; gap: var(--space-4); }
 .goal-row { display: grid; grid-template-columns: var(--size-10) minmax(0,1fr) minmax(var(--size-90), auto) var(--space-5); align-items: center; gap: var(--space-4); width: 100%; min-height: var(--size-76); padding: var(--space-4) var(--space-2); border-bottom: var(--size-1) solid var(--line); border-radius: var(--r-sm); text-align: left; }
 .goal-row:hover { background: var(--surface-soft); }
 .goal-row strong { font-size: var(--fs-body-strong); font-weight: var(--weight-medium); }
 .goal-row-copy { min-width: 0; }
-.goal-row p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--fs-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.goal-row p, .goal-row-next { display: block; margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--fs-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .goal-row small { display: flex; align-items: center; gap: var(--space-2); min-width: 0; margin-top: var(--space-2); color: var(--muted); font-size: var(--fs-caption); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .goal-row small span { color: var(--muted); }
 .goal-row > svg { width: var(--size-14); height: var(--size-14); color: var(--muted); }

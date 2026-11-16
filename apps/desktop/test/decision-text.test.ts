@@ -14,6 +14,10 @@ test("inline A/B/C options become separate lines for display", () => {
   assert.match(lines[3]!, /^C 先保留/);
 });
 
+test("two options without an introductory sentence still become separate lines", () => {
+  assert.equal(formatDecisionText("A 验收通过；B 继续调整"), "A 验收通过\nB 继续调整");
+});
+
 test("an already multi-line decision and ordinary prose stay unchanged", () => {
   assert.equal(formatDecisionText("结论\nA 通过\nB 退回"), "结论\nA 通过\nB 退回");
   assert.equal(formatDecisionText("只有一段说明，没有选项。"), "只有一段说明，没有选项。");
