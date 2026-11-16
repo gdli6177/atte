@@ -6,9 +6,14 @@ export type GoalEntryDestination = "scene" | "attention" | "details" | "task";
 export function hasGoalScene(goal: Goal) {
   return Boolean(goal.scene || goal.herdr?.tabId || goal.herdr?.paneId || goal.herdr?.agent);
 }
+/** True when opening the scene must create a fresh owner instead of reusing one. */
+export function needsSceneRecovery(goal: Goal) {
+  return Boolean(goal.scene && goal.live?.reachable === false) ||
+    (!hasGoalScene(goal) && Boolean(goal.backendHandoff));
+}
+
 export function goalSceneLabel(goal: Goal) {
-  return goal.scene && goal.live?.reachable === false ? "恢复并进入现场" : hasGoalScene(goal) ? "回到现场" :
-    goal.backendHandoff ? "恢复并进入现场" : "找管家";
+  return needsSceneRecovery(goal) ? "恢复并进入现场" : hasGoalScene(goal) ? "回到现场" : "找管家";
 }
 
 export function goalEntryDestination(goal: Goal): GoalEntryDestination {

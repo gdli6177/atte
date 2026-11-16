@@ -1,4 +1,4 @@
-import { hasGoalScene } from "./goalEntry.js";
+import { hasGoalScene, needsSceneRecovery } from "./goalEntry.js";
 import { useState } from "react";
 import {
   Bot,
@@ -371,7 +371,7 @@ export function GoalActionDock({
             variant="primary"
             disabled={busy}
             icon={<SquareTerminal size={15} />}
-            onClick={() => void service.openHerdr(goal.id)}
+            onClick={() => void service.openHerdr(goal.id, needsSceneRecovery(goal))}
           >
             {hasGoalScene(goal) ? "打开工作现场" : "找管家"}
           </Button>

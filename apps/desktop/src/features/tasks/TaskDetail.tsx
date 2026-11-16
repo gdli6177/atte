@@ -1,4 +1,4 @@
-import { hasGoalScene } from "../goals/goalEntry.js";
+import { hasGoalScene, needsSceneRecovery } from "../goals/goalEntry.js";
 import { useState } from "react";
 import { Check, Clock3, Send } from "lucide-react";
 import type { AtteCommand, Goal } from "../../../../../packages/core/src/types.js";
@@ -64,7 +64,7 @@ export function TaskDetail({ goal, service, busy, error, close, delegated, notif
           <>
             <div className="task-actions">
               {hasGoalScene(goal) && <Button variant="ghost" size="sm" disabled={busy}
-                onClick={() => void service.openHerdr(goal.id)}>回到现场</Button>}
+                onClick={() => void service.openHerdr(goal.id, needsSceneRecovery(goal))}>回到现场</Button>}
               <Button variant="ghost" size="sm" disabled={busy} onClick={() => setNotesOpen(!notesOpen)}>补充说明</Button>
               <Button variant="ghost" size="sm" disabled={busy} onClick={() => setReminderOpen(!reminderOpen)}>
                 {goal.remindAt ? "修改提醒" : "提醒我"}
