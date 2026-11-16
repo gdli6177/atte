@@ -1,4 +1,4 @@
-import { hasGoalScene, goalSceneLabel } from "./goalEntry.js";
+import { hasGoalScene, goalSceneLabel, needsSceneRecovery } from "./goalEntry.js";
 import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -62,7 +62,7 @@ export function GoalAttentionCard({
             <div className="goal-detail-header-actions">
               <button type="button" className="goal-scene-button" disabled={busy}
                 title={hasGoalScene(goal) ? `打开 ${goal.owner} 的工作现场` : "打开当前工作区的管家现场"}
-                onClick={() => void service.openHerdr(goal.id)}>
+                onClick={() => void service.openHerdr(goal.id, needsSceneRecovery(goal))}>
                 <SquareTerminal size={15} /><span>{goalSceneLabel(goal)}</span>
               </button>
               <Dialog.Close asChild><IconButton label="关闭"><X size={18} /></IconButton></Dialog.Close>
