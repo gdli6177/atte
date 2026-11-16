@@ -123,7 +123,7 @@ export interface SessionAdapter {
 export type SessionErrorCode =
   | "backend_missing" | "backend_unverified" | "backend_incompatible"
   | "backend_unreachable" | "backend_switch_in_progress" | "backend_busy"
-  | "scene_identity_mismatch" | "launch_unconfirmed" | "delivery_unconfirmed"
+  | "scene_identity_mismatch" | "launch_unconfirmed" | "launch_failed" | "delivery_unconfirmed"
   | "focus_failed" | "switch_recovery_required" | "stale_backend_epoch";
 export class SessionError extends Error {
   constructor(readonly code: SessionErrorCode, message: string) {

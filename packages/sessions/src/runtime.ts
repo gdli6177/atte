@@ -223,7 +223,20 @@ export class SessionRuntime {
     const deadline = Date.now() + 15_000;
     for (;;) {
       const observation = await adapter.inspect(created.scene);
-      if (observation.identity !== "match" || observation.state === "exited")
+      if (observation.identity === "match" && observation.state === "exited") {
+        // A verified exit is a failed launch, not an uncertain delivery. Clean
+        // this attempt up so a retry cannot deadlock on its own dead scene; the
+        // retired attempt stays visible in attemptHistory.
+        if (goalId && launch.intent.role === "owner")
+          await this.service.execute({ type: "scene.retire", goalId,
+            bindingId: created.scene.bindingId, attemptId: created.scene.attemptId }).catch(() => {});
+        else if (launch.intent.role === "concierge")
+          await this.service.execute({ type: "scene.release",
+            bindingId: created.scene.bindingId }).catch(() => {});
+        throw new SessionError("launch_failed",
+          `${launch.intent.role === "concierge" ? "管家" : "负责人"}启动后立即退出（可能是 Agent CLI 崩溃，例如 EPIPE）。本次现场已清理，可直接重试。`);
+      }
+      if (observation.identity !== "match")
         throw new SessionError("launch_unconfirmed", "启动程序未保持存活；已保留原现场和请求，未重新创建。");
       if (observation.reachable && ["idle", "working", "blocked"].includes(observation.state)) break;
       // Arbitrary interactive CLIs may not expose a lifecycle state. The
@@ -331,7 +344,22 @@ export class SessionRuntime {
     const role = input.role ?? "owner";
     if (role === "verifier" && (goal.status !== "review" || !goal.delivery || !goal.brief))
       throw new Error("独立复核需要待复核交付和委托摘要。");
-    if (goal.scene && role === "owner") throw new Error("目标已有负责人现场；请使用 owner send 联系原负责人。");
+    if (goal.scene && role === "owner") {
+      // A dead terminal keeps its reference on purpose: it is evidence until
+      // someone verifies that the process is gone. Re-verify here so a crashed
+      // owner can be replaced by a new attempt without hand-editing state.
+      const { adapter: current } = await this.adapter();
+      const observed = await current.inspect(goal.scene);
+      if (observed.identity !== "match" || observed.state !== "exited")
+        throw new Error("目标已有负责人现场；请使用 owner send 联系原负责人。若原负责人已退出，请先在目标详情恢复现场。");
+      await this.service.execute({
+        type: "scene.retire", goalId: goal.id,
+        bindingId: goal.scene.bindingId, attemptId: goal.scene.attemptId,
+      });
+      delete goal.scene;
+      delete goal.sceneLaunch;
+      delete goal.agentRuntime;
+    }
     const candidateIntent = role === "owner" ? goal.sceneLaunch : goal.autonomy?.verificationLaunch;
     const existingIntent = candidateIntent?.status === "rejected" ? undefined : candidateIntent;
     if (existingIntent) {

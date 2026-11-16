@@ -134,11 +134,15 @@ Herdr 0.9.5 的插件事件不暴露用户提交的 prompt 文本。用户直接
 
 `CoordinatorInbox` 把人工反馈、注意力、普通目标和后台巡检保存到工作区私有文件 `.atte/coordinator-inbox.json`，权限为 `0600`。排序固定为 `human > attention > normal > background`；同一目标只保留最新有效通知，新请求与旧请求同级时用新请求替换，旧请求为更高优先级时不降级。已经 `processing` 的请求不丢失，新变化在其后重新排队。
 
+`requestId` 是投递的幂等键：同一目标、请求与类型重复入队只保留一条，已合并的记录不会被同一次巡检继续追加。`unconfirmed` 在 30 分钟后转为 `expired` 终态并停止计入告警；它仍与“未送达”分开，且不自动重发。`atte delivery <requestId>` 可查询单次投递的最终状态。
+
 `CoordinatorDispatcher` 每个工作区只有一个 drain，因此一次只有一个 Atte 管家回合。负责人创建、执行、交付和 Herdr 现场仍按目标并行；协调收件箱不串行化负责人。单个目标失败后继续处理其他目标。优先级只在当时可排队项之间生效，已经开始的回合不能被后来的人工消息抢占；较低优先级后台工作可以持续运行，不会饿死人工消息。Herdr 明确报 blocked 时暂停下一次自动尝试；`unconfirmed` 且现场仍 `working` 时也暂停，留到下一次轮询或新事件唤醒。收件箱只保留最近 240 条终态记录，超过容量不会删除排队或处理中项目。
 
 每条目标通知在发送前原子更新 `coordinator-scope.json`；巡检路径也执行同一步骤。请求绑定 `requestId`，旧回执不能修改新目标状态。管家单回合观察上限为 120 秒；后端恢复最多等待 60 秒的结构化协调证据。超时保存未确认，停止自动重放。累计完成 40 个案卷或估算约 240,000 字符后，应用只在管家 `idle` / `done` 且队列为空时关闭并重建管家上下文；所有目标事实仍在 core 状态中，轮换不会清理消息、附件、交付或注意力。
 
 应用启动时，持久化为 `queued` 的请求继续处理；`processing` 表示应用可能已把请求交给管家却不知道完整结果，因此转为 `unconfirmed` 且不自动重放。顶部状态只统计每个目标最新一条失败或未确认记录，后续成功重试会清除旧提示。详细设计与基准见 [持久协调收件箱](product/coordinator-inbox.md)。
+
+巡检的 `basis` 只取负责人自己的最后一条实质性写回（或派发时间），管家记账、核对说明和已合并通知不会推迟 stale 判定。已有未答卡片时，升级只标记已升级，不再追加第二条同一诉求。负责人现场经身份核实且进程已退出时，`owner launch` 可退役旧 attempt 并建立新 attempt；启动后立即退出的现场记为 `launch_failed`、自动清理本次尝试，旧 attempt 保存在 `attemptHistory`，恢复不再依赖人点按钮。
 
 受管 Agent 的沙箱可能禁止连接 Unix Socket，因此桌面同时提供私有 Host Bridge。它只接受随机令牌和 `agent`、`pane`、`tab`、`workspace` 四类命令，并通过系统临时目录下按工作区哈希隔离的原子 request / claim / response 文件工作。目录和文件使用 owner-only 权限；socket 路径不依赖工作区深度，避免 macOS Unix Socket 约 104 字节的路径上限。请求已有 claim 但缺少 response 时表示结果未确认，恢复后只报告状态，不自动重放 Herdr 命令或 Agent prompt。Bridge 始终调用 Atte 选定的同一 Herdr 运行时，避免系统 PATH 中另一份 Herdr 指向不同 Session。
 

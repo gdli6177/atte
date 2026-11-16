@@ -8,7 +8,8 @@ await import("./scripts/build-icons.mjs");
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
 await build({ entryPoints: ["electron/main.ts", "electron/preload.ts", "electron/terminal-worker.ts"], bundle: true, platform: "node", format: "cjs", outdir: "dist", outExtension: { ".js": ".cjs" }, external: ["electron", "node-pty"], sourcemap: true, define: { ATTE_WINDOW_BACKGROUND: JSON.stringify(windowBackground) } });
-await build({ entryPoints: ["../../cli/src/main.ts"], bundle: true, platform: "node", format: "cjs", target: "node20", outfile: "dist/cli/atte.cjs" });
+const cliVersion = JSON.parse(await readFile("../../cli/package.json", "utf8")).version;
+await build({ entryPoints: ["../../cli/src/main.ts"], bundle: true, platform: "node", format: "cjs", target: "node20", outfile: "dist/cli/atte.cjs", define: { __ATTE_VERSION__: JSON.stringify(cliVersion) } });
 await mkdir("dist/assets", { recursive: true });
 for (const file of ["atte-favicon-16.png", "atte-favicon-32.png",
   "atte-tray-16.png", "atte-tray-32.png", "atte-tray-reversed-16.png",

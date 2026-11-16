@@ -181,3 +181,25 @@ test("late patrol replies cannot override fresh progress or completed work", () 
   item.status = "completed";
   assert.deepEqual(inspectWatchdog([item], after(90)), []);
 });
+
+test("concierge bookkeeping does not postpone the owner no-progress check", () => {
+  const item = goal();
+  item.activities.push({ id: "note", kind: "progress", at: after(29), actor: "管家", text: "去重说明" });
+  item.updatedAt = after(29);
+  const [request] = inspectWatchdog([item], after(31));
+  assert.equal(request?.reason, "stale");
+  assert.equal(request?.basis, start, "only the owner's own activity moves the basis");
+  item.activities.push({ id: "owner", kind: "progress", at: after(40), actor: "负责人", text: "完成一部分" });
+  assert.deepEqual(inspectWatchdog([item], after(41)), []);
+});
+
+test("an unresolved card is not escalated twice", () => {
+  const item = goal();
+  item.attention = { id: "att", kind: "intervention", source: "watchdog",
+    summary: "负责人现场不可达，请查看现场", since: start };
+  const [request] = inspectWatchdog([item], after(31));
+  reportWatchdog(item, after(31), request!.basis, "contacted");
+  const count = item.activities.length;
+  assert.deepEqual(inspectWatchdog([item], after(41)), []);
+  assert.equal(item.activities.length, count, "the existing card already asks for the same action");
+});

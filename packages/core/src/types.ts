@@ -497,6 +497,10 @@ export interface Goal {
   scene?: SceneReferenceV1;
   legacyScene?: LegacySceneV0;
   sceneHistory?: SceneReferenceV1[];
+  attemptHistory?: Array<{
+    attemptId: string; agent?: string; scene: SceneReferenceV1;
+    retiredAt: string; reason: "superseded" | "closed";
+  }>;
   backendHandoff?: BackendHandoff;
   sceneLaunch?: SceneLaunchIntent;
   reviewRounds?: number; reviewLimit?: number;

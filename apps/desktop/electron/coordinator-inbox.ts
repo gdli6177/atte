@@ -20,7 +20,8 @@ export type CoordinatorItemStatus =
   | "unconfirmed"
   | "failed"
   | "cancelled"
-  | "coalesced";
+  | "coalesced"
+  | "expired";
 
 export interface CoordinatorInboxItem {
   id: string;
@@ -64,6 +65,7 @@ export interface CoordinatorInboxStatus {
   };
   failed: number;
   unconfirmed: number;
+  expired: number;
   alerts: Array<{
     goalId: string;
     requestId: string;
@@ -83,6 +85,7 @@ export interface CoordinatorInboxRecovery {
 }
 
 const MAX_RETAINED_ITEMS = 240;
+const UNCONFIRMED_TTL = 30 * 60_000;
 const MAX_CONTEXT_CASES = 40;
 const MAX_CONTEXT_CHARS = 240_000;
 const priorityRank: Record<CoordinatorPriority, number> = {
@@ -130,7 +133,7 @@ function validInbox(value: unknown): value is StoredCoordinatorInbox {
     !Number.isSafeInteger(context.completedCases) || !Number.isSafeInteger(context.estimatedChars))
     return false;
   const statuses = new Set([
-    "queued", "processing", "sent", "unconfirmed", "failed", "cancelled", "coalesced",
+    "queued", "processing", "sent", "unconfirmed", "failed", "cancelled", "coalesced", "expired",
   ]);
   const kinds = new Set([
     "goal", "follow_up", "scene_reply", "restart", "feedback", "watchdog", "reconcile", "owner_write",
@@ -217,10 +220,14 @@ export class CoordinatorInbox {
   }): Promise<CoordinatorInboxItem> {
     return this.runExclusive(async () => {
       const at = nowIso();
+      // requestId is the idempotency key. A request that was already merged,
+      // sent or expired must not create another row when the same patrol runs
+      // again; only a recent failure may retry under the same id.
       const duplicate = this.state.items.find(item =>
         item.goalId === input.goalId && item.requestId === input.requestId &&
         item.kind === input.kind && (
-          ["queued", "processing", "sent", "unconfirmed"].includes(item.status) ||
+          ["queued", "processing", "sent", "unconfirmed", "coalesced", "expired", "cancelled"]
+            .includes(item.status) ||
           item.status === "failed" &&
             Date.now() - Date.parse(item.finishedAt ?? item.enqueuedAt) < 60_000
         ));
@@ -364,6 +371,20 @@ export class CoordinatorInbox {
     });
   }
 
+  private expireUnconfirmed(at: string) {
+    let changed = false;
+    for (const item of this.state.items) {
+      if (item.status !== "unconfirmed") continue;
+      const since = Date.parse(item.finishedAt ?? item.enqueuedAt);
+      if (!Number.isFinite(since) || Date.now() - since < UNCONFIRMED_TTL) continue;
+      item.status = "expired";
+      item.finishedAt = at;
+      item.detail = "投递结果长时间未确认，已按过期关闭；没有重发，请以现场为准。";
+      changed = true;
+    }
+    return changed;
+  }
+
   private statusUnlocked(): CoordinatorInboxStatus {
     const processing = [...this.state.items].reverse().find(item => item.status === "processing");
     const queued = this.state.items.filter(item => item.status === "queued");
@@ -393,6 +414,7 @@ export class CoordinatorInbox {
       } : {}),
       failed: alerts.filter(item => item.status === "failed").length,
       unconfirmed: alerts.filter(item => item.status === "unconfirmed").length,
+      expired: this.state.items.filter(item => item.status === "expired").length,
       alerts,
       processed: this.state.items.filter(item =>
         ["sent", "unconfirmed", "failed"].includes(item.status)).length,
@@ -406,6 +428,9 @@ export class CoordinatorInbox {
   }
 
   status() {
-    return this.runExclusive(async () => this.statusUnlocked());
+    return this.runExclusive(async () => {
+      if (this.expireUnconfirmed(nowIso())) await this.persist();
+      return this.statusUnlocked();
+    });
   }
 }
