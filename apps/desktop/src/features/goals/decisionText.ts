@@ -9,7 +9,9 @@ export function formatDecisionText(value: string): string {
   const text = value.replaceAll("\r\n", "\n").trim();
   if (!text || text.includes("\n")) return text;
   // Only act on real enumerations: at least two inline option labels.
-  if ((text.match(optionSeparator) ?? []).length < 2) return text;
+  const optionCount = (text.match(optionSeparator) ?? []).length
+    + (/^[A-Za-z](?:\s|[、.．:：)])/.test(text) ? 1 : 0);
+  if (optionCount < 2) return text;
   return text
     .replace(optionSeparator, (_match, punctuation: string) => `${punctuation}\n`)
     .split("\n")

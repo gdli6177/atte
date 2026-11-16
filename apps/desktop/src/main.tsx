@@ -64,6 +64,7 @@ import { TaskDetail } from "./features/tasks/TaskDetail.js";
 import { useReminderClock } from "./features/tasks/useReminderClock.js";
 import { GoalDetail } from "./features/goals/GoalDetail.js";
 import { GoalAttentionCard } from "./features/goals/GoalAttentionCard.js";
+import { deleteFinishedGoals } from "./features/goals/batchGoalDeletion.js";
 import { goalEntryDestination, hasGoalScene } from "./features/goals/goalEntry.js";
 import { goalProgressLabel, presentSceneContext, sceneSyncPresentation } from "./features/goals/goalPresentation.js";
 import type { GoalDetailService } from "./features/goals/goalService.js";
@@ -171,6 +172,7 @@ function App() {
   const [taskSection, setTaskSection] = useState<"later" | "self">("later");
   const [batchMode, setBatchMode] = useState(false);
   const [batchSelected, setBatchSelected] = useState<string[]>([]);
+  const [batchDeleting, setBatchDeleting] = useState(false);
   const [error, setError] = useState(""),
     [toast, setToast] = useState(""),
     [busy, setBusy] = useState(false),
@@ -354,8 +356,8 @@ function App() {
     const timer = window.setTimeout(() => setError(""), 8_000);
     return () => window.clearTimeout(timer);
   }, [error, modal]);
-  function showError(reason: unknown) {
-    setError(String(reason).replace(/^Error: /, "")
+  function showError(reason: unknown, prefix = "") {
+    setError(prefix + String(reason).replace(/^Error: /, "")
       .replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ""));
   }
   async function refreshBackendStatus() {
@@ -395,31 +397,41 @@ function App() {
     finally { setBusy(false); }
   }
   const batchSelectable = filter === "completed" || filter === "dropped";
+  const batchGoals = batchSelectable ? selectedGoals.filter(item => batchSelected.includes(item.id)) : [];
+  const allBatchSelected = selectedGoals.length > 0 && batchGoals.length === selectedGoals.length;
   useEffect(() => {
     setBatchMode(false);
     setBatchSelected([]);
-  }, [filter, projectId]);
+  }, [filter, projectId, page, workspace]);
+  useEffect(() => { setBatchSelected([]); }, [query]);
   function toggleBatch(id: string, checked: boolean) {
     setBatchSelected(current => checked
       ? [...new Set([...current, id])]
       : current.filter(value => value !== id));
   }
   async function deleteSelectedGoals() {
-    const ids = batchSelected.filter(id =>
-      state.goals.some(goal => goal.id === id && ["completed", "dropped"].includes(goal.status)));
-    if (!ids.length) return;
-    if (!window.confirm(`删除选中的 ${ids.length} 个已结束目标？附件和负责人现场会被清理，此操作不可撤销。`))
+    if (busy || batchDeleting || !batchGoals.length) return;
+    if (!window.confirm(`永久删除选中的 ${batchGoals.length} 个已结束目标？附件和负责人现场会被清理，此操作不可撤销。`))
       return;
+    setBatchDeleting(true);
     setBusy(true);
     setError("");
     try {
-      for (const goalId of ids) await execute({ type: "goal.delete", goalId });
-      setBatchSelected([]);
-      setBatchMode(false);
-      notify(`已删除 ${ids.length} 个已结束目标。`);
+      const result = await deleteFinishedGoals(batchGoals, command => api.command(command));
+      setBatchSelected(result.failed.map(item => item.goalId));
+      setBatchMode(result.failed.length > 0);
+      applyState(await api.command({ type: "snapshot" }));
+      const firstFailure = result.failed[0];
+      if (firstFailure) {
+        showError(firstFailure.reason,
+          `已删除 ${result.deleted.length} 个目标，${result.failed.length} 个未删除，已保留勾选。${firstFailure.title}：`);
+      } else {
+        notify(`已删除 ${result.deleted.length} 个已结束目标。`);
+      }
     } catch (reason) {
       showError(reason);
     } finally {
+      setBatchDeleting(false);
       setBusy(false);
     }
   }
@@ -494,7 +506,7 @@ function App() {
     methodPacks: () => api.methodPacksStatus(),
   }), [busy]);
   async function pickWorkspace() {
-    if (pickingWorkspace) return;
+    if (pickingWorkspace || batchDeleting) return;
     setPickingWorkspace(true);
     setError("");
     try {
@@ -1012,6 +1024,7 @@ function App() {
                     key={value}
                     type="button"
                     aria-pressed={filter === value}
+                    disabled={batchDeleting}
                     onClick={() => setFilter(value)}
                   >
                     {label}
@@ -1021,6 +1034,7 @@ function App() {
                   aria-label="搜索目标"
                   className="filter-search"
                   placeholder="搜索目标…"
+                  disabled={batchDeleting}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
@@ -1028,32 +1042,32 @@ function App() {
               {batchSelectable && (
                 <div className="goal-batch-bar" role="group" aria-label="批量管理">
                   {batchMode ? <>
-                    <span className="goal-batch-count">已选 {batchSelected.length} 项</span>
+                    <span className="goal-batch-count" role="status">{batchDeleting ? "正在删除…" : `已选 ${batchGoals.length} 项`}</span>
                     <Button
                       variant="secondary"
                       size="sm"
-                      disabled={busy || !selectedGoals.length}
+                      disabled={busy || batchDeleting || !selectedGoals.length}
                       onClick={() => setBatchSelected(
-                        batchSelected.length === selectedGoals.length ? [] : selectedGoals.map(item => item.id),
+                        allBatchSelected ? [] : selectedGoals.map(item => item.id),
                       )}
                     >
-                      {batchSelected.length === selectedGoals.length && selectedGoals.length ? "取消全选" : "全选"}
+                      {allBatchSelected ? "取消全选" : "全选"}
                     </Button>
                     <Button
                       variant="danger"
                       size="sm"
-                      disabled={busy || !batchSelected.length}
+                      disabled={busy || batchDeleting || !batchGoals.length}
                       onClick={() => void deleteSelectedGoals()}
                     >
-                      删除所选（{batchSelected.length}）
+                      删除所选（{batchGoals.length}）
                     </Button>
-                    <Button variant="ghost" size="sm" disabled={busy} onClick={() => {
+                    <Button variant="ghost" size="sm" disabled={busy || batchDeleting} onClick={() => {
                       setBatchMode(false);
                       setBatchSelected([]);
                     }}>退出批量</Button>
                   </> : <>
                     <span className="goal-batch-hint">只对已完成或已放弃的目标生效。</span>
-                    <Button variant="secondary" size="sm" onClick={() => setBatchMode(true)}>
+                    <Button variant="secondary" size="sm" disabled={busy || batchDeleting || !selectedGoals.length} onClick={() => setBatchMode(true)}>
                       批量选择
                     </Button>
                   </>}
@@ -1061,24 +1075,32 @@ function App() {
               )}
               <div className="goal-list">
                 {selectedGoals.length ? (
-                  selectedGoals.map((item) => batchMode ? (
-                    <label className="goal-row goal-row-batch" key={item.id}>
-                      <Checkbox
-                        name={`批量选择 ${item.title}`}
-                        checked={batchSelected.includes(item.id)}
-                        disabled={busy}
-                        onChange={event => toggleBatch(item.id, event.target.checked)}
-                        label={`批量选择 ${item.title}`}
-                      />
-                      <span className={`goal-dot ${item.status}`} />
-                      <div className="goal-row-copy">
-                        <strong>{item.title}</strong>
-                        <p>{item.next}</p>
-                      </div>
-                      <StatusPill tone={goalRowTone(item)}>
-                        {goalRowLabel(item)}
-                      </StatusPill>
-                    </label>
+                  selectedGoals.map((item) => batchMode && batchSelectable ? (
+                    <Checkbox
+                      className="goal-row goal-row-batch"
+                      key={item.id}
+                      aria-label={`批量选择 ${item.title}`}
+                      checked={batchSelected.includes(item.id)}
+                      disabled={busy || batchDeleting}
+                      onChange={event => toggleBatch(item.id, event.target.checked)}
+                      label={<>
+                        <span className={`goal-dot ${item.status}`} />
+                        <span className="goal-row-copy">
+                          <strong>{item.title}</strong>
+                          <span className="goal-row-next">{item.next}</span>
+                          <small>
+                            {state.projects.find(current => current.id === item.projectId)?.name ?? "个人事项"}
+                            <span aria-hidden="true">·</span>
+                            {item.owner}
+                            <span aria-hidden="true">·</span>
+                            {time(item.updatedAt)} 更新
+                          </small>
+                        </span>
+                        <StatusPill tone={goalRowTone(item)}>
+                          {goalRowLabel(item)}
+                        </StatusPill>
+                      </>}
+                    />
                   ) : (
                     <button
                       className="goal-row"
@@ -1298,7 +1320,7 @@ function App() {
         <p className="workspace-help">要处理某个代码项目，请在左侧「项目」旁点 + 添加。切换工作区后，将显示所选目录自己的目标和管家。</p>
         <div className="form-actions">
           <Button variant="secondary" onClick={() => setModal("")}>返回设置</Button>
-          <Button variant="primary" disabled={pickingWorkspace} onClick={() => void pickWorkspace()}>
+          <Button variant="primary" disabled={pickingWorkspace || batchDeleting} onClick={() => void pickWorkspace()}>
             {pickingWorkspace ? "正在打开工作区…" : workspace ? "选择其他工作区文件夹" : "选择工作区文件夹"}
           </Button>
         </div>

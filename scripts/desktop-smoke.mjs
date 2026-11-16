@@ -846,16 +846,74 @@ try {
     await service.execute({ type: "goal.complete", goalId: created.id, note: "批量删除验证", actor: "你" });
     batchGoals.push(created.id);
   }
+  const keptGoal = await service.execute({
+    type: "goal.create", input: { title: "搜索外保留目标", projectId: "personal", mode: "manual" },
+  });
+  await service.execute({ type: "goal.complete", goalId: keptGoal.id, note: "保留用于核对搜索范围", actor: "你" });
   await page.getByRole("button", { name: "全部目标", exact: true }).click();
+  await expect(page.getByRole("button", { name: "批量选择", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "已完成", exact: true }).click();
   await page.getByRole("button", { name: "批量选择", exact: true }).click();
+  await expect(page.getByRole("button", { name: "删除所选（0）", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "全选", exact: true }).click();
+  // Search clears old selections, so hidden goals cannot be deleted.
+  await page.getByRole("textbox", { name: "搜索目标" }).fill("批量删除");
+  await expect(page.getByRole("button", { name: "删除所选（0）", exact: true })).toBeDisabled();
+  await expect(page.locator(".goal-row-batch")).toHaveCount(2);
+  await page.getByText("批量删除 A", { exact: true }).click();
+  const batchCheckbox = page.getByRole("checkbox", { name: "批量选择 批量删除 A", exact: true });
+  await expect(batchCheckbox).toBeChecked();
+  await batchCheckbox.focus();
+  await page.keyboard.press("Space");
+  await expect(batchCheckbox).not.toBeChecked();
+  await page.getByRole("button", { name: "全选", exact: true }).click();
+  await expect(page.getByRole("button", { name: "删除所选（2）", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "取消全选", exact: true }).click();
+  await expect(page.getByRole("button", { name: "删除所选（0）", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "全选", exact: true }).click();
+  page.once("dialog", dialog => {
+    assert.match(dialog.message(), /永久删除选中的 2 个/);
+    void dialog.dismiss();
+  });
+  await page.getByRole("button", { name: "删除所选（2）", exact: true }).click();
+  assert.equal((await service.read()).goals.filter(item => batchGoals.includes(item.id)).length, 2);
+  await expect(page.getByRole("button", { name: "删除所选（2）", exact: true })).toBeEnabled();
+  const batchTheme = await page.evaluate(() => document.documentElement.dataset.theme);
+  for (const theme of ["dark", "light"]) {
+    await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
+    for (const [width, height] of [[900, 700], [1024, 768], [1440, 960]]) {
+      await page.setViewportSize({ width, height });
+      await page.screenshot({ path: join(home, `batch-goals-${theme}-${width}.png`), animations: "disabled" });
+      assert.deepEqual(await page.evaluate(auditRenderedUi), [], `batch goals ${theme} ${width}`);
+      const bounds = await page.locator(".goal-row-batch").first().evaluate(row => {
+        const title = row.querySelector("strong").getBoundingClientRect();
+        const checkbox = row.querySelector(".ui-checkbox__box").getBoundingClientRect();
+        return { titleX: title.x, checkboxRight: checkbox.right, titleWidth: title.width };
+      });
+      assert.ok(bounds.titleX > bounds.checkboxRight && bounds.titleWidth > 100,
+        "batch goal titles must stay beside the checkbox with room to read");
+    }
+  }
+  await page.evaluate(value => { document.documentElement.dataset.theme = value; }, batchTheme);
+  await page.setViewportSize({ width: 1440, height: 900 });
   page.once("dialog", dialog => void dialog.accept());
-  await page.getByRole("button", { name: /^删除所选（\d+）$/ }).click();
+  await page.getByRole("button", { name: "删除所选（2）", exact: true }).click();
   await expect.poll(async () =>
     (await service.read()).goals.filter(item => batchGoals.includes(item.id)).length
   ).toBe(0);
   await expect(page.locator(".goal-row-batch")).toHaveCount(0);
+  assert.equal((await service.read()).goals.some(item => item.id === keptGoal.id), true);
+  await page.getByRole("textbox", { name: "搜索目标" }).fill("");
+  const droppedBatch = await service.execute({
+    type: "goal.create", input: { title: "批量移出验证", projectId: "personal", mode: "manual" },
+  });
+  await service.execute({ type: "goal.drop", goalId: droppedBatch.id, note: "验证已放弃筛选" });
+  await page.getByRole("button", { name: "已放弃", exact: true }).click();
+  await page.getByRole("button", { name: "批量选择", exact: true }).click();
+  await page.getByRole("checkbox", { name: "批量选择 批量移出验证", exact: true }).check();
+  page.once("dialog", dialog => void dialog.accept());
+  await page.getByRole("button", { name: "删除所选（1）", exact: true }).click();
+  await expect.poll(async () => (await service.read()).goals.some(item => item.id === droppedBatch.id)).toBe(false);
   await page.getByRole("button", { name: "全部", exact: true }).click();
   assert.deepEqual(errors, []);
   const sceneGoal = await service.execute({
@@ -1144,6 +1202,7 @@ try {
         "6 theme/size combinations across attention, both task-pool sections, goals, settings top/bottom, goal detail, and intake",
         "dispatch failure is presented as a retryable concierge connection failure",
         "permanent deletion for completed goals",
+        "batch deletion of completed/dropped goals, keyboard selection, search scope, cancellation, and 6 theme/size layouts",
         "in-app goal abandonment with a recorded reason",
         "persistent owner scene entry is available from every active goal detail",
         "goal detail summarizes next action and latest agent reply while history opens newest-first",
