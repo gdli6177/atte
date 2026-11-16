@@ -11,7 +11,8 @@ export type CoordinatorJobKind =
   | "restart"
   | "feedback"
   | "watchdog"
-  | "reconcile";
+  | "reconcile"
+  | "owner_write";
 export type CoordinatorItemStatus =
   | "queued"
   | "processing"
@@ -132,7 +133,7 @@ function validInbox(value: unknown): value is StoredCoordinatorInbox {
     "queued", "processing", "sent", "unconfirmed", "failed", "cancelled", "coalesced",
   ]);
   const kinds = new Set([
-    "goal", "follow_up", "scene_reply", "restart", "feedback", "watchdog", "reconcile",
+    "goal", "follow_up", "scene_reply", "restart", "feedback", "watchdog", "reconcile", "owner_write",
   ]);
   const priorities = new Set(["human", "attention", "normal", "background"]);
   return value.items.every(item =>

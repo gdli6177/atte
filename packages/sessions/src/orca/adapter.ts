@@ -14,7 +14,7 @@ import {
 import { atomicJSON, claimJSON, childPath, readJSON, record, string } from "../io.js";
 import { launcherCommand, readLaunchReceipt, receiptProcess, type LaunchReceipt } from "../launcher.js";
 import { localProcesses, type ProcessInspector } from "../process.js";
-import { detectOrcaApplication } from "./detection.js";
+import { detectOrcaApplication, ORCA_RELEASE } from "./detection.js";
 import { ORCA_REQUIRED_RUNTIME_CAPABILITIES } from "./compatibility.js";
 import { orcaEnvelope, orcaPrograms, orcaTerminal, terminalPaneKey, OrcaCommandError, type OrcaEnvelope, type OrcaTerminal } from "./parser.js";
 
@@ -29,11 +29,30 @@ export interface OrcaAdapterOptions {
   detect?: () => Promise<BackendDetection>;
   open?: () => Promise<void>;
   launchApplication?: (profile?: string) => Promise<void>;
+  /** Brings the Orca window forward after an explicit scene focus. */
+  activate?: () => Promise<void>;
   processes?: ProcessInspector;
   environment?: NodeJS.ProcessEnv;
   shellEnvironment?: Record<string, string>;
   now?: () => Date;
   wait?: (ms: number) => Promise<void>;
+}
+/**
+ * `open -a` may leave the window behind another app or on another Space.
+ * NSRunningApplication activation with AllWindows raises the window and
+ * switches to its Space; it needs no Automation or Accessibility permission.
+ */
+export function activationScript(appPath: string) {
+  return `ObjC.import("AppKit");
+const wanted = ${JSON.stringify(appPath)};
+const all = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(${JSON.stringify(ORCA_RELEASE.bundleId)});
+const apps = [];
+for (let index = 0; index < all.count; index++) apps.push(all.objectAtIndex(index));
+const app = apps.find(candidate => candidate.bundleURL && ObjC.unwrap(candidate.bundleURL.path) === wanted) ?? apps[0];
+if (!app) throw new Error("no-instance");
+const raised = app.activateWithOptions($.NSApplicationActivateAllWindows | $.NSApplicationActivateIgnoringOtherApps);
+if (!raised) throw new Error("activation-refused");
+"activated";`;
 }
 export class OrcaAdapter implements SessionAdapter {
   readonly id = "orca" as const;
@@ -393,8 +412,13 @@ export class OrcaAdapter implements SessionAdapter {
           const focused = await this.call(["terminal", "switch", "--terminal", scene.locator.terminalHandle]);
           if (focused.runtimeId !== scene.runtimeId)
             return { status: "missing", navigated: false, detail: "聚焦期间 Orca 已重启；没有创建替代终端。" };
-          if (record(focused.result.focus) && focused.result.focus.navigated === true)
+          if (record(focused.result.focus) && focused.result.focus.navigated === true) {
+            // `terminal switch` only changes the tab inside Orca. Returning to a
+            // scene must also raise the application window, otherwise the user
+            // still has to switch to Orca manually.
+            await this.activateApplication().catch(() => {});
             return { status: "focused", navigated: true };
+          }
           lastDetail = "Orca 未确认精确导航。";
         }
       } catch (error) {
@@ -405,6 +429,16 @@ export class OrcaAdapter implements SessionAdapter {
         return { status: "missing", navigated: false, detail: `${lastDetail} 没有创建替代终端。` };
       await (this.options.wait ?? delay)(100);
     }
+  }
+  /** AppKit activation raises every window and switches to the app's Space. */
+  private async activateApplication() {
+    if (this.options.activate) return this.options.activate();
+    if (process.platform !== "darwin") return;
+    await exec("/usr/bin/osascript", ["-l", "JavaScript", "-e", activationScript(this.options.appPath)],
+      { timeout: 5_000 }).catch(async () => {
+        // LaunchServices activation remains a fallback for unusual installs.
+        await exec("/usr/bin/open", ["-a", this.options.appPath], { timeout: 5_000 });
+      });
   }
   async close(scene: SceneReferenceV1): Promise<CloseReceipt> {
     this.assertScene(scene);

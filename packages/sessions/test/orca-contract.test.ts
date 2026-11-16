@@ -26,6 +26,8 @@ async function fixture(t: test.TestContext, options: {
     cwd: "/tmp/个人 事项", title: "owned fixture", launcherPath: "/tmp/private-launcher.zsh", receiptPath,
   };
   let alive = true, runtimeId = "runtime-one", created = false, sends = 0, creates = 0, closed = false;
+  let activations = 0;
+  let activationError: Error | undefined;
   let orphaned = options.orphaned ?? false;
   let focusDisconnectedResponses = 0;
   const calls: string[][] = [];
@@ -48,6 +50,7 @@ async function fixture(t: test.TestContext, options: {
       hasChild: async () => alive,
     },
     wait: async () => {},
+    activate: async () => { activations++; if (activationError) throw activationError; },
     run: async args => {
       calls.push(args);
       const command = args.slice(0, 2).join(" ");
@@ -109,6 +112,8 @@ async function fixture(t: test.TestContext, options: {
   return {
     root, input, adapter, create, calls,
     counts: () => ({ sends, creates }),
+    activations: () => activations,
+    failActivation: () => { activationError = new Error("activation denied"); },
     restart: () => { runtimeId = "runtime-two"; },
     disconnectNextFocus: (count = 1) => { focusDisconnectedResponses = count; },
   };
@@ -267,6 +272,29 @@ test("focus retries the same terminal while Orca connects it and never requires 
   f.disconnectNextFocus();
   assert.deepEqual(await f.adapter.focus(scene), { status: "focused", navigated: true });
   assert.equal(f.counts().creates, 1);
+  assert.equal(f.activations(), 1, "a successful tab switch must raise the Orca window");
+});
+
+test("reshowing a scene raises the application every time without creating a terminal", async t => {
+  const f = await fixture(t), scene = (await f.create()).scene!;
+  for (let index = 0; index < 3; index++)
+    assert.deepEqual(await f.adapter.focus(scene), { status: "focused", navigated: true });
+  assert.equal(f.activations(), 3);
+  assert.equal(f.counts().creates, 1);
+});
+
+test("a failed window activation never turns a real navigation into a focus failure", async t => {
+  const f = await fixture(t), scene = (await f.create()).scene!;
+  f.failActivation();
+  assert.deepEqual(await f.adapter.focus(scene), { status: "focused", navigated: true });
+  assert.equal(f.activations(), 1);
+});
+
+test("an unverified scene is never raised, because nothing was navigated", async t => {
+  const f = await fixture(t), scene = (await f.create()).scene!;
+  f.restart();
+  assert.equal((await f.adapter.focus(scene)).status, "missing");
+  assert.equal(f.activations(), 0);
 });
 test("background orphaned terminals stay reachable, receive input, and reattach on focus", async t => {
   const f = await fixture(t, { orphaned: true }), scene = (await f.create()).scene!;
