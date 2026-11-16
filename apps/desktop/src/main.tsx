@@ -169,6 +169,8 @@ function App() {
     [goalId, setGoalId] = useState("");
   const [intakeHandling, setIntakeHandling] = useState<IntakeHandling>("concierge");
   const [taskSection, setTaskSection] = useState<"later" | "self">("later");
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchSelected, setBatchSelected] = useState<string[]>([]);
   const [error, setError] = useState(""),
     [toast, setToast] = useState(""),
     [busy, setBusy] = useState(false),
@@ -391,6 +393,35 @@ function App() {
     }
     catch (reason) { showError(reason); }
     finally { setBusy(false); }
+  }
+  const batchSelectable = filter === "completed" || filter === "dropped";
+  useEffect(() => {
+    setBatchMode(false);
+    setBatchSelected([]);
+  }, [filter, projectId]);
+  function toggleBatch(id: string, checked: boolean) {
+    setBatchSelected(current => checked
+      ? [...new Set([...current, id])]
+      : current.filter(value => value !== id));
+  }
+  async function deleteSelectedGoals() {
+    const ids = batchSelected.filter(id =>
+      state.goals.some(goal => goal.id === id && ["completed", "dropped"].includes(goal.status)));
+    if (!ids.length) return;
+    if (!window.confirm(`删除选中的 ${ids.length} 个已结束目标？附件和负责人现场会被清理，此操作不可撤销。`))
+      return;
+    setBusy(true);
+    setError("");
+    try {
+      for (const goalId of ids) await execute({ type: "goal.delete", goalId });
+      setBatchSelected([]);
+      setBatchMode(false);
+      notify(`已删除 ${ids.length} 个已结束目标。`);
+    } catch (reason) {
+      showError(reason);
+    } finally {
+      setBusy(false);
+    }
   }
   function notify(text: string) {
     if (toastTimer.current !== undefined) clearTimeout(toastTimer.current);
@@ -994,9 +1025,61 @@ function App() {
                   onChange={(event) => setQuery(event.target.value)}
                 />
               </div>
+              {batchSelectable && (
+                <div className="goal-batch-bar" role="group" aria-label="批量管理">
+                  {batchMode ? <>
+                    <span className="goal-batch-count">已选 {batchSelected.length} 项</span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy || !selectedGoals.length}
+                      onClick={() => setBatchSelected(
+                        batchSelected.length === selectedGoals.length ? [] : selectedGoals.map(item => item.id),
+                      )}
+                    >
+                      {batchSelected.length === selectedGoals.length && selectedGoals.length ? "取消全选" : "全选"}
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={busy || !batchSelected.length}
+                      onClick={() => void deleteSelectedGoals()}
+                    >
+                      删除所选（{batchSelected.length}）
+                    </Button>
+                    <Button variant="ghost" size="sm" disabled={busy} onClick={() => {
+                      setBatchMode(false);
+                      setBatchSelected([]);
+                    }}>退出批量</Button>
+                  </> : <>
+                    <span className="goal-batch-hint">只对已完成或已放弃的目标生效。</span>
+                    <Button variant="secondary" size="sm" onClick={() => setBatchMode(true)}>
+                      批量选择
+                    </Button>
+                  </>}
+                </div>
+              )}
               <div className="goal-list">
                 {selectedGoals.length ? (
-                  selectedGoals.map((item) => (
+                  selectedGoals.map((item) => batchMode ? (
+                    <label className="goal-row goal-row-batch" key={item.id}>
+                      <Checkbox
+                        name={`批量选择 ${item.title}`}
+                        checked={batchSelected.includes(item.id)}
+                        disabled={busy}
+                        onChange={event => toggleBatch(item.id, event.target.checked)}
+                        label={`批量选择 ${item.title}`}
+                      />
+                      <span className={`goal-dot ${item.status}`} />
+                      <div className="goal-row-copy">
+                        <strong>{item.title}</strong>
+                        <p>{item.next}</p>
+                      </div>
+                      <StatusPill tone={goalRowTone(item)}>
+                        {goalRowLabel(item)}
+                      </StatusPill>
+                    </label>
+                  ) : (
                     <button
                       className="goal-row"
                       key={item.id}

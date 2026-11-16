@@ -233,6 +233,12 @@ h1 em { color: var(--accent); font-style: normal; }
 .filter-bar button.active { background: var(--surface); border-color: var(--line-strong); color: var(--text); }
 .filter-bar input { width: var(--size-190); min-height: var(--size-35); margin-left: auto; padding: var(--space-2) var(--space-2); font-size: var(--fs-meta); }
 .goal-list { border-top: var(--size-1) solid var(--line); }
+.goal-batch-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-4) 0 var(--space-2); }
+.goal-batch-hint, .goal-batch-count { color: var(--muted); font-size: var(--fs-meta); }
+.goal-batch-count { color: var(--secondary); }
+.goal-row.goal-row-batch { grid-template-columns: auto var(--size-10) minmax(0,1fr) minmax(var(--size-90), auto); cursor: default; }
+.goal-row-batch .ui-checkbox { flex: none; }
+.goal-row-batch .ui-checkbox .ui-checkbox__copy { position: absolute; width: var(--size-1); height: var(--size-1); padding: 0; margin: calc(-1 * var(--size-1)); overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .goal-row { display: grid; grid-template-columns: var(--size-10) minmax(0,1fr) minmax(var(--size-90), auto) var(--space-5); align-items: center; gap: var(--space-4); width: 100%; min-height: var(--size-76); padding: var(--space-4) var(--space-2); border-bottom: var(--size-1) solid var(--line); border-radius: var(--r-sm); text-align: left; }
 .goal-row:hover { background: var(--surface-soft); }
 .goal-row strong { font-size: var(--fs-body-strong); font-weight: var(--weight-medium); }
@@ -392,7 +398,7 @@ h1 em { color: var(--accent); font-style: normal; }
 .attention-action-focus > svg { margin-top: var(--size-3); color: var(--secondary); }
 .attention-action-focus > div { min-width: 0; }
 .attention-action-focus small { display: block; margin-bottom: var(--space-1); color: var(--secondary); font-size: var(--fs-caption); font-weight: var(--weight-medium); }
-.attention-action-focus h2 { margin: 0; font-size: var(--fs-subtitle); font-weight: var(--weight-semibold); line-height: var(--leading-body); overflow-wrap: anywhere; white-space: pre-wrap; }
+.attention-action-focus h2 { margin: 0; font-size: var(--fs-body-strong); font-weight: var(--weight-medium); line-height: var(--leading-body); text-wrap: pretty; overflow-wrap: anywhere; white-space: pre-wrap; }
 .attention-action-focus p { margin: var(--space-2) 0 0; color: var(--secondary); font-size: var(--fs-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
 .attention-action-focus.review { --status-color: var(--mint); }
 .attention-action-focus.waiting { --status-color: var(--warm); }

@@ -837,6 +837,27 @@ try {
   await page.getByRole("button", { name: "永久删除", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "detached" });
   assert.equal((await service.read()).goals.some(item => item.id === waiting.id), false);
+  // Completed goals support batch selection and deletion from the goals page.
+  const batchGoals = [];
+  for (const title of ["批量删除 A", "批量删除 B"]) {
+    const created = await service.execute({
+      type: "goal.create", input: { title, projectId: "personal", mode: "manual" },
+    });
+    await service.execute({ type: "goal.complete", goalId: created.id, note: "批量删除验证", actor: "你" });
+    batchGoals.push(created.id);
+  }
+  await page.getByRole("button", { name: "全部目标", exact: true }).click();
+  await page.getByRole("button", { name: "已完成", exact: true }).click();
+  await page.getByRole("button", { name: "批量选择", exact: true }).click();
+  await page.getByRole("button", { name: "全选", exact: true }).click();
+  page.once("dialog", dialog => void dialog.accept());
+  await page.getByRole("button", { name: /^删除所选（\d+）$/ }).click();
+  await expect.poll(async () =>
+    (await service.read()).goals.filter(item => batchGoals.includes(item.id)).length
+  ).toBe(0);
+  await expect(page.locator(".goal-row-batch")).toHaveCount(0);
+  await page.getByRole("button", { name: "全部", exact: true }).click();
+  assert.deepEqual(errors, []);
   const sceneGoal = await service.execute({
     type: "goal.create",
     input: { title: "现场入口验证", projectId: "personal", mode: "manual" },

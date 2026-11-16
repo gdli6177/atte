@@ -1,6 +1,6 @@
 id = "dev.atte"
 name = "Atte"
-version = "0.13.6"
+version = "0.13.7"
 min_herdr_version = "0.9.5"
 description = "Bring Atte attention, one-line goal intake, and concierge focus into Herdr."
 platforms = ["macos"]
