@@ -4,7 +4,8 @@ import { mkdtemp, mkdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  SessionControl, SessionError, type SessionAdapter, type SwitchHooks, type SwitchJournal, type SceneObservation,
+  SessionControl, SessionError, localProcesses,
+  type SessionAdapter, type SwitchHooks, type SwitchJournal, type SceneObservation,
 } from "../src/index.js";
 import { WorkspaceService, type Goal, type SceneReferenceV1 } from "../../core/src/index.js";
 
@@ -446,4 +447,54 @@ test("a failure after the first workspace commits cannot be resumed with a parti
   assert.equal(final.phase, "ready", final.detail);
   for (const service of f.services)
     assert.equal((await service.read()).backendEpoch, 1);
+});
+
+test("switching away from a closed backend succeeds when its managed process is gone", async t => {
+  const root = await mkdtemp(join(tmpdir(), "cv-switch-closed-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const control = new SessionControl(join(root, "control"), { quiescenceTimeoutMs: 0 });
+  const configuration = await control.initialize();
+  const workspace = join(root, "workspace");
+  await mkdir(workspace);
+  await control.registerWorkspace(workspace);
+  const service = new WorkspaceService(workspace);
+  const goal = await service.execute({ type: "goal.intake", text: "切换离开已关闭的后端" }) as Goal;
+  let orcaDown = false;
+  const adapter = (backend: "herdr" | "orca"): SessionAdapter => ({
+    id: backend,
+    detect: async () => ({ id: backend, status: "compatible",
+      capabilities: { create: true, inspect: true, send: true, focus: true, close: true, discover: true, nativeResume: false } }),
+    connect: async () => {
+      if (backend === "orca" && orcaDown)
+        throw new SessionError("backend_unreachable", "Orca 本机运行时尚未就绪。");
+      return { id: "runtime", generation: "generation", version: "fixture", backend };
+    },
+    create: async () => { throw new Error("Not used"); },
+    inspect: async (scene: SceneReferenceV1) => ({ bindingId: scene.bindingId, identity: "match",
+      reachable: true, state: "idle", observedAt: new Date().toISOString(), source: "backend" }),
+    inspectMany: async () => [],
+    send: async () => { throw new Error("Not used"); },
+    focus: async () => ({ status: "focused", navigated: true }),
+    close: async () => { throw new Error("A closed backend cannot close terminals"); },
+    discover: async () => [],
+    captureResume: async () => ({ status: "unsupported" }),
+  });
+  const hooks: SwitchHooks = {
+    adapter: async backend => adapter(backend),
+    resume: async () => {},
+  };
+  await control.switchTo("orca", hooks);
+  await service.execute({ type: "scene.bind", goalId: goal.id, scene: {
+    version: 1, backend: "orca", installationId: configuration.installationId,
+    backendEpoch: 1, runtimeId: "orca-runtime", runtimeGeneration: "generation",
+    bindingId: "orca-binding", attemptId: "orca-attempt",
+    process: { pid: 2147483646, bornAt: "dead" },
+    locator: { kind: "orca", repoId: "repo", worktreeId: "worktree", terminalHandle: "terminal",
+      executionHostId: "host", incarnationId: "incarnation" },
+  } });
+  orcaDown = true;
+  const switched = await control.switchTo("herdr", hooks);
+  assert.equal(switched?.phase, "ready");
+  assert.ok(switched?.closed.some(receipt => receipt.detail?.includes("旧后端未运行")));
+  assert.equal((await control.status()).selected, "herdr");
 });
