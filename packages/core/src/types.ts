@@ -189,7 +189,7 @@ export interface Project {
 }
 export interface WorkflowStep { id: string; name: string; prompt: string }
 export interface Workflow { id: string; name: string; steps: WorkflowStep[] }
-export interface AgentPreferences { concierge: string; owner?: string; worker?: string }
+export interface AgentPreferences { concierge: string; owner?: string }
 export type WorkspaceRecoveryReason =
   | "unsupported-version"
   | "invalid-state"
@@ -515,7 +515,26 @@ export interface Goal {
   skillResolutions?: GoalSkillResolution[];
   ownerLaunchRecovery?: OwnerLaunchRecovery;
   attachments?: GoalAttachment[];
+  readOnly?: true;
+  readOnlyReason?: "legacy-orca" | "legacy-epoch";
+  executionHold?: "migration-confirmation";
+  history?: GoalRetiredHistory;
+  acceptance?: AcceptanceRecord;
+  deliveryHistory?: Delivery[];
   activities: Activity[]; createdAt: string; updatedAt: string;
+}
+export interface GoalRetiredHistory {
+  readonly retiredAt: string;
+  readonly kind?: GoalKind;
+  readonly brief?: GoalBrief;
+  readonly briefHistory?: readonly GoalBrief[];
+  readonly autonomy?: GoalAutonomy;
+  readonly release?: ReleaseTarget;
+  readonly acceptance?: AcceptanceRecord;
+  readonly skills?: readonly GoalSkillBinding[];
+  readonly skillResolutions?: readonly GoalSkillResolution[];
+  readonly dispatch?: Goal["dispatch"];
+  readonly attention?: Attention | null;
 }
 export interface SceneReply {
   id: string;
@@ -536,10 +555,12 @@ export interface SceneVisit {
   detail?: string;
 }
 export interface WorkspaceState {
-  version: 4; name: string; projects: Project[]; workflows: Workflow[]; goals: Goal[];
+  version: 5; name: string; projects: Project[]; workflows: Workflow[]; goals: Goal[];
   backendEpoch: number;
   backendBinding?: BackendBinding;
-  autonomy: WorkspaceAutonomy;
+  autonomy?: WorkspaceAutonomy;
+  watchdog?: { noProgressMinutes: number };
+  history?: WorkspaceRetiredHistory;
   bots?: BotBinding[];
   botRequests?: BotRequestReceipt[];
   decisions: DecisionRecord[];
@@ -555,9 +576,25 @@ export interface WorkspaceState {
     live?: LivePresence;
   };
 }
+export interface WorkspaceRetiredHistory {
+  readonly retiredAt: string;
+  readonly sourceVersion: 2 | 3 | 4 | 5;
+  readonly autonomy?: WorkspaceAutonomy;
+  readonly bots?: readonly BotBinding[];
+  readonly botRequests?: readonly BotRequestReceipt[];
+  readonly worker?: string;
+  readonly projects?: ReadonlyArray<{
+    projectId: string;
+    autonomy?: ProjectAutonomy;
+    releaseOnMerge?: ReleaseOnMerge;
+  }>;
+  readonly backendBinding?: BackendBinding;
+  readonly concierge?: WorkspaceState["concierge"];
+}
 type WorkspaceCommand =
   | { type: "snapshot" }
   | { type: "backend.register"; binding: BackendBinding }
+  | { type: "backend.recover-stale"; binding: BackendBinding }
   | { type: "scene.bind"; goalId?: string; scene: SceneReferenceV1; role?: "owner" | "verifier" | "concierge" }
   | { type: "scene.prepare"; goalId?: string; intent: SceneLaunchIntent }
   | { type: "scene.launch.result"; goalId?: string; role?: "owner" | "concierge" | "verifier"; requestId: string; status: SceneLaunchIntent["status"]; detail?: string }
@@ -678,7 +715,7 @@ type WorkspaceCommand =
     }
   | { type: "goal.resume"; goalId: string; note: string; mode: "concierge" | "manual" }
   | { type: "goal.restart"; goalId: string; note: string }
-  | { type: "goal.takeover"; goalId: string }
+  | { type: "goal.takeover"; goalId: string; actor?: string }
   | { type: "goal.delegate"; goalId: string }
   | { type: "goal.restore"; goalId: string }
   | { type: "goal.followup"; goalId: string; note?: string }

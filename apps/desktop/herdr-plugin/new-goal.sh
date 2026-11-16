@@ -13,7 +13,7 @@ printf '\n\033[38;5;111m要处理什么？\033[0m\n'
 printf '%s' '> '
 IFS= read -r text || exit 130
 if [ -z "$text" ]; then
-  printf '%s\n' "没有输入，目标没有创建。"
+  printf '%s\n' "没有输入，事项没有创建。"
   exit 1
 fi
 

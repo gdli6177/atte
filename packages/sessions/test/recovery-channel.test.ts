@@ -7,11 +7,11 @@ import { SessionRecoveryChannel, requestSessionRecovery } from "../src/index.js"
 import type { RecoveryRequest } from "../src/recovery-channel.js";
 
 const request: RecoveryRequest = {
-  context: { installationId: "installation", backend: "orca", epoch: 1,
+  context: { installationId: "installation", backend: "herdr", epoch: 1,
     scopeGeneration: "scope", role: "concierge", goalId: "goal-one" },
   operation: "launch", input: { goalId: "goal-one", name: "owner-one" },
 };
-test("recovery channel keeps switch authority in the host and returns one private receipt", async t => {
+test("recovery channel keeps transport authority in the host and returns one private receipt", async t => {
   const root = await mkdtemp(join(tmpdir(), "cv-recovery-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   let calls = 0;
@@ -34,6 +34,10 @@ test("recovery channel keeps switch authority in the host and returns one privat
 });
 test("ordinary CLI cannot create recovery authority and missing host results never auto-replay", async t => {
   await assert.rejects(requestSessionRecovery({}, request), /普通调用不能/);
+  await assert.rejects(requestSessionRecovery({}, {
+    ...request,
+    context: { ...request.context, backend: "orca" as never },
+  }), /仅接受当前 Herdr 管家/);
   const root = await mkdtemp(join(tmpdir(), "cv-recovery-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const channel = new SessionRecoveryChannel(root, async () => { throw new Error("unreachable"); });

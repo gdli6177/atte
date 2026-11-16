@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import assert from "node:assert/strict";
-import { completeAutonomySetup } from "./lib/autonomy-setup.mjs";
+import { waitForWorkspace } from "./lib/autonomy-setup.mjs";
 
 const exec = promisify(execFile);
 // Narrow terminals can split a marker across accessibility rows with Herdr
@@ -72,20 +72,23 @@ try {
   for (const stream of [app.process().stdout, app.process().stderr])
     stream?.on("data", chunk => applicationLogs.push(...chunk.toString().split("\n")));
   await page.waitForFunction(() => !!window.atte);
-  await completeAutonomySetup(page);
+  await waitForWorkspace(page);
   await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
   herdrExecutable = (await page.evaluate(() => window.atte.herdrStatus())).executable;
   assert.ok(herdrExecutable);
-  const goal = await page.evaluate(() => window.atte.command({
-    type: "goal.create", input: { title: "隔离的真实终端测试", projectId: "personal", mode: "manual" },
-  }));
+  const goal = await page.evaluate(async () => {
+    const draft = await window.atte.command({
+      type: "goal.intake", text: "隔离的真实终端测试", handling: "later",
+    });
+    return window.atte.command({ type: "goal.takeover", goalId: draft.id });
+  });
   // This fixture is written directly through IPC before React has necessarily
   // finished its one-time subscription setup. Reload once to verify normal
   // startup recovery and wait until the renderer has loaded the goal.
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.atte);
   await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
-  await page.getByRole("button", { name: "全部目标", exact: true }).click();
+  await page.getByRole("button", { name: "全部事项", exact: true }).click();
   await page.locator(".goal-row").filter({ hasText: goal.title }).waitFor();
   // A manually recorded goal opens the workspace TUI without starting a model.
   await page.evaluate((id) => window.atte.openHerdr(id), goal.id);
@@ -259,7 +262,7 @@ try {
   await expect(page.getByRole("status")).toContainText("图片交给当前 Agent");
   await page.getByRole("button", { name: "隐藏终端", exact: true }).click();
   assert.equal(await page.locator(".terminal-panel").isVisible(), false);
-  await page.locator(".top-actions").getByRole("button", { name: "新目标", exact: true }).click();
+  await page.locator(".top-actions").getByRole("button", { name: "新事项", exact: true }).click();
   await page.getByLabel("要交给管家的事情").fill("不能被终端抢走的草稿");
   // An arriving connection/open event must not dismiss a form or steal its focus.
   await page.evaluate((id) => window.atte.openHerdr(id), goal.id);

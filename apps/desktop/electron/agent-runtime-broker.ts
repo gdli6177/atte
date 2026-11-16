@@ -8,7 +8,13 @@ import type {
   Goal,
   WorkspaceService,
 } from "../../../packages/core/src/index.js";
-import { agentReceiptMarker, agentRuntimeSocketPath, progressBasis, workspaceDataDirectory } from "../../../packages/core/src/index.js";
+import {
+  agentReceiptMarker,
+  agentRuntimeSocketPath,
+  isReadOnlyGoal,
+  progressBasis,
+  workspaceDataDirectory,
+} from "../../../packages/core/src/index.js";
 import type { AgentHookManager, ManagedAdapterId } from "./agent-hook-manager.js";
 
 const MAX_REQUEST_BYTES = 1_000_000;
@@ -165,6 +171,7 @@ export class AgentRuntimeBroker {
         goal = state.goals.find(item => item.id === event.goalId),
         runtime = goal?.agentRuntime;
       if (!goal || !runtime) return false;
+      if (isReadOnlyGoal(goal)) continue;
       if (runtime.attempt.attemptId !== event.attemptId) {
         await this.recordDiagnostic(event, "old_attempt");
         continue;
@@ -210,7 +217,7 @@ export class AgentRuntimeBroker {
   private schedule(goal: Goal) {
     const runtime = goal.agentRuntime, receipt = runtime?.receipt;
     this.clearGoalTimers(goal.id);
-    if (goal.mode !== "concierge" || goal.status !== "active" || !runtime || !receipt ||
+    if (isReadOnlyGoal(goal) || goal.mode !== "concierge" || goal.status !== "active" || !runtime || !receipt ||
       ["reminding", "written", "cancelled", "protocol_missing"].includes(receipt.status))
       return;
     const key = receiptKey(goal.id, receipt.turnId);
@@ -236,7 +243,7 @@ export class AgentRuntimeBroker {
     if (!service) return;
     const goal = (await service.read()).goals.find(item => item.id === goalId),
       runtime = goal?.agentRuntime;
-    if (!goal || !runtime || runtime.attempt.attemptId !== attemptId ||
+    if (!goal || isReadOnlyGoal(goal) || !runtime || runtime.attempt.attemptId !== attemptId ||
       !runtime.receipt ||
       (runtime.currentTurnId !== turnId &&
         runtime.currentTurnId !== runtime.receipt.reminderTurnId) ||
@@ -249,7 +256,7 @@ export class AgentRuntimeBroker {
 
   private async remind(goalId: string, turnId: string) {
     const initial = (await this.options.service()?.read())?.goals.find(goal => goal.id === goalId);
-    if (!initial?.agentRuntime?.attempt.attemptId) return;
+    if (!initial?.agentRuntime?.attempt.attemptId || isReadOnlyGoal(initial)) return;
     let current = await this.current(goalId, initial.agentRuntime.attempt.attemptId, turnId);
     if (!current || !["waiting", "reminding"].includes(current.runtime.receipt?.status ?? "") ||
       current.runtime.lastSemanticWriteTurnId === turnId ||
@@ -301,7 +308,7 @@ export class AgentRuntimeBroker {
 
   private async markProtocolMissing(goalId: string, turnId: string) {
     const initial = (await this.options.service()?.read())?.goals.find(goal => goal.id === goalId);
-    if (!initial?.agentRuntime?.attempt.attemptId) return;
+    if (!initial?.agentRuntime?.attempt.attemptId || isReadOnlyGoal(initial)) return;
     const current = await this.current(goalId, initial.agentRuntime.attempt.attemptId, turnId);
     if (!current || current.runtime.receipt?.status !== "reminded" ||
       current.runtime.lastSemanticWriteTurnId === turnId ||
@@ -322,13 +329,6 @@ export class AgentRuntimeBroker {
         result.goal,
         "负责人回合结束并收到一次回执提醒后，仍未提交 Atte 结构化结果。请先联系原负责人核对实际结果、真实等待或交付；不要根据终端文本或空闲状态猜测完成。",
       );
-      await current.service.execute({
-        type: "watchdog.report",
-        goalId,
-        at: new Date().toISOString(),
-        basis,
-        outcome: "contacted",
-      }).catch(() => {});
     } catch (error) {
       await current.service.execute({
         type: "watchdog.report",
@@ -402,6 +402,10 @@ export class AgentRuntimeBroker {
     await this.refresh();
     const state = await service.read();
     for (const goal of state.goals) {
+      if (isReadOnlyGoal(goal)) {
+        this.clearGoalTimers(goal.id);
+        continue;
+      }
       const receipt = goal.agentRuntime?.receipt;
       if (receipt?.status === "reminding") {
         // A crash may happen after delivery but before acknowledgement. Reserve
@@ -428,6 +432,10 @@ export class AgentRuntimeBroker {
     const state = await service.read();
     for (const goal of state.goals) {
       if (goalId && goal.id !== goalId) continue;
+      if (isReadOnlyGoal(goal)) {
+        this.clearGoalTimers(goal.id);
+        continue;
+      }
       const runtime = goal.agentRuntime;
       if (runtime && this.options.hooks &&
         !await this.options.hooks.isEnabled(runtime.attempt.adapter as ManagedAdapterId)) {

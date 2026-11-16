@@ -1,4 +1,4 @@
-import type { Goal, WorkspaceState } from "../../../packages/core/src/index.js";
+import { isReadOnlyGoal, type Goal, type WorkspaceState } from "../../../packages/core/src/index.js";
 
 /** Activity kinds an owner can only produce through an explicit status command. */
 const semanticKinds = new Set<Goal["activities"][number]["kind"]>([
@@ -36,7 +36,7 @@ export class OwnerWriteObserver {
 
   observe(state: WorkspaceState) {
     for (const goal of state.goals) {
-      if (goal.mode !== "concierge" ||
+      if (isReadOnlyGoal(goal) || goal.mode !== "concierge" ||
         ["completed", "dropped", "backlog"].includes(goal.status)) continue;
       if (goal.dispatch?.status === "pending") continue;
       const fresh = goal.activities.filter(activity =>

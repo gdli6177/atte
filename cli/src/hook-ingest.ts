@@ -11,17 +11,57 @@ import {
   environmentValue,
   workspaceDataDirectory,
 } from "../../packages/core/src/index.js";
+import {
+  HOOK_INPUT_MAX_BYTES,
+  HOOK_INPUT_TIMEOUT_MS,
+  readHookInput,
+  type HookInputResult,
+} from "./hook-input.js";
+import { recordHookDiagnostic, type HookDiagnosticReason } from "./hook-diagnostics.js";
 
-const MAX_PAYLOAD_BYTES = 512_000;
 const MAX_SPOOL_BYTES = 1_000_000;
 
 export interface HookIngestInput {
   adapter: string;
-  stdin: () => Promise<string>;
+  stdin?: () => Promise<string | HookInputResult>;
   environment?: NodeJS.ProcessEnv;
   send?: (events: AgentRuntimeEventV1[], token: string) => Promise<boolean>;
   spool?: (events: AgentRuntimeEventV1[], token: string) => Promise<unknown>;
   now?: () => Date;
+}
+
+export type HookIngestResult =
+  | { accepted: true; reason?: "spooled" }
+  | { accepted: false; reason?: HookDiagnosticReason | "not_managed" };
+
+async function consumeInput(input: HookIngestInput): Promise<HookInputResult> {
+  if (!input.stdin) return readHookInput();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      input.stdin(),
+      new Promise<HookInputResult>(resolve => {
+        timer = setTimeout(() => resolve({ ok: false, reason: "timeout", bytes: 0 }),
+          HOOK_INPUT_TIMEOUT_MS);
+      }),
+    ]);
+    if (typeof result !== "string") return result;
+    const bytes = Buffer.byteLength(result);
+    return bytes > HOOK_INPUT_MAX_BYTES
+      ? { ok: false, reason: "overflow", bytes }
+      : { ok: true, text: result, bytes };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    return {
+      ok: false,
+      reason: message === "timeout" || message === "overflow" || message === "read_error"
+        ? message
+        : "read_error",
+      bytes: 0,
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function sendOverSocket(
@@ -64,29 +104,41 @@ function sendOverSocket(
   });
 }
 
-export async function ingestAgentHook(input: HookIngestInput): Promise<{
-  accepted: boolean;
-  reason?: string;
-}> {
+export async function ingestAgentHook(input: HookIngestInput): Promise<HookIngestResult> {
   const environment = input.environment ?? process.env;
+  const finish = async (result: HookIngestResult) => {
+    if (!result.accepted && result.reason && result.reason !== "not_managed")
+      await recordHookDiagnostic({ reason: result.reason, environment, now: input.now });
+    return result;
+  };
+  try {
+    const consumed = await consumeInput(input);
+    const managed = ["GOAL_ID", "ATTEMPT_ID", "HOOK_TOKEN", "AGENT_NAME", "WORKSPACE"]
+      .every(name => environmentValue(environment, name)?.trim());
+    if (!managed) return { accepted: false, reason: "not_managed" };
+    if (!isAgentRuntimeAdapter(input.adapter))
+      return await finish({ accepted: false, reason: "unsupported_adapter" });
+    if (!consumed.ok) return await finish({ accepted: false, reason: consumed.reason });
+    return finish(await ingestManagedHook(input, environment, consumed.text));
+  } catch {
+    return await finish({ accepted: false, reason: "ingest_error" });
+  }
+}
+
+async function ingestManagedHook(
+  input: HookIngestInput,
+  environment: NodeJS.ProcessEnv,
+  rawText: string,
+): Promise<HookIngestResult> {
   const goalId = environmentValue(environment, "GOAL_ID")?.trim(),
     attemptId = environmentValue(environment, "ATTEMPT_ID")?.trim(),
     token = environmentValue(environment, "HOOK_TOKEN")?.trim(),
     agent = environmentValue(environment, "AGENT_NAME")?.trim(),
     workspace = environmentValue(environment, "WORKSPACE")?.trim();
-  // Installed Hooks are global. An Agent outside a Atte target is a no-op.
-  if (!goalId || !attemptId || !token || !agent || !workspace)
-    return { accepted: false, reason: "not_managed" };
-  if (!isAgentRuntimeAdapter(input.adapter))
+  if (!goalId || !attemptId || !token || !agent || !workspace ||
+    !isAgentRuntimeAdapter(input.adapter))
     return { accepted: false, reason: "unsupported_adapter" };
-
-  let rawText: string;
-  try {
-    rawText = await input.stdin();
-  } catch {
-    return { accepted: false, reason: "stdin_unavailable" };
-  }
-  if (!rawText.trim() || Buffer.byteLength(rawText) > MAX_PAYLOAD_BYTES)
+  if (!rawText.trim())
     return { accepted: false, reason: "invalid_payload" };
   let raw: unknown;
   try {

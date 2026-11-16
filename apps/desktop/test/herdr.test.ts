@@ -1,13 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HerdrClient, terminalPrompt, type HerdrRunner } from "../electron/herdr.ts";
-import {
-  agentReceiptMarker,
-  SkillRegistry,
-} from "../../../packages/core/src/index.ts";
+import { agentReceiptMarker } from "../../../packages/core/src/index.ts";
 
 function fake(responses: Record<string, string>) {
   const calls: string[][] = [];
@@ -321,12 +318,13 @@ test("new goals notify the same concierge without creating an owner or another s
     assert.match(args[3]!, /整理后交给本目标独立负责人/);
     assert.match(args[3]!, /退回修改转交原负责人/);
     assert.match(args[3]!, /向人交接/);
-    assert.match(args[3]!, /agent prompt <名称> "<完整任务>" --wait --until working/);
+    assert.match(args[3]!, /atte owner send <目标ID> --text/);
     assert.match(args[3]!, /agent_prompt_stalled/);
     assert.match(args[3]!, /禁止未经核对就重复发送/);
     assert.match(args[3]!, /atte owner launch <目标ID> --name <负责人名称> --json/);
     assert.match(args[3]!, /命令行单次输入通常只有约 1 KB/);
-    assert.match(args[3]!, /禁止手工串联 Herdr 命令/);
+    assert.match(args[3]!, /不要手工串联 Herdr/);
+    assert.doesNotMatch(args[3]!, /worker|verifier|autonomy|boundary|续跑|自动验收/);
     assert.equal((args[3]!.match(/\[ATTE_CASE_BEGIN\]/g) ?? []).length, 1);
     assert.equal((args[3]!.match(/\[ATTE_CASE_END\]/g) ?? []).length, 1);
   }
@@ -335,57 +333,6 @@ test("new goals notify the same concierge without creating an owner or another s
   assert.match(prompts[2]![3]!, /\/workspace\/\.atte\/attachments\/att_0123456789abcdef\.png/);
   assert.match(prompts[2]![3]!, /实际查看图片/);
   assert.ok(prompts.every(args => args.includes("--wait") && !args.includes("--timeout")));
-});
-
-test("concierge notifications carry method constraints and a local method catalog", async () => {
-  const root = await mkdtemp(join(tmpdir(), "atte-concierge-methods-")),
-    source = join(root, "method-source");
-  try {
-    await mkdir(source, { recursive: true });
-    await writeFile(join(source, "SKILL.md"), "# 方法正文\n\n只在匹配目标时使用。\n");
-    await writeFile(join(source, "manifest.json"), JSON.stringify({
-      schemaVersion: 1,
-      id: "acme.release-review",
-      name: "发布复核",
-      description: "发布前核对真实下载物。",
-      version: "1.0.0",
-      minimumAtte: "0.10.0",
-      kind: "process",
-      roles: ["owner", "verifier"],
-      entry: "SKILL.md",
-    }));
-    await new SkillRegistry(root, "0.10.0").install(source);
-    const mock = fake({ "agent prompt": "{}" });
-    await new HerdrClient(mock.runner, "atte-test", root).notifyGoal(
-      { session: "atte-test", agent: "concierge" },
-      "goal_methods",
-      "方法目录",
-      {
-        id: "goal_methods",
-        title: "方法目录",
-        description: "确认本地方法可被发现。",
-        projectId: "personal",
-        kind: "delivery",
-        mode: "concierge",
-        status: "active",
-        next: "分配合适负责人",
-        attention: null,
-        attachments: [],
-        activities: [],
-      } as any,
-      root,
-    );
-    const prompt = mock.calls.find(args =>
-      args[0] === "agent" && args[1] === "prompt")![3]!;
-    assert.match(prompt, /\[ATTE_METHOD_CONTEXT\]/);
-    assert.match(prompt, /Agent 接入流程/);
-    assert.match(prompt, /工作现场恢复/);
-    assert.match(prompt, /发布复核 \(acme\.release-review@1\.0\.0\)：可用/);
-    assert.match(prompt, /发布前核对真实下载物/);
-    assert.doesNotMatch(prompt, /方法正文/);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
 });
 
 test("watchdog keeps recovery with owners instead of asking the concierge to execute", async () => {
@@ -425,9 +372,9 @@ test("resumed concierge receives current role instructions without starting anot
   );
   assert.equal(mock.calls.length,1);
   assert.deepEqual(mock.calls[0]!.slice(0,3),["agent","prompt","concierge"]);
-  assert.match(mock.calls[0]![3]!,/不亲自执行目标/);
-  assert.match(mock.calls[0]![3]!,/custom-cli/);
-  assert.doesNotMatch(mock.calls[0]![3]!,/Codex 负责人使用 workspace-write/);
+  assert.match(mock.calls[0]![3]!,/唯一的控制面管家/);
+  assert.match(mock.calls[0]![3]!,/ATTE_CONCIERGE_READY/);
+  assert.doesNotMatch(mock.calls[0]![3]!,/worker|verifier|发布目标/);
   assert.ok(mock.calls[0]!.includes("--wait") && !mock.calls[0]!.includes("--timeout"));
 });
 test("a running terminal-title spinner wins over a stale idle agent status", async () => {
@@ -575,16 +522,10 @@ test("starts one replacement only after a stale pane is rejected", async () => {
   assert.ok(!start?.includes("sandbox_workspace_write.network_access=true"));
   assert.ok(!start?.includes("danger-full-access"));
   const instructions = mock.calls.find(args => args[0] === "agent" && args[1] === "prompt")?.[3];
-  assert.match(instructions!, /不亲自执行目标/);
-  assert.match(instructions!, /不能因为任务简单而自己执行/);
-  assert.match(instructions!, /由负责人产出真实成果、实际运行检查/);
-  assert.match(instructions!, /atte direct --new/);
-  assert.match(instructions!, /不能在终端里处理完却不写回 App/);
-  assert.match(instructions!, /atte owner launch/);
-  assert.match(instructions!, /清除管家继承的案卷限制/);
-  assert.match(instructions!, /不要手工串联/);
-    assert.match(instructions!, /不得只写「已回答」/);
-  assert.doesNotMatch(instructions!, /workflow list|--stage|工序快照/);
+  assert.match(instructions!, /唯一的控制面管家/);
+  assert.match(instructions!, /不亲自执行业务目标/);
+  assert.match(instructions!, /ATTE_CONCIERGE_READY/);
+  assert.doesNotMatch(instructions!, /worker|verifier|发布目标|自治目标/);
   assert.doesNotMatch(instructions!, /简单事项你可以自己完成/);
 });
 
@@ -640,7 +581,7 @@ test("custom commands start in the real pane, preserve argv and reuse the record
   await client.notifyGoal(reference, "g1", "目标");
   assert.equal(mock.calls.filter(args => args[0] === "workspace" && args[1] === "create").length, 1);
   assert.ok(mock.calls.some(args => args[0] === "pane" && args[1] === "run" && args[3]?.includes("g1")));
-  const messages = mock.calls.filter(args => args[0] === "pane" && args[1] === "run" && args[3]?.includes("不亲自执行目标"));
+  const messages = mock.calls.filter(args => args[0] === "pane" && args[1] === "run" && args[3]?.includes("控制面管家"));
   assert.equal(messages.length, 2, "both initial instructions and a reused custom CLI receive the role boundary");
 });
 

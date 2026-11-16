@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { WorkspaceService, type Goal } from "../../../packages/core/src/index.ts";
+import { WorkspaceService, type Goal, type WorkspaceState } from "../../../packages/core/src/index.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,4 +49,23 @@ test("review offers one message entry and independent acceptance in both detail 
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("legacy Orca goals expose history only, never acceptance or dispatch controls", () => {
+  const goal = {
+    id: "legacy", projectId: "personal", title: "旧 Orca 事项", description: "",
+    mode: "concierge", status: "review", steps: [], next: "历史下一步", owner: "负责人",
+    attention: { kind: "review", summary: "旧验收", since: new Date().toISOString() },
+    delivery: { summary: "历史成果", checks: [], submittedAt: new Date().toISOString(), submittedBy: "负责人" },
+    activities: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    readOnly: true, readOnlyReason: "legacy-orca",
+  } as unknown as Goal;
+  const state = { projects: [] } as unknown as WorkspaceState;
+  const view = presentGoal(goal, state);
+  const markup = renderToStaticMarkup(createElement(GoalActionDock, {
+    goal, view, service: {} as GoalDetailService, busy: false, error: "",
+    replyMode: null, setReplyMode: () => {}, notify: () => {},
+  }));
+  assert.match(markup, /只读历史/);
+  assert.doesNotMatch(markup, /验收通过|给管家发消息|重试联系管家|打开工作现场/);
 });

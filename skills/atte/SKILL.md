@@ -27,7 +27,6 @@ atte goal list --root "$WORKSPACE" --json
 atte goal show "$GOAL_ID" --root "$WORKSPACE" --json
 atte ask "$VERBATIM_REQUEST" --project "$PROJECT_ID" --root "$WORKSPACE"
 atte capture "$VERBATIM_FUTURE_IDEA" --root "$WORKSPACE"
-atte capture "$VERBATIM_PERSONAL_TASK" --self --root "$WORKSPACE"
 atte goal message "$GOAL_ID" --text "$VERBATIM_MESSAGE" --root "$WORKSPACE"
 ```
 
@@ -35,34 +34,16 @@ Use repeatable `--attachment <absolute-path>` for PNG, JPEG, WebP, or GIF contex
 
 If the user asks to create work, prefer one `ask` call with the complete natural-language request. Do not split it into a progress form. Report the returned goal ID and the saved next step, then stop unless the user asked for further execution.
 
-When the user explicitly says to save for later or not to start, use `capture` instead of `ask`. Use `capture --self` for work the human will do. Neither starts an agent; add `--remind-at <ISO>` only for an explicit, unambiguous time. Do not change a deferred item to active just because notes were added. Starting it later requires explicit user intent and `goal start ID --by self|concierge`; delegation keeps the same record and attachments. The managed concierge cannot use these human intake commands to escape its current-case scope.
+When the user explicitly says to save for later or not to start, use `capture` instead of `ask`. It never starts an agent; add `--remind-at <ISO>` only for an explicit, unambiguous time. Do not change a deferred item to active just because notes were added. Starting it later requires explicit user intent and `goal start ID --by self|concierge`; delegation keeps the same record and attachments. The managed concierge cannot use these human intake commands to escape its current-case scope.
 
-The managed concierge can persist a new request it has already received in its terminal using `direct --new --handling later|self "$VERBATIM_REQUEST"`. This creates no dispatch. Existing-case `direct` records notes and returns external waits to active coordination; `--handling` must not be used to change an existing goal's execution assignment.
+The managed concierge can persist a new request it has already received in its terminal using `direct --new --handling later "$VERBATIM_REQUEST"`. This creates no dispatch. Existing-case `direct` records notes and returns external waits to active coordination; `--handling` must not be used to change an existing goal's execution assignment.
 
-## Work methods and local packs
+## Work methods
 
-Use `atte skill list --json` to inspect built-in and installed local methods. Built-in
-role and process methods are resolved automatically and cannot be attached or replaced.
-The current-case concierge may inspect a method catalog and explicitly attach a matching
-local method to its current goal with `atte skill attach`. Owners and verifiers cannot
-change bindings.
-
-Local methods are bounded instructions, not executable tasks. Never infer goal completion
-from a method, script, Agent Stop, or terminal state. If the user asks to create or update
-a reusable method, load the separate `atte-local-pack-author` Skill when available;
-otherwise use:
-
-```sh
-atte skill draft "$DRAFT" --id "$PACK_ID" --name "$NAME" \
-  --description "$WHEN_TO_USE" --role owner
-atte skill validate "$DRAFT" --json
-atte skill install "$DRAFT" --json
-```
-
-Show the preview and get an explicit install decision before installing. Never approve a
-script on the user's behalf. `atte skill run PACK_ID SCRIPT_ID --goal GOAL_ID`
-requires an existing goal binding, matching package digest and a user-approved script
-SHA-256. Script output is audit evidence only.
+Atte 0.14 ships the concierge and owner instructions with the app. Local method packs,
+script approval and method execution were retired. Do not issue `atte skill` commands or
+suggest installing a capability pack. Follow the current goal and project instructions
+directly, and use only the retained status protocol below.
 
 ## Agent execution protocol
 

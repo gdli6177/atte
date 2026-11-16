@@ -86,3 +86,29 @@ test("finished and manual goals never start coordinator work", () => {
   ]));
   assert.deepEqual(calls, []);
 });
+
+test("legacy read-only scenes never trigger an owner-write notification", () => {
+  const calls: string[] = [];
+  const observer = new OwnerWriteObserver({ onWrite: goal => calls.push(goal.id) });
+  observer.seed(state([]));
+  observer.observe(state([
+    goal({
+      readOnly: true,
+      readOnlyReason: "legacy-orca",
+      activities: [activity("act_legacy", "delivery")],
+    }),
+    goal({
+      id: "legacy-scene",
+      activities: [activity("act_scene", "progress")],
+      scene: {
+        version: 1, backend: "orca", installationId: "installation", backendEpoch: 1,
+        runtimeId: "runtime", runtimeGeneration: "generation", bindingId: "binding", attemptId: "attempt",
+        locator: {
+          kind: "orca", repoId: "repo", worktreeId: "repo::/tmp", terminalHandle: "terminal",
+          executionHostId: "local", incarnationId: "incarnation",
+        },
+      },
+    }),
+  ]));
+  assert.deepEqual(calls, []);
+});

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Sparkles, Trash2 } from "lucide-react";
-import type { IntakeHandling } from "../../../../../packages/core/src/types.js";
+export type CaptureHandling = "concierge" | "later";
 import { Button, ChoiceGroup, Field, LoadingState, Modal, TextArea } from "../../ui/index.js";
 
 type IntakeImage = { key: string; file: File; preview: string };
@@ -22,11 +22,11 @@ export function GoalIntakeForm({
 }: {
   busy: boolean;
   error: string;
-  initialHandling?: IntakeHandling;
+  initialHandling?: CaptureHandling;
   onClose: () => void;
-  onSubmit: (text: string, files: File[], handling: IntakeHandling) => Promise<void>;
+  onSubmit: (text: string, files: File[], handling: CaptureHandling) => Promise<void>;
 }) {
-  const [handling, setHandling] = useState<IntakeHandling>(initialHandling);
+  const [handling, setHandling] = useState<CaptureHandling>(initialHandling);
   const [images, setImages] = useState<IntakeImage[]>([]),
     [validation, setValidation] = useState(""),
     [dragging, setDragging] = useState(false),
@@ -96,8 +96,8 @@ export function GoalIntakeForm({
         }}
       >
         <ChoiceGroup label="这件事怎么安排" value={handling} onChange={setHandling} disabled={busy}
-          options={[{ value: "later", label: "先记下" }, { value: "self", label: "我来做" }, { value: "concierge", label: "交给管家" }]} />
-        <p className="ui-form__note" aria-live="polite">{handling === "later" ? "只记录，不启动 Agent。准备好再开始。" : handling === "self" ? "由你执行，做完直接标记完成。" : "现在交给管家协调，由独立负责人执行。"}</p>
+          options={[{ value: "later", label: "先记下" }, { value: "concierge", label: "交给管家" }]} />
+        <p className="ui-form__note" aria-live="polite">{handling === "later" ? "只记录，不启动 Agent。准备好再开始。" : "现在交给管家协调，由独立负责人执行。"}</p>
         <Field
           label={handling === "concierge" ? "要交给管家的事情" : "记下这件事"}
           htmlFor="goal-intake-input"
@@ -193,8 +193,8 @@ export function GoalIntakeForm({
           <Button variant="secondary" disabled={busy} onClick={onClose}>
             取消
           </Button>
-          <Button type="submit" aria-label={handling === "concierge" ? "确认交给管家" : handling === "later" ? "确认先记下" : "确认我来做"} variant="primary" disabled={busy} icon={<Sparkles size={15} />}>
-            {busy ? "正在保存…" : handling === "later" ? "先记下" : handling === "self" ? "记到我来做" : "确认交给管家"}
+          <Button type="submit" aria-label={handling === "concierge" ? "确认交给管家" : "确认先记下"} variant="primary" disabled={busy} icon={<Sparkles size={15} />}>
+            {busy ? "正在保存…" : handling === "later" ? "先记下" : "确认交给管家"}
           </Button>
         </div>
       </form>

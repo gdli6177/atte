@@ -13,9 +13,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "atte-handoff-"));
   roots.push(root);
   const service = new WorkspaceService(root);
-  const item = await service.execute({ type: "goal.create", input: {
-    title: "审批", projectId: "personal", mode: "manual",
-  } }) as Goal;
+  const item = await service.execute({ type: "goal.intake", text: "审批" }) as Goal;
   await service.execute({ type: "goal.wait", goalId: item.id, reason: "等 YR", owner: "YR" });
   return { service, id: item.id };
 }

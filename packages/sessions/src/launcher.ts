@@ -14,7 +14,6 @@ export interface LaunchReceipt {
   backendEpoch: number;
   pid: number;
   bornAt: string;
-  terminalHandle?: string;
   herdr?: { session: string; workspaceId: string; tabId: string; paneId: string };
 }
 export interface LaunchFiles {
@@ -28,7 +27,7 @@ export function quoteShell(value: string) {
 }
 export async function createLaunchFiles(
   directory: string,
-  input: Omit<LaunchReceipt, "pid" | "bornAt" | "terminalHandle" | "version"> & {
+  input: Omit<LaunchReceipt, "pid" | "bornAt" | "version"> & {
     executable: string;
     args: string[];
     cwd: string;
@@ -53,18 +52,12 @@ export async function createLaunchFiles(
       if (!/^[A-Z][A-Z0-9_]*$/.test(key)) throw new Error("无效的启动环境字段。");
       return `export ${key}=${quoteShell(value)}${key === "PATH" ? ":$PATH" : ""}`;
     }),
-    ...(input.environment.ATTE_BACKEND === "herdr" ? [
-      'export HERDR_ENV=1 HERDR_SESSION="$atte_herdr_session" HERDR_WORKSPACE_ID="$atte_herdr_workspace" HERDR_TAB_ID="$atte_herdr_tab" HERDR_PANE_ID="$atte_herdr_pane"',
-    ] : []),
+    'export HERDR_ENV=1 HERDR_SESSION="$atte_herdr_session" HERDR_WORKSPACE_ID="$atte_herdr_workspace" HERDR_TAB_ID="$atte_herdr_tab" HERDR_PANE_ID="$atte_herdr_pane"',
     `cd ${quoteShell(input.cwd)} || exit 1`,
     "atte_process_birth=$(LC_ALL=C /bin/ps -p $$ -o lstart= | /usr/bin/sed 's/^ *//;s/ *$//')",
-    "atte_terminal_handle=${ORCA_TERMINAL_HANDLE:-}",
-    // Handle and birth-time are OS-owned inputs, but still validate before
-    // putting them into the tiny JSON receipt. No prompt or token is included.
-    '[[ "$atte_terminal_handle" =~ \'^[A-Za-z0-9_-]+$\' ]] || atte_terminal_handle=""',
     ...["session", "workspace", "tab", "pane"].map(key =>
       `[[ "$atte_herdr_${key}" =~ '^[A-Za-z0-9_:-]+$' ]] || atte_herdr_${key}=""`),
-    `printf ${quoteShell(JSON.stringify(fixed).slice(0, -1) + ',"pid":%s,"bornAt":"%s","terminalHandle":"%s","herdr":{"session":"%s","workspaceId":"%s","tabId":"%s","paneId":"%s"}}\\n')} "$$" "$atte_process_birth" "$atte_terminal_handle" "$atte_herdr_session" "$atte_herdr_workspace" "$atte_herdr_tab" "$atte_herdr_pane" > ${quoteShell(receiptPath + ".tmp")}`,
+    `printf ${quoteShell(JSON.stringify(fixed).slice(0, -1) + ',"pid":%s,"bornAt":"%s","herdr":{"session":"%s","workspaceId":"%s","tabId":"%s","paneId":"%s"}}\\n')} "$$" "$atte_process_birth" "$atte_herdr_session" "$atte_herdr_workspace" "$atte_herdr_tab" "$atte_herdr_pane" > ${quoteShell(receiptPath + ".tmp")}`,
     `/bin/mv ${quoteShell(receiptPath + ".tmp")} ${quoteShell(receiptPath)}`,
     command,
     "atte_exit_status=$?",
@@ -105,8 +98,6 @@ export async function readLaunchReceipt(path: string): Promise<LaunchReceipt | u
     backendEpoch: data.backendEpoch as number,
     pid: data.pid as number,
     bornAt: string(data.bornAt, "process birth", 100).trim(),
-    ...(typeof data.terminalHandle === "string" && data.terminalHandle
-      ? { terminalHandle: string(data.terminalHandle, "terminalHandle", 240) } : {}),
     ...(record(data.herdr) && typeof data.herdr.paneId === "string" && data.herdr.paneId ? {
       herdr: {
         session: string(data.herdr.session, "Herdr session"),

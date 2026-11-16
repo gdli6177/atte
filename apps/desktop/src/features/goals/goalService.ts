@@ -1,7 +1,6 @@
 import type {
   AtteCommand,
   GoalAttachment,
-  SkillPackView,
 } from "../../../../../packages/core/src/types.js";
 
 export interface GoalDetailService {
@@ -15,5 +14,4 @@ export interface GoalDetailService {
   openUrl(url: string): Promise<void>;
   retryDispatch(goalId: string): Promise<void>;
   restartGoal(goalId: string, note: string): Promise<unknown>;
-  methodPacks?(): Promise<SkillPackView[]>;
 }

@@ -58,13 +58,12 @@ export function renderBoard(state: WorkspaceState, selectedId?: string, message?
   const goals = openGoals(state), attention = attentionGoals(state.goals);
   const waiting = goals.filter(goal => goal.status === "waiting" && !goal.attention).length;
   const deferred = goals.filter(goal => goal.status === "backlog").length;
-  const personal = goals.filter(goal => goal.mode === "manual" && goal.status !== "backlog").length;
   const active = goals.filter(goal => goal.mode === "concierge" && goal.status === "active" && !attention.includes(goal)).length;
   const lines = [
     `${ESC}38;5;111m╭────────────────────────────────────────────────────────────╮${ESC}0m`,
-    `${ESC}38;5;111m│${ESC}0m  ${ESC}1mAtte${ESC}0m  ${ESC}38;5;79m注意力控制台${ESC}0m  ${ESC}2m${state.backendBinding?.backend === "orca" ? "Orca" : "Herdr"}${ESC}0m                     ${ESC}38;5;111m│${ESC}0m`,
+    `${ESC}38;5;111m│${ESC}0m  ${ESC}1mAtte${ESC}0m  ${ESC}38;5;79m注意力控制台${ESC}0m  ${ESC}2mHerdr${ESC}0m                         ${ESC}38;5;111m│${ESC}0m`,
     `${ESC}38;5;111m╰────────────────────────────────────────────────────────────╯${ESC}0m`,
-    `  ${ESC}38;5;214m${attention.length} 件需要你${ESC}0m   ${ESC}38;5;110m${waiting} 件在等${ESC}0m   ${ESC}2m${active} 件推进中 · ${deferred} 件暂存 · ${personal} 件我来做${ESC}0m`,
+    `  ${ESC}38;5;214m${attention.length} 件需要你${ESC}0m   ${ESC}38;5;110m${waiting} 件在等${ESC}0m   ${ESC}2m${active} 件推进中 · ${deferred} 件暂存${ESC}0m`,
     "",
   ];
   if (!goals.length) {
@@ -108,8 +107,8 @@ export function renderBoard(state: WorkspaceState, selectedId?: string, message?
     ...(selected?.mode === "manual" && selected.status !== "backlog" && selected.status !== "review" ? ["a 标记完成"] : []),
   ];
   lines.push("", ...(message ? [`  ${ESC}38;5;79m${message}${ESC}0m`, ""] : []),
-    `${ESC}2m↑↓ 选择  enter 详情  n 新目标  c 补充/决定  f 跟进  o 打开现场  g 回到管家${ESC}0m`,
-    `${ESC}2mt 先记下  p 我来做${ESC}0m`,
+    `${ESC}2m↑↓ 选择  enter 详情  n 新事项  c 补充/决定  f 跟进  o 打开现场  g 回到管家${ESC}0m`,
+    `${ESC}2mt 先记下${ESC}0m`,
     `${ESC}2m${contextual.length ? `${contextual.join("  ")}  ` : ""}q 关闭${ESC}0m`);
   return lines.join("\n");
 }
@@ -212,7 +211,7 @@ export async function runBoard(
       const goal = await service.execute({ type: "goal.intake", text, handling }) as Goal;
       selectedId = goal.id;
       return handling === "concierge" ? "已交给管家。Atte 打开时会自动派发，桌面未运行时请求会保留。"
-        : handling === "later" ? "已暂存，不会启动 Agent。" : "已记录，由你安排，做完即可标记完成。";
+        : "已暂存，不会启动 Agent。";
     });
   };
   const comment = async () => {
@@ -257,7 +256,7 @@ export async function runBoard(
       paused = false;
       await act(async () => {
         await service.execute({ type: mode === "concierge" ? "goal.delegate" : "goal.takeover", goalId: goal.id });
-        return mode === "concierge" ? "已交给管家。" : "已记到我来做。";
+        return mode === "concierge" ? "已交给管家。" : "已先记下。";
       });
       return;
     }
@@ -324,7 +323,6 @@ export async function runBoard(
     }
     if (key.name === "n") { paused = true; void createGoal(); return; }
     if (key.name === "t") { paused = true; void createGoal("later"); return; }
-    if (key.name === "p") { paused = true; void createGoal("self"); return; }
     if (key.name === "c") { paused = true; void comment(); return; }
     if (key.name === "f") { paused = true; void followUp(); return; }
     if (key.name === "u") { paused = true; void resume("concierge"); return; }

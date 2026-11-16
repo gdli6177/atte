@@ -1,16 +1,14 @@
-import { appendFile, mkdir, open, readFile, realpath, rename, lstat, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readFile, realpath, rename, link, lstat, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { nextSequence, withLock } from "./storage.js";
 import type { WorkspaceRecoveryReason, WorkspaceState } from "./types.js";
 import {
-  defaultProjectAutonomy,
   defaultProjectPolicy,
-  defaultWorkspaceAutonomy,
   initialState,
   newId,
 } from "./model.js";
-import { reconcileAutonomyDefaults } from "./autonomy.js";
+import { retireWorkspaceFeatures } from "./retired-history.js";
 import { decisionMarkdown } from "./governance.js";
 import { normalizeExternalWaits } from "./waiting.js";
 import { isSceneReference, type LegacySceneV0 } from "./session-types.js";
@@ -102,7 +100,7 @@ export async function compactEventLogIfNeeded(
   await rename(temporary, path);
   return { compacted: true, before, after: Buffer.byteLength(body) };
 }
-function validateShape(value: unknown, version: 2 | 3 | 4): WorkspaceState {
+function validateShape(value: unknown, version: 2 | 3 | 4 | 5): WorkspaceState {
   if (!record(value))
     throw new IncompatibleWorkspaceStateError(
       "invalid-state",
@@ -120,10 +118,10 @@ function validateShape(value: unknown, version: 2 | 3 | 4): WorkspaceState {
   if (!record(value.concierge) || !nonEmptyString(value.concierge.session) ||
     !["not_ready", "ready", "error"].includes(String(value.concierge.status)))
     invalidState("工作区快照中的管家状态无效。");
-  if (version === 4 && (!Number.isSafeInteger(value.backendEpoch) ||
+  if (version >= 4 && (!Number.isSafeInteger(value.backendEpoch) ||
     (value.backendEpoch as number) < 0))
     invalidState("工作区后端代次无效。");
-  if (version === 4 && value.concierge.scene !== undefined &&
+  if (version >= 4 && value.concierge.scene !== undefined &&
     !isSceneReference(value.concierge.scene))
     invalidState("管家现场身份无效。");
   if (value.decisions !== undefined && !Array.isArray(value.decisions))
@@ -140,7 +138,7 @@ function validateShape(value: unknown, version: 2 | 3 | 4): WorkspaceState {
       !Array.isArray(goal.activities) || !nonEmptyString(goal.createdAt) ||
       !nonEmptyString(goal.updatedAt))
       invalidState("工作区快照包含结构不完整的目标。");
-    if (version === 4 && goal.scene !== undefined && !isSceneReference(goal.scene))
+    if (version >= 4 && goal.scene !== undefined && !isSceneReference(goal.scene))
       invalidState("目标现场身份无效。");
     if (goal.skills !== undefined) {
       if (!Array.isArray(goal.skills) || goal.skills.length > 8 ||
@@ -178,28 +176,11 @@ function validateShape(value: unknown, version: 2 | 3 | 4): WorkspaceState {
   const state = value as unknown as WorkspaceState;
   state.decisions ??= [];
   for (const project of state.projects) project.policy ??= defaultProjectPolicy();
-  normalizeExternalWaits(state);
   return state;
 }
 function migrateStateV2(value: unknown): WorkspaceState {
   const state = validateShape(value, 2);
-  // v2 first gains conservative v3 business defaults; the next migration
-  // adds session identities without changing authorization.
   (state as unknown as { version: number }).version = 3;
-  state.autonomy = defaultWorkspaceAutonomy();
-  state.bots = [];
-  state.botRequests = [];
-  for (const project of state.projects) {
-    project.autonomy = defaultProjectAutonomy();
-    project.releaseOnMerge = "unknown";
-  }
-  for (const goal of state.goals) {
-    goal.kind = "delivery";
-    goal.revision = 1;
-    delete goal.autonomy;
-    delete goal.brief;
-    delete goal.release;
-  }
   return migrateStateV3(state);
 }
 function legacyScene(reference: unknown): LegacySceneV0 | undefined {
@@ -217,7 +198,7 @@ function legacyScene(reference: unknown): LegacySceneV0 | undefined {
 }
 function migrateStateV3(value: unknown): WorkspaceState {
   const state = validateShape(value, 3);
-  state.version = 4;
+  (state as unknown as { version: number }).version = 4;
   state.backendEpoch = 0;
   state.concierge.legacyScene = legacyScene(state.concierge);
   for (const item of state.goals) {
@@ -250,8 +231,12 @@ export function validateState(value: unknown): WorkspaceState {
       "invalid-state",
       "工作区快照不是有效对象。",
     );
-  if (value.version === 2) return migrateStateV2(value);
-  const state = value.version === 3 ? migrateStateV3(value) : validateShape(value, 4);
+  const version = value.version;
+  if (version !== 2 && version !== 3 && version !== 4 && version !== 5)
+    throw new IncompatibleWorkspaceStateError("unsupported-version",
+      `工作区状态版本 ${String(version ?? "未知")} 与当前版本不兼容。`);
+  const state = version === 2 ? migrateStateV2(value) : version === 3
+    ? migrateStateV3(value) : validateShape(value, version);
   if (state.autonomy !== undefined &&
     (!record(state.autonomy) ||
       !["human-review", "auto-with-verification"].includes(String(state.autonomy.acceptance)) ||
@@ -265,13 +250,96 @@ export function validateState(value: unknown): WorkspaceState {
     invalidState("工作区 Bot 绑定列表无效。");
   if (state.botRequests !== undefined && !Array.isArray(state.botRequests))
     invalidState("工作区 Bot 请求回执列表无效。");
-  reconcileAutonomyDefaults(state);
+  if (version !== 5) retireWorkspaceFeatures(state, version);
+  else {
+    if (state.autonomy !== undefined || state.bots !== undefined || state.botRequests !== undefined ||
+      state.projects.some(project => project.autonomy !== undefined || project.releaseOnMerge !== undefined) ||
+      state.goals.some(goal => goal.autonomy !== undefined || goal.brief !== undefined ||
+        goal.briefHistory !== undefined || goal.release !== undefined || goal.skills !== undefined ||
+        goal.skillResolutions !== undefined || goal.kind === "release" ||
+        goal.dispatch?.kind === "continuation" || goal.dispatch?.kind === "verification" ||
+        goal.acceptance?.kind === "automatic"))
+      invalidState("v5 快照不能重新启用已退役的执行配置；请保留原快照并检查 history。");
+  }
+  if (state.agents && "worker" in state.agents) invalidState("v5 Agent 偏好不支持 worker。");
+  if (state.watchdog !== undefined && (!record(state.watchdog) ||
+    !Number.isSafeInteger(state.watchdog.noProgressMinutes) || state.watchdog.noProgressMinutes < 1))
+    invalidState("巡检设置无效。");
+  for (const goal of state.goals) {
+    const legacyOrca = goal.scene?.backend === "orca" ||
+      goal.agentRuntime?.attempt.scene?.backend === "orca" ||
+      goal.ownerLaunchRecovery?.scene?.backend === "orca";
+    if (legacyOrca) {
+      goal.readOnly = true;
+      goal.readOnlyReason = "legacy-orca";
+      delete goal.dispatch;
+      delete goal.watchdog;
+      delete goal.recovery;
+      delete goal.sceneVisit;
+      const receipt = goal.agentRuntime?.receipt;
+      if (receipt && receipt.status !== "written") receipt.status = "cancelled";
+    }
+    if (goal.readOnly !== undefined && goal.readOnly !== true) invalidState("目标只读标记无效。");
+    if (goal.readOnlyReason !== undefined &&
+      goal.readOnlyReason !== "legacy-orca" && goal.readOnlyReason !== "legacy-epoch")
+      invalidState("目标只读原因无效。");
+    if (goal.readOnlyReason === "legacy-orca" || goal.readOnlyReason === "legacy-epoch")
+      goal.readOnly = true;
+    if (goal.readOnly === true) goal.readOnlyReason ??= "legacy-orca";
+    if (goal.executionHold !== undefined && goal.executionHold !== "migration-confirmation")
+      invalidState("目标执行暂停标记无效。");
+    if (goal.kind !== undefined && goal.kind !== "delivery" && goal.kind !== "discovery")
+      invalidState("v5 目标类型只能是 delivery 或 discovery。");
+  }
+  normalizeExternalWaits(state);
   return state;
 }
 async function writeAtomic(path: string, body: string) {
   const temporary = `${path}.${process.pid}-${randomUUID()}.tmp`;
-  await writeFile(temporary, body, { mode: 0o600 });
-  await rename(temporary, path);
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(body);
+    await handle.sync();
+    await handle.close();
+    await rename(temporary, path);
+  } finally {
+    await handle.close().catch(() => {});
+    await rm(temporary, { force: true });
+  }
+}
+async function backupSnapshot(directory: string, version: 2 | 3 | 4, raw: string) {
+  const backup = join(directory, `state.v${version}.backup.json`);
+  const verify = async (path: string) => {
+    const info = await lstat(path);
+    if (info.isSymbolicLink() || !info.isFile() ||
+      stateDigest(await readFile(path, "utf8")) !== stateDigest(raw))
+      throw new Error("原版本备份校验失败，已停止升级并保留原快照。");
+  };
+  try {
+    await verify(backup);
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const temporary = `${backup}.${process.pid}-${randomUUID()}.tmp`;
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(raw);
+    await handle.sync();
+    await handle.close();
+    await verify(temporary);
+    await link(temporary, backup);
+    await verify(backup);
+    const directoryHandle = await open(directory, "r");
+    try {
+      await directoryHandle.sync();
+    } finally {
+      await directoryHandle.close();
+    }
+  } finally {
+    await handle.close().catch(() => {});
+    await rm(temporary, { force: true });
+  }
 }
 export class WorkspaceStore {
   constructor(readonly root: string) {}
@@ -307,94 +375,21 @@ export class WorkspaceStore {
     }
   }
   private async readStateFile(directory: string): Promise<WorkspaceState> {
-    const path = join(directory, "state.json"),
-      raw = await readFile(path, "utf8"),
-      parsed: unknown = JSON.parse(raw);
-    if (!record(parsed) || ![2, 3].includes(parsed.version as number)) return validateState(parsed);
+    const path = join(directory, "state.json"), raw = await readFile(path, "utf8");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      if (error instanceof SyntaxError)
+        throw new IncompatibleWorkspaceStateError("invalid-state", "原 state.json 无法解析。");
+      throw error;
+    }
+    if (!record(parsed) || ![2, 3, 4].includes(parsed.version as number)) return validateState(parsed);
+    validateShape(structuredClone(parsed), parsed.version as 2 | 3 | 4);
+    await backupSnapshot(directory, parsed.version as 2 | 3 | 4, raw);
     const migrated = validateState(parsed);
-    // validateState mutates the parsed object. The backup version is read
-    // from the original bytes, never the in-memory migrated value.
-    const originalVersion = (JSON.parse(raw) as { version: number }).version;
-    const backupPath = join(directory, `state.v${originalVersion}.backup.json`);
-    try {
-      const info = await lstat(backupPath);
-      if (info.isSymbolicLink() || !info.isFile() ||
-        stateDigest(await readFile(backupPath, "utf8")) !== stateDigest(raw))
-        throw new Error("原版本备份与当前快照不一致；为保护新数据，已停止升级。请保留备份并检查版本。");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      await writeFile(backupPath, raw, { mode: 0o600, flag: "wx" });
-      if (stateDigest(await readFile(backupPath, "utf8")) !== stateDigest(raw))
-        throw new Error("原版本备份未能完整保存，已停止升级。");
-    }
-    const temporary = `${path}.${process.pid}-${randomUUID()}.tmp`,
-      serialized = `${JSON.stringify(migrated, null, 2)}\n`;
-    await writeFile(temporary, serialized, { mode: 0o600 });
-    await rename(temporary, path);
+    await writeAtomic(path, `${JSON.stringify(migrated, null, 2)}\n`);
     return migrated;
-  }
-  private async recover(incompatible: IncompatibleWorkspaceStateError): Promise<WorkspaceState> {
-    const owner = await realpath(this.root);
-    const { directory } = await prepareWorkspaceState(this.root),
-      current = await this.recoveryReason(directory);
-    if (!current) {
-      try {
-        return await this.readStateFile(directory);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return initialState();
-        throw error;
-      }
-    }
-    const detectedAt = new Date(),
-      stamp = detectedAt.toISOString().replace(/\D/g, "").slice(0, 14),
-      archivedPath = join(owner, `.atte.backup-${stamp}-${randomUUID().slice(0, 8)}`),
-      staging = join(owner, `.atte.recovery-${randomUUID().slice(0, 8)}`),
-      recovery = {
-        id: newId("recovery"),
-        detectedAt: detectedAt.toISOString(),
-        archivedPath,
-        reason: current.reason,
-        detail: current.message,
-      },
-      next = initialState(recovery);
-    try {
-      await mkdir(staging);
-      const serialized = `${JSON.stringify(next, null, 2)}\n`;
-      await writeAtomic(join(staging, "state.json"), serialized);
-      await writeFile(join(staging, "events.jsonl"), `${JSON.stringify({
-        id: newId("evt"),
-        type: "workspace_recovered",
-        sequence: 1,
-        created_at: detectedAt.toISOString(),
-        title: "工作区已自动恢复",
-        source_task_id: "workspace",
-        recovery,
-        state_sha256: stateDigest(serialized),
-        state_bytes: Buffer.byteLength(serialized),
-      })}\n`, { mode: 0o600 });
-      await writeFile(join(staging, "sequence"), "1", { mode: 0o600 });
-      await Promise.all([
-        writeAtomic(join(staging, "decisions.md"), decisionMarkdown(next.decisions, "approved")),
-        writeAtomic(join(staging, "rejected.md"), decisionMarkdown(next.decisions, "rejected")),
-      ]);
-    } catch (error) {
-      await rm(staging, { recursive: true, force: true }).catch(() => {});
-      throw error;
-    }
-    try {
-      await rename(directory, archivedPath);
-    } catch (error) {
-      await rm(staging, { recursive: true, force: true }).catch(() => {});
-      throw error;
-    }
-    try {
-      await rename(staging, directory);
-    } catch (error) {
-      await rename(archivedPath, directory).catch(() => {});
-      await rm(staging, { recursive: true, force: true }).catch(() => {});
-      throw error;
-    }
-    return next;
   }
   /** Caller must hold the workspace-root lock. Recovery moves `.atte`
    * atomically, so its lock must live beside that directory. */
@@ -403,15 +398,10 @@ export class WorkspaceStore {
     try {
       return await this.readStateFile(directory);
     } catch (error) {
-      if (error instanceof IncompatibleWorkspaceStateError || error instanceof SyntaxError) {
-        const incompatible = error instanceof SyntaxError
-          ? new IncompatibleWorkspaceStateError("invalid-state", "原 state.json 无法解析。")
-          : error;
-        return this.recover(incompatible);
-      }
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       const incompatible = await this.recoveryReason(directory);
-      return incompatible ? this.recover(incompatible) : initialState();
+      if (incompatible) throw incompatible;
+      return initialState();
     }
   }
   async read(): Promise<WorkspaceState> {

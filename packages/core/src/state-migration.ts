@@ -127,7 +127,17 @@ export async function prepareWorkspaceState(root: string): Promise<StateMigratio
       }, null, 2)}\n`, { mode: 0o600, flag: "wx" });
       const { rename } = await import("node:fs/promises");
       await rename(temporary, current);
-      return { directory: current, migrated: true, fallback: false };
+      try {
+        const { WorkspaceStore } = await import("./store.js");
+        await new WorkspaceStore(owner).read();
+        return { directory: current, migrated: true, fallback: false };
+      } catch (error) {
+        await rm(current, { recursive: true, force: true });
+        return {
+          directory: legacy, migrated: false, fallback: true,
+          detail: `Atte 状态迁移后的快照校验未通过，原目录保持不变并继续使用 ${LEGACY_STATE_DIRECTORY}：${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
     } catch (error) {
       await rm(temporary, { recursive: true, force: true }).catch(() => {});
       return {

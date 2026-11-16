@@ -37,22 +37,16 @@ async function fixture(t: test.TestContext) {
   return { root, directory, workspace, control, file, launch };
 }
 
-test("cleanup removes stale stopped launchers and terminal journals while protecting live and unknown work", async t => {
+test("cleanup removes stale stopped launchers while protecting live and unknown work", async t => {
   const f = await fixture(t), dead = await f.launch("dead");
   const live = await f.launch("live", { live: true }), unknown = await f.launch("unknown", { unknown: true });
-  const unfinished = await f.file(join(f.directory, "switch", "unfinished.json"),
-    { operationId: "unfinished", phase: "recovery_required" });
-  const completed = await f.file(join(f.directory, "switch", "completed.json"),
-    { operationId: "completed", phase: "ready" });
   const paths = await staleSessionStorage(f.directory, now);
   assert(paths.includes(dead.path));
   assert(paths.includes(dead.launcher));
-  assert(paths.includes(completed));
   assert(!paths.includes(live.path));
   assert(!paths.includes(live.launcher));
   assert(!paths.includes(unknown.path));
   assert(!paths.includes(unknown.launcher));
-  assert(!paths.includes(unfinished));
   assert(!paths.some(path => path.includes("state.json") || path.endsWith("backend.json")));
 });
 

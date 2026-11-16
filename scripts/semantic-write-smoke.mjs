@@ -7,8 +7,7 @@ import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { completeAutonomySetup } from "./lib/autonomy-setup.mjs";
-import { cleanupBackendTrial } from "./lib/backend-trial-cleanup.mjs";
+import { waitForWorkspace } from "./lib/autonomy-setup.mjs";
 
 const exec = promisify(execFile);
 const trial = await realpath(await mkdtemp("/tmp/atte-semantic-e2e-"));
@@ -81,7 +80,7 @@ try {
   page.setDefaultTimeout(60_000);
   const errors = [];
   page.on("pageerror", error => errors.push(String(error)));
-  await completeAutonomySetup(page);
+  await waitForWorkspace(page);
   await page.evaluate(() => window.atte.command({ type: "agents.configure", preferences: {
     concierge: "cv-local-agent --model test", owner: "cv-local-agent --model test",
   } }));
@@ -118,7 +117,6 @@ try {
   process.exitCode = 1;
 } finally {
   await app?.close().catch(() => {});
-  await cleanupBackendTrial(trial, executablePath, environment).catch(() => {});
   const herdr = join(userData, "runtime/herdr");
   await exec(herdr, ["--session", session, "server", "stop"], { env: environment }).catch(() => {});
   if (succeeded && process.env.ATTE_KEEP_TEST_ARTIFACTS !== "1") await rm(trial, { recursive: true, force: true });

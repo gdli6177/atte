@@ -6,12 +6,10 @@ import { join, resolve } from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
-import { HerdrAdapter, OrcaAdapter, createLaunchFiles } from "../packages/sessions/src/index.ts";
+import { HerdrAdapter, createLaunchFiles } from "../packages/sessions/src/index.ts";
 
 const backend = process.env.ATTE_OMP_DELIVERY_BACKEND ?? "herdr";
-assert(["herdr", "orca"].includes(backend));
-const profile = process.env.ATTE_TEST_ORCA_PROFILE;
-if (backend === "orca") assert(profile?.startsWith("/private/tmp/"), "Use an isolated Orca profile.");
+assert.equal(backend, "herdr");
 const executable = resolve(process.env.ATTE_TEST_HERDR_BINARY ||
   "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/Resources/herdr");
 const agent = process.env.ATTE_TRIAL_AGENT;
@@ -22,31 +20,13 @@ await mkdir(cwd);
 const session = `cv-omp-${randomUUID().slice(0, 8)}`;
 const environment = {
   ...process.env, HOME: root, XDG_CONFIG_HOME: join(root, "config"),
-  XDG_STATE_HOME: join(root, "state"), ...(profile ? { ORCA_USER_DATA_PATH: profile } : {}),
+  XDG_STATE_HOME: join(root, "state"),
 };
-const server = backend === "herdr" ? spawn(executable, ["--session", session, "server"], {
+const server = spawn(executable, ["--session", session, "server"], {
   env: environment, stdio: "ignore",
-}) : undefined;
+});
 const nativeAgentShapes = [];
-const orca = "/Applications/Orca.app/Contents/Resources/bin/orca";
-const adapter = backend === "orca" ? new OrcaAdapter({
-  appPath: "/Applications/Orca.app", directory: join(root, "control"), environment,
-  run: async (args, timeout) => {
-    const { stdout } = await promisify(execFile)(orca, args, { env: environment, timeout, maxBuffer: 2_000_000 });
-    if (args[0] === "worktree" && args[1] === "ps") {
-      const data = JSON.parse(stdout);
-      for (const item of (data.result?.worktrees ?? []).flatMap(item => item.agents ?? [])) {
-        const shape = { keys: Object.keys(item), agent: item.agent, kind: item.kind,
-          type: item.type, program: item.program, label: item.label };
-        if (!nativeAgentShapes.some(value => JSON.stringify(value) === JSON.stringify(shape))) {
-          nativeAgentShapes.push(shape);
-          console.log(JSON.stringify({ nativeAgentShape: shape }));
-        }
-      }
-    }
-    return stdout;
-  },
-}) : new HerdrAdapter({
+const adapter = new HerdrAdapter({
   executable, session, directory: join(root, "control"), environment,
   run: async (args, timeout = 5_000) => {
     const { stdout } = await promisify(execFile)(executable, ["--session", session, ...args],
@@ -134,12 +114,6 @@ try {
   console.log(JSON.stringify({ passed: true, evidence: root }));
 } finally {
   console.log(JSON.stringify({ evidence: root }));
-  if (scene && backend === "orca") {
-    const observed = await promisify(execFile)(orca, ["terminal", "read", "--terminal",
-      scene.locator.terminalHandle, "--screen", "--limit", "100", "--environment", "local", "--json"],
-    { env: environment, timeout: 10_000, maxBuffer: 200_000 }).catch(error => ({ stdout: String(error) }));
-    await writeFile(join(root, "terminal-screen.json"), observed.stdout);
-  }
   if (scene) await adapter.close(scene).catch(() => {});
   server?.kill("SIGTERM");
 }

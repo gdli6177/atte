@@ -3,13 +3,12 @@ import type {
   AttentionKind,
   Goal,
   GoalKind,
-  ProjectAutonomy,
   ProjectPolicy,
-  WorkspaceAutonomy,
   WorkspaceRecovery,
   WorkspaceState,
 } from "./types.js";
 import { hasDueReminder } from "./task-pool.js";
+import { isReadOnlyGoal } from "./retirement.js";
 export const newId = (prefix: string) => `${prefix}_${globalThis.crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
 export const defaultProjectPolicy = (): ProjectPolicy => ({
   shipPolicy: "external-approval",
@@ -17,51 +16,36 @@ export const defaultProjectPolicy = (): ProjectPolicy => ({
   revision: 1,
   updatedAt: new Date().toISOString(),
 });
-export const defaultProjectAutonomy = (): ProjectAutonomy => ({
-  acceptance: "inherit",
-  revision: 1,
-  updatedAt: new Date().toISOString(),
-});
-export const defaultWorkspaceAutonomy = (): WorkspaceAutonomy => ({
-  acceptance: "human-review",
-  paused: false,
-  maxRecoveryAttempts: 3,
-  noProgressMinutes: 30,
-  revision: 1,
-  updatedAt: new Date().toISOString(),
-});
 export const initialState = (recovery?: WorkspaceRecovery): WorkspaceState => ({
-  version: 4,
+  version: 5,
   backendEpoch: 0,
   name: "我的工作台",
   projects: [{
     id: "personal",
     name: "个人事项",
     policy: defaultProjectPolicy(),
-    autonomy: defaultProjectAutonomy(),
-    releaseOnMerge: "unknown",
     createdAt: new Date().toISOString(),
   }],
   workflows: [],
   goals: [],
   decisions: [],
-  autonomy: defaultWorkspaceAutonomy(),
+  watchdog: { noProgressMinutes: 30 },
   ...(recovery ? { recovery } : {}),
   concierge: { session: "atte", status: "not_ready" },
 });
 export const goalKind = (goal: Goal): GoalKind => goal.kind ?? "delivery";
 export const goalRevision = (goal: Goal) => goal.revision ?? 1;
-export const goalIsAutonomous = (goal: Goal) =>
-  Boolean(goal.brief || goal.autonomy || goal.kind === "discovery" || goal.kind === "release");
 export function attentionGoals(goals: Goal[], now = Date.now()): Goal[] {
   return goals.filter((goal) => attentionKind(goal, now)).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
 }
 export function attentionKind(goal: Goal, now = Date.now()): AttentionKind | undefined {
+  if (isReadOnlyGoal(goal)) return undefined;
   if (["completed", "dropped"].includes(goal.status)) return undefined;
   if (goal.attention) return goal.attention.kind;
   return hasDueReminder(goal, now) ? "follow_up" : undefined;
 }
 export function attentionRequest(goal: Goal, now = Date.now()): (Attention & { id: string }) | undefined {
+  if (isReadOnlyGoal(goal)) return undefined;
   if (["completed", "dropped"].includes(goal.status)) return undefined;
   if (goal.attention) return {
     ...goal.attention,

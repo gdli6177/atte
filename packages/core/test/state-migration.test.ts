@@ -147,15 +147,15 @@ test("fallback state keeps legacy attachment paths readable and does not rewrite
   }]);
   const stateBefore = await service.read();
   stateBefore.goals.find(item => item.id === goal.id)!.attachments = [attachment!];
-  const before = `${JSON.stringify(stateBefore, null, 2)}\n`.replaceAll(".atte/attachments/", ".crewvane/attachments/");
+  const fallbackSnapshot = `${JSON.stringify(stateBefore, null, 2)}\n`.replaceAll(".atte/attachments/", ".crewvane/attachments/");
   await rename(join(root, ".atte"), join(root, ".crewvane"));
-  await writeFile(join(root, ".crewvane/state.json"), before);
+  await writeFile(join(root, ".crewvane/state.json"), fallbackSnapshot);
   await writeFile(join(root, "outside.txt"), "do not follow\n");
   await symlink(join(root, "outside.txt"), join(root, ".crewvane/linked.txt"));
 
   const fallback = await prepareWorkspaceState(root);
   assert.equal(fallback.fallback, true);
-  const state = validateState(JSON.parse(before));
+  const state = validateState(JSON.parse(fallbackSnapshot));
   assert.equal(state.goals[0]?.attachments?.[0]?.path.startsWith(".crewvane/attachments/"), true);
   const resolved = await validateGoalAttachments(root, state.goals[0]?.attachments);
   assert.equal(resolved[0]?.path, attachment?.path.replace(".atte/", ".crewvane/"));

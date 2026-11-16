@@ -21,12 +21,6 @@ const projectEntry = await service.execute({ type: "project.add", name: "隔离�
 const agent = process.env.ATTE_TRIAL_AGENT ||
   "omp";
 await service.execute({ type: "agents.configure", preferences: { concierge: agent, owner: agent } });
-await service.execute({
-  type: "workspace.autonomy.set",
-  acceptance: "human-review",
-  initialize: true,
-  actor: "你",
-});
 const app = await electron.launch({
   executablePath: resolve(process.env.ATTE_APP_PATH || "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte"),
   env: { ...process.env, ATTE_TEST_HOME: home, ATTE_TEST_USER_DATA: join(trial, "userData"),

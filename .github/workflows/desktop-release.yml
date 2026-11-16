@@ -31,6 +31,9 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
@@ -49,7 +52,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
       - run: pnpm test:atte-ui
       - run: pnpm test:desktop
-      - run: pnpm test:methods
       - run: pnpm test:task-pool
       - run: pnpm test:installers
       - run: pnpm test:terminal

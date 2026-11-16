@@ -8,6 +8,7 @@ import {
   rm,
   stat,
   symlink,
+  writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -317,77 +318,43 @@ test("a Hook trust startup dialog preserves the original scene without sending i
   assert.match(saved.next, /同一负责人/);
 });
 
-test("a blocked verifier preserves an actionable verification site without touching the owner scene", async () => {
+test("a retired verifier launch fails before any workspace or process I/O", async () => {
   const { root, service } = await fixture();
   const goal = await service.execute({
     type: "goal.create",
-    input: { title: "独立复核现场", projectId: "personal", mode: "concierge" },
+    input: { title: "已退役复核", projectId: "personal", mode: "concierge" },
   }) as Goal;
-  const activityId = goal.activities[0]!.id;
-  await service.execute({
-    type: "goal.brief",
-    goalId: goal.id,
-    actor: "管家",
-    brief: {
-      outcome: "完成可独立复核的交付",
-      inScope: ["实现"],
-      outOfScope: [],
-      criteria: [{
-        id: "tests-pass",
-        statement: "真实检查通过",
-        required: true,
-        provenance: { kind: "user-message", activityId },
-      }],
-      constraints: [],
-      externalEffects: [],
-      verificationPlan: {
-        requiredEvidenceKinds: ["command"],
-        independentReviewer: true,
-      },
-      attemptBudget: { maxRecoveryAttempts: 3 },
-      source: { activityIds: [activityId], ruleRefs: [] },
-    },
-  });
-  await service.execute({
-    type: "goal.review",
-    goalId: goal.id,
-    actor: "owner-a",
-    delivery: {
-      summary: "交付已经提交。",
-      candidate: { revision: "rev-1" },
-      checks: [{ name: "测试", command: "true", result: "passed" }],
-      evidence: [{
-        id: "ev_tests",
-        kind: "command",
-        label: "测试通过",
-        result: "passed",
-        observedAt: new Date().toISOString(),
-        command: "true",
-      }],
-    },
-  });
-  const mock = fakeRunner();
-  const result = await launchOwner(service, {
-    goalId: goal.id,
-    name: "reviewer-blocked",
-    role: "verifier",
-  }, {
-    environment: { HERDR_ENV: "1", HERDR_SESSION: "test", HOME: root },
-    run: async args => {
-      if (args[0] === "agent" && args[1] === "start" && !args.includes("--help")) {
-        mock.calls.push(args);
-        throw new Error('Herdr agent start: {"code":"agent_not_ready","message":"trust prompt"}');
-      }
-      return mock.run(args);
-    },
-  });
-  assert.match(result.warning ?? "", /目标任务尚未发送/);
-  const saved = (await service.read()).goals[0]!;
-  assert.equal(saved.herdr, undefined);
-  assert.equal(saved.autonomy?.verificationSite?.status, "blocked");
-  assert.equal(saved.autonomy?.verificationSite?.reference?.agent, "reviewer-blocked");
-  assert.equal(saved.attention?.kind, "intervention");
-  assert.match(saved.next, /复核者现场/);
+  const before = await service.read();
+  await assert.rejects(launchOwner(service, {
+    goalId: goal.id, name: "reviewer-retired", role: "verifier" as never,
+  }, { environment: { HERDR_ENV: "1", HERDR_SESSION: "test", HOME: root } }), /feature_removed/);
+  assert.deepEqual(await service.read(), before);
+});
+
+test("an old Orca workspace binding cannot launch an owner from the legacy CLI path", async () => {
+  const { root, service } = await fixture();
+  const goal = await service.execute({
+    type: "goal.create",
+    input: { title: "旧 Orca 工作区", projectId: "personal", mode: "concierge" },
+  }) as Goal;
+  const path = join(root, ".atte", "state.json");
+  const raw = JSON.parse(await readFile(path, "utf8"));
+  raw.version = 4;
+  raw.backendBinding = {
+    installationId: "legacy-orca", backend: "orca", epoch: 0,
+    scopeGeneration: "legacy-scope", status: "active",
+  };
+  await writeFile(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+  const calls: string[][] = [];
+  const error = await launchOwner(service, { goalId: goal.id, name: "owner-old" }, {
+    environment: { HERDR_ENV: "1", HERDR_SESSION: "atte-test", HOME: root },
+    run: async args => { calls.push(args); return "{}"; },
+  }).then(() => undefined, reason => String(reason));
+  assert.match(error ?? "", /v5 工作区不能继续绑定 Orca|goal_read_only/);
+  assert.equal(calls.length, 0);
+  const migrated = (await service.read()).goals[0]!;
+  assert.equal(migrated.herdr, undefined);
+  assert.equal(migrated.readOnly, true);
 });
 
 test("reopens the original Agent kind with its native resume arguments", async () => {
@@ -494,7 +461,7 @@ test("launches a custom interactive CLI and records its real foreground process"
   assert.ok(launches.length > 3);
   assert.ok(launches.some(args => /My Agent/.test(args[3]!)));
   assert.equal(launches.at(-1)![2], "w7:p3");
-  assert.match(launches.at(-1)![3]!, /## 目标负责人/);
+  assert.match(launches.at(-1)![3]!, /你是当前 Atte 目标的唯一独立负责人/);
   assert.match(launches.at(-1)![3]!, /## 本次目标任务\n执行自定义任务/);
   assert.match(launches.at(-1)![3]!, /goal scene-reply/);
   const state = await service.read();

@@ -1,13 +1,17 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertOwnerSendReceipt, run } from "../src/cli.js";
 import { renderBoardPlain } from "../src/board.js";
-import { WorkspaceService, type Goal } from "../../packages/core/src/index.js";
+import {
+  WorkspaceService,
+  isReadOnlyGoal,
+  type Goal,
+} from "../../packages/core/src/index.js";
 const fixtures: string[] = [];
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAACAAAAAYCAYAAACbU/80AAAAVUlEQVR4nGPUMIr6z4AEAqKWInMZNiyLZqClPBPDAAOmEe8Axoqe///pGefo8kwMAwyYRrwDGEfLAYaR7gDG0XKAYaQ7gHG0HGAY6Q5gHC0HGEa6AwC58E1KmpVcaAAAAABJRU5ErkJggg==",
@@ -58,6 +62,11 @@ test("the executable presents Atte while keeping the public atte command", async
   assert.equal(stderr, "");
   assert.match(stdout, /^Atte — The attention layer/);
   assert.match(stdout, /atte goal message ID --text TEXT/);
+  assert.match(stdout, /atte capture TEXT/);
+  assert.match(stdout, /atte goal start ID --by self\|concierge/);
+  assert.doesNotMatch(stdout, /^\s+atte (?:skill|autonomy|release|bot|verifier)\b/m);
+  assert.doesNotMatch(stdout, /goal (?:brief|checkpoint|verify|boundary|boundary-resolve|autonomy|reopen)\b/);
+  assert.doesNotMatch(stdout, /--handling [^\n]*self|--self/);
   assert.doesNotMatch(stdout, /\bcrewvane (?:status|attention|board|goal|owner|skill)\b/);
 });
 async function callProcess(
@@ -98,7 +107,7 @@ async function coordinator<T>(root: string, goalId: string, task: () => Promise<
     else process.env.ATTE_AGENT_NAME = previousActor;
   }
 }
-test("capture records future or personal work and explicit start reuses the same record", async () => {
+test("capture records backlog and explicit start reuses the same record", async () => {
   const root = await fixture("cv-cli-pool-");
   const saved = await call(root, ["capture", "先记下，等有空再整理"]);
   assert.equal(saved.code, 0, saved.stderr);
@@ -112,14 +121,20 @@ test("capture records future or personal work and explicit start reuses the same
   assert.equal(started.json.dispatch.status, "pending");
   const repeated = await call(root, ["goal", "start", saved.json.id, "--by", "concierge"]);
   assert.equal(repeated.json.dispatch.id, started.json.dispatch.id);
-  const self = await call(root, ["capture", "我明天去银行", "--self",
+  const personal = await call(root, ["capture", "我明天去银行",
     "--remind-at", new Date(Date.now() + 86400_000).toISOString()]);
-  assert.equal(self.code, 0, self.stderr);
-  assert.equal(self.json.mode, "manual");
-  assert.equal(self.json.status, "active");
-  assert.equal(self.json.dispatch, undefined);
+  assert.equal(personal.code, 0, personal.stderr);
+  assert.equal(personal.json.status, "backlog");
+  assert.equal(personal.json.dispatch, undefined);
+  const taken = await call(root, ["goal", "start", personal.json.id, "--by", "self"]);
+  assert.equal(taken.code, 0, taken.stderr);
+  assert.equal(taken.json.id, personal.json.id);
+  assert.equal(taken.json.mode, "manual");
+  assert.equal(taken.json.status, "active");
+  assert.equal(taken.json.owner, "你");
+  assert.equal(taken.json.dispatch, undefined);
   assert.equal((await call(root, ["attention"])).json.length, 0);
-  const completed = await call(root, ["goal", "complete", self.json.id, "--note", "银行的事已办完"]);
+  const completed = await call(root, ["goal", "complete", personal.json.id, "--note", "银行的事已办完"]);
   assert.equal(completed.json.status, "completed");
   assert.equal(completed.json.delivery, undefined);
   assert.equal((await call(root, ["goal", "list", "--all"])).json.length, 2);
@@ -167,21 +182,60 @@ test("real owner CLI receipts and concierge scope bind resolution to the latest 
   });
   assert.equal((await service.read()).decisions[0]!.source, "Herdr 负责人现场");
 });
-test("CLI reports an automatically protected legacy workspace", async () => {
+test("CLI fails closed and preserves an unsupported legacy workspace", async () => {
   const root = await fixture("atte-cli-recovery-");
   await mkdir(join(root, ".atte"), { recursive: true });
-  await writeFile(join(root, ".atte/state.json"), JSON.stringify({ version: 1, tasks: [] }));
-  let stdout = "";
+  const original = JSON.stringify({ version: 1, tasks: [] });
+  await writeFile(join(root, ".atte/state.json"), original);
+  let stdout = "", stderr = "";
   const code = await run(["status", "--root", root], {
     out: text => { stdout += text; },
-    error: () => {},
+    error: text => { stderr += text; },
   });
-  assert.equal(code, 0);
-  assert.match(stdout, /旧版工作区已自动保护/);
-  assert.match(stdout, /\.atte\.backup-/);
-  const next = JSON.parse(await readFile(join(root, ".atte/state.json"), "utf8"));
-  assert.equal(next.version, 4);
-  assert.equal(next.recovery.reason, "unsupported-version");
+  assert.equal(code, 1);
+  assert.equal(stdout, "");
+  assert.match(stderr, /工作区状态版本 1 与当前版本不兼容/);
+  assert.equal(await readFile(join(root, ".atte/state.json"), "utf8"), original);
+  assert.deepEqual(
+    (await readdir(root)).filter(name => name.startsWith(".atte.backup-")),
+    [],
+  );
+});
+test("CLI upgrades v4 Orca workspaces to v5 and keeps legacy goals read-only", async () => {
+  const root = await fixture("atte-cli-orca-v5-");
+  const service = new WorkspaceService(root);
+  const goal = await service.execute({
+    type: "goal.create",
+    input: { title: "旧 Orca 目标", projectId: "personal", mode: "concierge" },
+  }) as Goal;
+  const state = await service.read();
+  await writeFile(join(root, ".atte/state.json"), JSON.stringify({
+    ...state,
+    version: 4,
+    backendBinding: {
+      installationId: "orca-installation",
+      backend: "orca",
+      epoch: 1,
+      scopeGeneration: "legacy-scope",
+      status: "active",
+    },
+  }));
+
+  const status = await call(root, ["status"]);
+  assert.equal(status.code, 0, status.stderr);
+  const migrated = await new WorkspaceService(root).read();
+  assert.equal(migrated.version, 5);
+  const legacy = migrated.goals.find(item => item.id === goal.id)!;
+  assert.equal(isReadOnlyGoal(legacy), true);
+  assert.equal(legacy.readOnly, true);
+  assert.equal(legacy.readOnlyReason, "legacy-orca");
+  assert.equal(legacy.dispatch, undefined);
+  const blocked = await call(root, [
+    "goal", "progress", goal.id,
+    "--summary", "旧 Orca 现场不能继续执行",
+  ]);
+  assert.equal(blocked.code, 1);
+  assert.match(blocked.stderr, /goal_read_only/);
 });
 test("CLI rejects incomplete or fabricated review records", async () => {
   const root = await fixture("atte-cli-invalid-");
@@ -223,8 +277,8 @@ test("owner names from the managed pane are attributed without manual flags", as
     else process.env.ATTE_AGENT_NAME = previous;
   }
 });
-test("real CLI classifies discovery goals, sets a goal acceptance override, and schedules wait-due", async () => {
-  const root = await fixture("atte-cli-autonomy-");
+test("real CLI preserves discovery and delivery kinds and an external wait without autonomy scheduling", async () => {
+  const root = await fixture("atte-cli-kinds-");
   const created = await call(root, [
     "goal", "create",
     "--title", "先探索再决定",
@@ -239,53 +293,6 @@ test("real CLI classifies discovery goals, sets a goal acceptance override, and 
   assert.equal(switched.code, 0, switched.stderr);
   assert.equal(switched.json.kind, "delivery");
 
-  const overridden = await call(root, [
-    "goal", "autonomy", "acceptance", created.json.id,
-    "--acceptance", "auto-with-verification",
-  ]);
-  assert.equal(overridden.code, 0, overridden.stderr);
-  assert.equal(overridden.json.autonomy.override, "auto-with-verification");
-
-  const previousActor = process.env.ATTE_AGENT_NAME;
-  process.env.ATTE_AGENT_NAME = "managed-owner";
-  try {
-    const blocked = await call(root, [
-      "goal", "autonomy", "acceptance", created.json.id,
-      "--acceptance", "human-review",
-    ]);
-    assert.equal(blocked.code, 1);
-    assert.match(blocked.stderr, /只能由人/);
-  } finally {
-    if (previousActor === undefined) delete process.env.ATTE_AGENT_NAME;
-    else process.env.ATTE_AGENT_NAME = previousActor;
-  }
-
-  const activityId = created.json.activities[0].id,
-    briefPath = join(root, "brief.json");
-  await writeFile(briefPath, JSON.stringify({
-    outcome: "验证自主目标的等待续跑",
-    inScope: ["验证"],
-    outOfScope: [],
-    criteria: [{
-      id: "verified",
-      statement: "等待到期可以唤醒管家",
-      required: true,
-      provenance: { kind: "user-message", activityId },
-    }],
-    constraints: [],
-    externalEffects: [],
-    verificationPlan: {
-      requiredEvidenceKinds: ["inspection"],
-      independentReviewer: true,
-    },
-    attemptBudget: { maxRecoveryAttempts: 2 },
-    source: { activityIds: [activityId], ruleRefs: [] },
-  }));
-  const briefed = await call(root, [
-    "goal", "brief", created.json.id,
-    "--file", briefPath,
-  ]);
-  assert.equal(briefed.code, 0, briefed.stderr);
   const dueAt = "2030-01-01T00:00:00.000Z",
     waiting = await call(root, [
       "goal", "wait", created.json.id,
@@ -294,208 +301,108 @@ test("real CLI classifies discovery goals, sets a goal acceptance override, and 
       "--remind-at", dueAt,
     ]);
   assert.equal(waiting.code, 0, waiting.stderr);
-  assert.equal(waiting.json.autonomy.continuation.trigger, "wait-due");
-  assert.equal(waiting.json.autonomy.continuation.dueAt, dueAt);
-  const inspected = await call(root, [
-    "autonomy", "inspect",
-    "--at", "2030-01-01T00:01:00.000Z",
-  ]);
-  assert.deepEqual(inspected.json.map((candidate: { trigger: string }) => candidate.trigger), ["wait-due"]);
+  assert.equal(waiting.json.status, "waiting");
+  assert.equal(waiting.json.waitingFor, "YR");
+  assert.equal(waiting.json.remindAt, dueAt);
+  assert.equal(waiting.json.autonomy, undefined);
+  const saved = (await new WorkspaceService(root).read()).goals
+    .find(goal => goal.id === created.json.id)!;
+  assert.equal(saved.kind, "delivery");
+  assert.equal(saved.autonomy, undefined);
 });
-test("goal verify records the managed Herdr pane as reviewer evidence", async () => {
-  const root = await fixture("atte-cli-reviewer-site-"),
-    service = new WorkspaceService(root),
-    goal = await service.execute({
-      type: "goal.create",
-      input: { title: "复核现场", projectId: "personal", mode: "concierge" },
-    }) as Goal,
-    activityId = goal.activities[0]!.id,
-    briefPath = join(root, "brief.json");
-  await writeFile(briefPath, JSON.stringify({
-    outcome: "完成可复核交付",
-    inScope: ["实现"],
-    outOfScope: [],
-    criteria: [{
-      id: "tests-pass",
-      statement: "真实检查通过",
-      required: true,
-      provenance: { kind: "user-message", activityId },
-    }],
-    constraints: [],
-    externalEffects: [],
-    verificationPlan: {
-      requiredEvidenceKinds: ["command"],
-      independentReviewer: true,
-    },
-    attemptBudget: { maxRecoveryAttempts: 3 },
-    source: { activityIds: [activityId], ruleRefs: [] },
-  }));
-  assert.equal((await call(root, ["goal", "brief", goal.id, "--file", briefPath])).code, 0);
+test("real CLI keeps review evidence while retired verification is rejected", async () => {
+  const root = await fixture("atte-cli-review-evidence-");
+  const goal = (await call(root, [
+    "goal", "create",
+    "--title", "保留真实审查证据",
+    "--project", "personal",
+  ])).json as Goal;
+  const evidencePath = join(root, "evidence.json");
+  await writeFile(evidencePath, JSON.stringify([{
+    id: "ev_tests",
+    kind: "command",
+    label: "测试通过",
+    result: "passed",
+    observedAt: new Date().toISOString(),
+    command: "true",
+  }]));
   const reviewed = await call(root, [
     "goal", "review", goal.id,
-    "--summary", "等待独立复核",
+    "--summary", "交付附真实检查和证据",
     "--check", "测试::true::passed",
     "--candidate-revision", "rev-1",
-    "--evidence-file", await (async () => {
-      const path = join(root, "evidence.json");
-      await writeFile(path, JSON.stringify([{
-        id: "ev_tests",
-        kind: "command",
-        label: "测试通过",
-        result: "passed",
-        observedAt: new Date().toISOString(),
-        command: "true",
-      }]));
-      return path;
-    })(),
+    "--evidence-file", evidencePath,
   ]);
   assert.equal(reviewed.code, 0, reviewed.stderr);
-  const previous = {
-    HERDR_ENV: process.env.HERDR_ENV,
-    HERDR_SESSION: process.env.HERDR_SESSION,
-    HERDR_WORKSPACE_ID: process.env.HERDR_WORKSPACE_ID,
-    HERDR_TAB_ID: process.env.HERDR_TAB_ID,
-    HERDR_PANE_ID: process.env.HERDR_PANE_ID,
-    ATTE_AGENT_NAME: process.env.ATTE_AGENT_NAME,
-  };
-  Object.assign(process.env, {
-    HERDR_ENV: "1",
-    HERDR_SESSION: "test-session",
-    HERDR_WORKSPACE_ID: "w2",
-    HERDR_TAB_ID: "w2:t2",
-    HERDR_PANE_ID: "w2:p2",
-    ATTE_AGENT_NAME: "reviewer-cli",
-  });
-  try {
-    const verified = await call(root, [
-      "goal", "verify", goal.id,
-      "--delivery", reviewed.json.delivery.id,
-      "--outcome", "passed",
-      "--summary", "独立复核已核对真实命令。",
-      "--reviewer", "reviewer-cli",
-      "--criterion", "tests-pass::passed::ev_tests",
-    ]);
-    assert.equal(verified.code, 0, verified.stderr);
-  } finally {
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-  }
-  const saved = (await service.read()).goals[0]!;
-  assert.deepEqual(saved.autonomy?.lastVerification?.reviewerHerdr, {
-    session: "test-session",
-    workspaceId: "w2",
-    tabId: "w2:t2",
-    paneId: "w2:p2",
-    agent: "reviewer-cli",
-  });
-});
-test("a spawned verifier can only read its goal and submit its own verification", async () => {
-  const root = await fixture("atte-cli-verifier-scope-"),
-    service = new WorkspaceService(root),
-    goal = await service.execute({
-      type: "goal.create",
-      input: { title: "需要独立复核", projectId: "personal", mode: "concierge" },
-    }) as Goal,
-    other = await service.execute({
-      type: "goal.create",
-      input: { title: "不能跨目标读取", projectId: "personal", mode: "concierge" },
-    }) as Goal,
-    activityId = goal.activities[0]!.id;
-  await service.execute({
-    type: "goal.brief",
-    goalId: goal.id,
-    actor: "管家",
-    brief: {
-      outcome: "完成可独立复核的交付",
-      inScope: ["实现"],
-      outOfScope: [],
-      criteria: [{
-        id: "tests-pass",
-        statement: "真实检查通过",
-        required: true,
-        provenance: { kind: "user-message", activityId },
-      }],
-      constraints: [],
-      externalEffects: [],
-      verificationPlan: {
-        requiredEvidenceKinds: ["command"],
-        independentReviewer: true,
-      },
-      attemptBudget: { maxRecoveryAttempts: 3 },
-      source: { activityIds: [activityId], ruleRefs: [] },
-    },
-  });
-  const reviewed = await service.execute({
-    type: "goal.review",
-    goalId: goal.id,
-    actor: "owner-a",
-    delivery: {
-      summary: "实现与检查已完成。",
-      candidate: { revision: "rev-verifier-scope" },
-      checks: [{ name: "测试", command: "true", result: "passed" }],
-      evidence: [{
-        id: "ev_tests",
-        kind: "command",
-        label: "测试通过",
-        result: "passed",
-        observedAt: new Date().toISOString(),
-        command: "true",
-      }],
-    },
-  }) as Goal;
-  const environment = {
-    ATTE_AGENT_NAME: "reviewer-proc",
-    ATTE_GOAL_ID: goal.id,
-    ATTE_ROLE: "verifier",
-    HERDR_ENV: "1",
-    HERDR_PANE_ID: "w9:p2",
-    HERDR_SESSION: "verifier-session",
-    HERDR_TAB_ID: "w9:t2",
-    HERDR_WORKSPACE_ID: "w9",
-  };
-  const status = await callProcess(root, environment, ["status"]);
-  assert.equal(status.json.goal.id, goal.id);
-  assert.equal(status.json.goal.status, "review");
-  assert.equal(status.json.goals, undefined);
+  assert.equal(reviewed.json.status, "review");
+  assert.equal(reviewed.json.delivery.checks[0].command, "true");
+  assert.equal(reviewed.json.delivery.evidence[0].id, "ev_tests");
+  assert.equal(reviewed.json.reviewRounds, 1);
 
-  await assert.rejects(
-    () => callProcess(root, environment, ["goal", "show", other.id]),
-    /只能查看当前复核目标/,
-  );
-  await assert.rejects(
-    () => callProcess(root, environment, [
-      "goal", "progress", goal.id,
-      "--summary", "复核者试图修改执行进度",
-    ]),
-    /只能查看当前目标或提交复核结果/,
-  );
-
-  const verificationArguments = [
+  const rejected = await call(root, [
     "goal", "verify", goal.id,
-    "--delivery", reviewed.delivery!.id!,
+    "--delivery", reviewed.json.delivery.id,
     "--outcome", "passed",
-    "--summary", "独立复核已核对真实命令。",
-    "--criterion", "tests-pass::passed::ev_tests",
-  ];
-  await assert.rejects(
-    () => callProcess(root, environment, [
-      ...verificationArguments,
-      "--reviewer", "someone-else",
-    ]),
-    /不能用 --reviewer 冒用/,
-  );
-
-  const verified = await callProcess(root, environment, verificationArguments);
-  assert.equal(verified.json.autonomy.lastVerification.reviewer, "reviewer-proc");
-  assert.deepEqual(verified.json.autonomy.lastVerification.reviewerHerdr, {
-    session: "verifier-session",
-    workspaceId: "w9",
-    tabId: "w9:t2",
-    paneId: "w9:p2",
-    agent: "reviewer-proc",
+    "--summary", "独立复核已退役",
+  ]);
+  assert.equal(rejected.code, 2);
+  assert.deepEqual(rejected.json, {
+    error: "feature_removed",
+    message: rejected.json.message,
   });
+  assert.match(rejected.stderr, /^atte: feature_removed: /);
+  const saved = (await new WorkspaceService(root).read()).goals[0]!;
+  assert.deepEqual(saved.delivery, reviewed.json.delivery);
+});
+test("CLI caps review submissions at three rounds and a human can extend the limit", async () => {
+  const root = await fixture("atte-cli-review-rounds-");
+  const goal = (await call(root, [
+    "goal", "create",
+    "--title", "限制审查轮次",
+    "--project", "personal",
+  ])).json as Goal;
+  for (let round = 1; round <= 3; round++) {
+    if (round > 1)
+      assert.equal((await call(root, [
+        "goal", "rework", goal.id,
+        "--note", `第 ${round} 轮修改完成`,
+      ])).code, 0);
+    const reviewed = await call(root, [
+      "goal", "review", goal.id,
+      "--summary", `第 ${round} 轮交付，真实检查通过`,
+      "--check", `第 ${round} 轮检查::true::passed`,
+    ]);
+    assert.equal(reviewed.code, 0, reviewed.stderr);
+    assert.equal(reviewed.json.reviewRounds, round);
+  }
+  assert.equal((await call(root, [
+    "goal", "rework", goal.id,
+    "--note", "准备提交第四轮",
+  ])).code, 0);
+  const blocked = await call(root, [
+    "goal", "review", goal.id,
+    "--summary", "第四轮交付等待增加审查轮次",
+    "--check", "第四轮检查::true::passed",
+  ]);
+  assert.equal(blocked.code, 0, blocked.stderr);
+  assert.equal(blocked.json.reviewRounds, 3);
+  assert.equal(blocked.json.delivery.summary, "第 3 轮交付，真实检查通过");
+  assert.equal(blocked.json.attention.kind, "intervention");
+  assert.match(blocked.json.attention.summary, /审查已达到 3 轮上限/);
+  const extended = await call(root, [
+    "goal", "resolve", goal.id,
+    "--note", "用户明确允许增加第四轮审查",
+  ]);
+  assert.equal(extended.code, 0, extended.stderr);
+  assert.equal(extended.json.reviewLimit, 4);
+  assert.equal(extended.json.attention, null);
+  const fourth = await call(root, [
+    "goal", "review", goal.id,
+    "--summary", "第四轮交付，真实检查通过",
+    "--check", "第四轮检查::true::passed",
+  ]);
+  assert.equal(fourth.code, 0, fourth.stderr);
+  assert.equal(fourth.json.reviewRounds, 4);
 });
 test("owner launch is routed through the current concierge case", async () => {
   const root = await fixture("atte-cli-owner-launch-");
@@ -765,7 +672,7 @@ test("a scoped concierge with no active case can still record a direct new task"
   }
 });
 
-test("a managed concierge preserves explicit future and human-only intake without launching execution", async () => {
+test("a managed concierge preserves backlog intake and rejects retired self handling", async () => {
   const root = await fixture("cv-direct-pool-");
   const existing = (await call(root, ["ask", "当前案卷"])).json as Goal;
   await coordinator(root, existing.id, async () => {
@@ -777,15 +684,14 @@ test("a managed concierge preserves explicit future and human-only intake withou
     assert.equal(illicit.code, 1);
     assert.match(illicit.stderr, /尚未开始/);
     const personal = await call(root, ["direct", "--new", "--handling", "self", "这件事我亲自处理"]);
-    assert.equal(personal.code, 0, personal.stderr);
-    assert.equal(personal.json.mode, "manual");
-    assert.equal(personal.json.owner, "你");
-    assert.equal(personal.json.dispatch, undefined);
+    assert.equal(personal.code, 2);
+    assert.equal(personal.json.error, "feature_removed");
+    assert.match(personal.stderr, /^atte: feature_removed: /);
     const changeViaMessage = await call(root, ["direct", "--current", "--handling", "concierge", "补充备注"]);
     assert.equal(changeViaMessage.code, 1);
     assert.match(changeViaMessage.stderr, /不能改变执行安排/);
   });
-  assert.equal((await new WorkspaceService(root).read()).goals.length, 3);
+  assert.equal((await new WorkspaceService(root).read()).goals.length, 2);
 });
 
 test("Herdr board renders actionable attention without terminal escape codes", async () => {
@@ -811,7 +717,7 @@ test("Herdr board renders actionable attention without terminal escape codes", a
   assert.match(plain, /1 件需要你/);
   assert.match(plain, /周六还是周日上线/);
   assert.match(plain, /上线 external-approval/);
-  assert.match(plain, /n 新目标/);
+  assert.match(plain, /n 新事项/);
   assert.doesNotMatch(plain, /\x1b/);
 
   const waitingGoal = (await service.read()).goals.find(goal => goal.status === "waiting")!;

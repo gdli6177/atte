@@ -6,7 +6,7 @@ import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/p
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { completeAutonomySetup } from "./lib/autonomy-setup.mjs";
+import { waitForWorkspace } from "./lib/autonomy-setup.mjs";
 import { verifyReconciliationPresentation } from "./lib/reconciliation-presentation.mjs";
 
 const repo = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -70,37 +70,47 @@ async function launchInstalled(appPath, label) {
   );
   const workspace = join(trial, `${label}-workspace`);
   const home = join(trial, `${label}-home`);
+  const session = `atte-installer-${label}`;
   await mkdir(workspace); await mkdir(join(home, ".local/bin"), { recursive: true });
+  const environment = {
+    ...process.env, HOME: home,
+    XDG_CONFIG_HOME: join(home, ".config"),
+    XDG_STATE_HOME: join(home, ".local/state"),
+    ATTE_TEST_HOME: home, ATTE_TEST_USER_DATA: join(trial, `${label}-userData`),
+    ATTE_TEST_WORKSPACE: workspace, ATTE_HERDR_SESSION: session,
+  };
   const app = await electron.launch({
     executablePath: join(appPath, "Contents/MacOS/Atte"),
     args: [],
-    env: { ...process.env, ATTE_TEST_HOME: home,
-      ATTE_TEST_USER_DATA: join(trial, `${label}-userData`),
-      ATTE_TEST_WORKSPACE: workspace, ATTE_HERDR_SESSION: `atte-installer-${label}` },
+    env: environment,
     timeout: 60_000,
   });
   try {
     const page = await app.firstWindow();
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await completeAutonomySetup(page);
+    await waitForWorkspace(page);
     await page.getByRole("heading", { name: "现在，可以安心了。" }).waitFor();
+    await page.evaluate(() => window.atte.command({
+      type: "agents.configure", preferences: { concierge: "/missing/atte-installer-agent" },
+    }));
     assert.equal(await app.evaluate(({ app }) => app.getVersion()), version);
     assert.equal(await page.evaluate(() => typeof window.require), "undefined");
     await page.waitForFunction(() => window.atte.cliStatus().then(status => status.installed), null, {
       timeout: 30_000,
     });
     await page.getByRole("button", { name: "设置", exact: true }).click();
+    await page.getByRole("link", { name: "高级与维护", exact: true }).click();
     await page.getByRole("button", { name: "重新安装", exact: true }).waitFor();
     const cli = join(home, ".local/bin/atte");
     const installedState = JSON.parse(
       (await exec(cli, ["status", "--root", workspace, "--json"])).stdout,
     );
-    assert.equal(installedState.version, 4, `${label}: bundled CLI must use the current workspace format`);
+    assert.equal(installedState.version, 5, `${label}: bundled CLI must use the current workspace format`);
     const created = JSON.parse((await exec(cli, ["goal", "create", "--title", "安装包 CLI 验收",
       "--project", "personal", "--root", workspace, "--json"])).stdout);
     await writeFile(join(trial, `${label}-cli.json`), JSON.stringify(created));
-    await page.getByRole("button", { name: "全部目标", exact: true }).click();
+    await page.getByRole("button", { name: "全部事项", exact: true }).click();
     await page.getByText("安装包 CLI 验收", { exact: true }).waitFor();
     await verifyReconciliationPresentation(page, trial, label);
     await page.screenshot({ path: join(trial, `${label}-installed.png`) });
@@ -108,6 +118,8 @@ async function launchInstalled(appPath, label) {
     console.log(`${label}: installed app starts, icon/signature verified, bundled CLI installs and writes a goal`);
   } finally {
     await app.close();
+    await exec(join(appPath, "Contents/Resources/herdr"), ["--session", session, "server", "stop"],
+      { env: environment, timeout: 10_000 }).catch(() => {});
   }
 }
 let mounted = false;
@@ -127,5 +139,5 @@ try {
   console.log("Installer verification passed (DMG + ZIP + SHA-256)");
 } finally {
   if (mounted) await exec("hdiutil", ["detach", mount]);
-  await rm(trial, { recursive: true, force: true });
+  await rm(trial, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }

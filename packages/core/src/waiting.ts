@@ -1,4 +1,5 @@
 import type { Goal, WorkspaceState } from "./types.js";
+import { isReadOnlyGoal } from "./retirement.js";
 
 const identity = (value: string) => value.normalize("NFKC").trim().replace(/^@/, "").toLowerCase();
 const humanNames = new Set(["你", "我", "本人", "用户", "人", "human", "user", "me", "you", "myself"]);
@@ -47,7 +48,7 @@ export function leaveExternalWait(goal: Goal) {
 export function normalizeExternalWaits(state: WorkspaceState) {
   const agents = agentNames(state);
   for (const goal of state.goals) {
-    if (goal.status !== "waiting") continue;
+    if (isReadOnlyGoal(goal) || goal.status !== "waiting") continue;
     const party = goal.waitingFor;
     // Older versions overwrote the execution owner with the waiting party.
     if (goal.owner === party)

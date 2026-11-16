@@ -1,8 +1,6 @@
 export * from "./contracts.js";
 export * from "./launcher.js";
 export * from "./process.js";
-export * from "./orca/adapter.js";
-export * from "./orca/detection.js";
 export * from "./herdr/adapter.js";
 export * from "./herdr/server.js";
 export * from "./control/types.js";
@@ -13,3 +11,4 @@ export * from "./prompts.js";
 export * from "./recovery-channel.js";
 export * from "./session-host.js";
 export * from "./maintenance.js";
+export * from "./reminder-id.js";

@@ -94,9 +94,9 @@ test("Agent role preferences persist without changing running concierge referenc
   const { service } = await fixture();
   await service.execute({ type: "concierge.status", status: "ready",
     reference: { session: "atte-test", agent: "concierge", paneId: "w1:p1" } });
-  await service.execute({ type: "agents.configure", preferences: { concierge: "codex --model my-model", owner: "omp --model other-model", worker: "qodercli" } });
+  await service.execute({ type: "agents.configure", preferences: { concierge: "codex --model my-model", owner: "omp --model other-model" } });
   const state = await service.read();
-  assert.deepEqual(state.agents, { concierge: "codex --model my-model", owner: "omp --model other-model", worker: "qodercli" });
+  assert.deepEqual(state.agents, { concierge: "codex --model my-model", owner: "omp --model other-model" });
   assert.equal(state.concierge.paneId, "w1:p1");
   await assert.rejects(service.execute({ type: "agents.configure", preferences: { concierge: "codex; echo injected" } }), /无效/);
 });
@@ -191,7 +191,7 @@ test("new goals no longer use workflow definitions", async () => {
   const { service } = await fixture();
   const item = await create(service);
   const state = await service.read();
-  assert.equal(state.version, 4);
+  assert.equal(state.version, 5);
   assert.deepEqual(state.goals[0]?.steps, []);
   assert.equal(item.mode, "concierge");
   assert.equal(state.concierge.session, "atte");
@@ -203,7 +203,7 @@ test("new goals no longer use workflow definitions", async () => {
       workflowId: "feature",
       mode: "concierge",
     },
-  }), /工序已移除/);
+  }), /feature_removed|工序已移除/);
 });
 test("waiting only becomes attention at the reminder time", async () => {
   const { service } = await fixture();
@@ -351,10 +351,10 @@ test("concurrent services retain both updates and state file is valid", async ()
   assert.equal(
     JSON.parse(await readFile(join(root, ".atte/state.json"), "utf8"))
       .version,
-    4,
+    5,
   );
 });
-test("incompatible state is archived and a recoverable v2 workspace is created", async () => {
+test("invalid state stops without archiving or replacing the workspace", async () => {
   const { root, service } = await fixture(),
     legacy = join(root, ".atte");
   await mkdir(join(legacy, "attachments"), { recursive: true });
@@ -364,110 +364,70 @@ test("incompatible state is archived and a recoverable v2 workspace is created",
   );
   await writeFile(join(legacy, "attachments", "legacy.txt"), "preserved");
 
-  const recovered = await service.read();
-  assert.equal(recovered.version, 4);
-  assert.equal(recovered.recovery?.reason, "unsupported-version");
-  assert.match(recovered.recovery?.detail ?? "", /版本 1/);
-  assert.ok(recovered.recovery?.archivedPath);
-  assert.equal((await stat(recovered.recovery!.archivedPath)).isDirectory(), true);
-  assert.deepEqual(
-    JSON.parse(await readFile(join(recovered.recovery!.archivedPath, "state.json"), "utf8")),
-    { version: 1, tasks: [{ id: "legacy-task" }] },
-  );
-  assert.equal(
-    await readFile(join(recovered.recovery!.archivedPath, "attachments/legacy.txt"), "utf8"),
-    "preserved",
-  );
-  assert.equal(JSON.parse(await readFile(join(legacy, "state.json"), "utf8")).version, 4);
-  assert.equal((await service.read()).recovery?.id, recovered.recovery?.id);
-  assert.equal(
-    (await readdir(root)).filter(name => name.startsWith(".atte.backup-")).length,
-    1,
-  );
-  await service.execute({ type: "workspace.recovery.dismiss" });
-  assert.equal((await service.read()).recovery, undefined);
+  await assert.rejects(service.read(), /版本 1/);
+  assert.deepEqual(JSON.parse(await readFile(join(legacy, "state.json"), "utf8")),
+    { version: 1, tasks: [{ id: "legacy-task" }] });
+  assert.equal(await readFile(join(legacy, "attachments/legacy.txt"), "utf8"), "preserved");
+  assert.equal((await readdir(root)).filter(name => name.startsWith(".atte.backup-")).length, 0);
 });
 
-test("concurrent readers archive an incompatible workspace only once", async () => {
-  const { root } = await fixture(),
-    legacy = join(root, ".atte");
+test("concurrent readers stop on the same incompatible workspace without archiving", async () => {
+  const { root } = await fixture(), legacy = join(root, ".atte");
   await mkdir(legacy, { recursive: true });
-  await writeFile(
-    join(legacy, "state.json"),
-    JSON.stringify({ version: 1, tasks: [{ id: "legacy-task" }] }),
-  );
-
-  const [first, second] = await Promise.all([
+  const raw = JSON.stringify({ version: 1, tasks: [{ id: "legacy-task" }] });
+  await writeFile(join(legacy, "state.json"), raw);
+  const [first, second] = await Promise.allSettled([
     new WorkspaceService(root).read(),
     new WorkspaceService(root).read(),
   ]);
-  assert.equal(first.recovery?.id, second.recovery?.id);
-  assert.equal(first.recovery?.archivedPath, second.recovery?.archivedPath);
-  assert.equal(
-    (await readdir(root)).filter(name => name.startsWith(".atte.backup-")).length,
-    1,
-  );
+  assert.equal(first.status, "rejected");
+  assert.equal(second.status, "rejected");
+  assert.equal(await readFile(join(legacy, "state.json"), "utf8"), raw);
+  assert.equal((await readdir(root)).filter(name => name.startsWith(".atte.backup-")).length, 0);
 });
 
-test("a first write against incompatible state recovers under the same workspace lock", async () => {
+test("a first write against incompatible state fails without replacing it", async () => {
   const { root, service } = await fixture();
   await mkdir(join(root, ".atte"), { recursive: true });
-  await writeFile(join(root, ".atte/state.json"), JSON.stringify({ version: 1, tasks: [] }));
-
-  const item = await create(service);
-  const state = await service.read();
-  assert.equal(state.goals[0]?.id, item.id);
-  assert.equal(state.recovery?.reason, "unsupported-version");
-  assert.equal((await readdir(root)).filter(name => name.startsWith(".atte.backup-")).length, 1);
+  const raw = JSON.stringify({ version: 1, tasks: [] });
+  await writeFile(join(root, ".atte/state.json"), raw);
+  await assert.rejects(create(service), /版本 1/);
+  assert.equal(await readFile(join(root, ".atte/state.json"), "utf8"), raw);
+  assert.equal((await readdir(root)).filter(name => name.startsWith(".atte.backup-")).length, 0);
 });
 
-test("legacy event-only workspaces are archived before a new snapshot is written", async () => {
+test("event-only workspaces are not silently archived", async () => {
   const { root, service } = await fixture();
   await mkdir(join(root, ".atte"), { recursive: true });
-  await writeFile(
-    join(root, ".atte/events.jsonl"),
-    `${JSON.stringify({ type: "workspace_changed", state: { version: 1, tasks: [] } })}\n`,
-  );
-  const recovered = await service.read();
-  assert.equal(recovered.recovery?.reason, "legacy-event-log");
-  assert.match(
-    await readFile(join(recovered.recovery!.archivedPath, "events.jsonl"), "utf8"),
-    /"version":1/,
-  );
+  const raw = `${JSON.stringify({ type: "workspace_changed", state: { version: 1, tasks: [] } })}\n`;
+  await writeFile(join(root, ".atte/events.jsonl"), raw);
+  await assert.rejects(service.read(), /旧版或未完成事件日志/);
+  assert.equal(await readFile(join(root, ".atte/events.jsonl"), "utf8"), raw);
 });
 
-test("unreadable state JSON is preserved instead of blocking the workspace", async () => {
+test("unreadable state JSON is preserved and blocks instead of being archived", async () => {
   const { root, service } = await fixture();
   await mkdir(join(root, ".atte"), { recursive: true });
   await writeFile(join(root, ".atte/state.json"), "{not-json");
-  const recovered = await service.read();
-  assert.equal(recovered.recovery?.reason, "invalid-state");
-  assert.equal(
-    await readFile(join(recovered.recovery!.archivedPath, "state.json"), "utf8"),
-    "{not-json",
-  );
+  await assert.rejects(service.read(), /无法解析|JSON/);
+  assert.equal(await readFile(join(root, ".atte/state.json"), "utf8"), "{not-json");
 });
-test("future versions and malformed nested snapshots are also protected", async () => {
-  for (const [version, goals] of [[5, []], [3, [null]]] as const) {
+
+test("future versions and malformed nested snapshots are not archived", async () => {
+  for (const [version, goals] of [[6, []], [3, [null]]] as const) {
     const { root, service } = await fixture();
     await mkdir(join(root, ".atte"), { recursive: true });
-    await writeFile(join(root, ".atte/state.json"), JSON.stringify({
-      version,
-      name: "test",
-      projects: [],
-      workflows: [],
-      goals,
-      decisions: [],
+    const raw = JSON.stringify({
+      version, name: "test", projects: [], workflows: [], goals, decisions: [],
       concierge: { session: "atte", status: "not_ready" },
-    }));
-    const recovered = await service.read();
-    assert.equal(recovered.version, 4);
-    assert.equal(recovered.recovery?.reason,
-      version === 5 ? "unsupported-version" : "invalid-state");
-    assert.equal((await readdir(root)).filter(name => name.startsWith(".atte.backup-")).length, 1);
+    });
+    await writeFile(join(root, ".atte/state.json"), raw);
+    await assert.rejects(service.read());
+    assert.equal(await readFile(join(root, ".atte/state.json"), "utf8"), raw);
+    assert.equal((await readdir(root)).filter(name => name.startsWith(".atte.backup-")).length, 0);
   }
 });
-test("a compatible v4 snapshot is reused without creating a backup", async () => {
+test("a compatible v5 snapshot is reused without creating a backup", async () => {
   const { root, service } = await fixture();
   const created = await create(service);
   const second = await service.read();

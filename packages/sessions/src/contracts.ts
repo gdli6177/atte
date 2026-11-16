@@ -1,5 +1,5 @@
 import type {
-  LocalProcessIdentity, SceneReferenceV1, SessionBackendId, SkillRole,
+  LocalProcessIdentity, SceneReferenceV1,
 } from "../../core/src/index.js";
 
 export type Compatibility = "missing" | "unverified" | "incompatible" | "compatible";
@@ -13,11 +13,10 @@ export interface SessionCapabilities {
   nativeResume: boolean;
 }
 export interface BackendDetection {
-  id: SessionBackendId;
+  id: "herdr";
   status: Compatibility;
   version?: string;
   path?: string;
-  appPath?: string;
   capabilities: SessionCapabilities;
   detail?: string;
   runtime?: RuntimeIdentity;
@@ -25,7 +24,7 @@ export interface BackendDetection {
 export interface RuntimeIdentity {
   id: string;
   generation: string;
-  backend: SessionBackendId;
+  backend: "herdr";
   version: string;
   process?: LocalProcessIdentity;
 }
@@ -41,7 +40,7 @@ export interface CreateSceneRequest {
   installationId: string;
   backendEpoch: number;
   attemptId: string;
-  role: SkillRole;
+  role: "concierge" | "owner";
   goalId?: string;
   cwd: string;
   title: string;
@@ -70,8 +69,6 @@ export interface SendSceneRequest {
   scene: SceneReferenceV1;
   text: string;
   payloadSha256: string;
-  /** Only the original upstream request can be retried. */
-  retry?: { requestId: string; incarnationId: string; payloadSha256: string };
 }
 export interface SendReceipt {
   status: "rejected" | "accepted" | "started" | "unknown";
@@ -79,7 +76,6 @@ export interface SendReceipt {
   payloadSha256: string;
   scene: SceneReferenceV1;
   at: string;
-  upstreamRequestId?: string;
   detail?: string;
 }
 export interface FocusResult {
@@ -108,7 +104,7 @@ export type AgentResumeResult =
   | { status: "supported"; agent: string; kind: "id" | "path"; value: string }
   | { status: "unsupported" | "unknown"; detail?: string };
 export interface SessionAdapter {
-  readonly id: SessionBackendId;
+  readonly id: "herdr";
   detect(): Promise<BackendDetection>;
   connect(input: RuntimeConnection): Promise<RuntimeIdentity>;
   create(input: CreateSceneRequest): Promise<CreateSceneResult>;
@@ -122,9 +118,11 @@ export interface SessionAdapter {
 }
 export type SessionErrorCode =
   | "backend_missing" | "backend_unverified" | "backend_incompatible"
-  | "backend_unreachable" | "backend_switch_in_progress" | "backend_busy"
+  | "backend_unreachable" | "backend_unsupported" | "backend_busy" | "backend_configuration_invalid"
+  | "backend_installation_mismatch"
+  | "scene_read_only"
   | "scene_identity_mismatch" | "launch_unconfirmed" | "launch_failed" | "delivery_unconfirmed"
-  | "focus_failed" | "switch_recovery_required" | "stale_backend_epoch";
+  | "focus_failed" | "stale_backend_epoch";
 export class SessionError extends Error {
   constructor(readonly code: SessionErrorCode, message: string) {
     super(`${code}: ${message}`);

@@ -4,7 +4,9 @@ import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionControl, SessionRuntime, type SessionAdapter, type CreateSceneRequest, type SendSceneRequest } from "../src/index.js";
-import { WorkspaceService, type Goal, type SceneReferenceV1 } from "../../core/src/index.js";
+import {
+  ReadOnlyGoalError, WorkspaceService, goalCanExecute, type Goal, type SceneReferenceV1,
+} from "../../core/src/index.js";
 
 async function fixture(t: test.TestContext) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "cv-runtime-")));
@@ -192,15 +194,8 @@ test("consultation restores a review scene while preserving the same attention a
     checks: [{ name: "核对", command: "test", result: "passed", note: "实际核对通过" }],
   }, actor: "owner" });
   const before = (await f.service.read()).goals[0]!;
-  await f.control.operation({ workspace: f.workspace, requestId: "prepare-test-switch", kind: "create",
-    authority: undefined }, async () => {});
-  // Use a control instance that is still ready before committing the new
-  // epoch. Real switches own an explicit authority for this operation.
-  const changing = new SessionControl(join(f.control.directory, "..", "test-switch-control"));
-  await changing.initialize();
-  const switchControl = new SessionControl(f.control.directory);
-  void switchControl;
-  void changing;
+  await f.control.operation({ workspace: f.workspace, requestId: "admitted-noop", kind: "create",
+    goalId: f.goal.id }, async () => {});
   await f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-consult", consultationOnly: true });
   const after = (await f.service.read()).goals[0]!;
   assert.equal(after.status, "review");
@@ -231,43 +226,37 @@ test("explicit recovery retires only a confirmed exited owner and preserves the 
   assert.deepEqual(f.stopped, []);
 });
 
-test("a pending decision restores a consultation-only owner after a backend handoff", async t => {
+test("registering an old Orca workspace preserves its read-only binding and cannot create a Herdr owner", async t => {
   const f = await fixture(t);
-  const original = await f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-old" });
   await f.service.execute({ type: "goal.decide", goalId: f.goal.id,
     question: "采用 A 还是 B？", actor: "owner-old" });
   const before = (await f.service.read()).goals[0]!;
-  await f.service.execute({ type: "backend.commit", binding: {
-    installationId: f.config.installationId, backend: "orca", epoch: 1,
-    scopeGeneration: "next-generation", status: "resuming", operationId: "switch-one",
-  }, handoffs: { [f.goal.id]: {
-    operationId: "switch-one", checkpointRevision: before.revision ?? 1,
-    sourceScene: original.scene, method: "deferred", status: "skipped",
-  } } });
-  // The runtime fixture uses one adapter for both IDs. Advance only its
-  // persisted control fixture; the real transition's epoch/authority tests
-  // live in backend-switch.test.ts.
-  const controlPath = join(f.control.directory, "backend.json");
-  const control = JSON.parse(await readFile(controlPath, "utf8"));
-  await writeFile(controlPath, JSON.stringify({ ...control, selected: "orca", epoch: 1, scopeGeneration: "next-generation" }), { mode: 0o600 });
-  const orca: SessionAdapter = { ...f.adapter, id: "orca", create: async input => {
-    const result = await f.adapter.create(input);
-    if (!result.scene) throw new Error("Fixture must create a scene");
-    return { ...result, scene: { ...result.scene, backend: "orca", locator: {
-      kind: "orca", repoId: "repo", worktreeId: "worktree", terminalHandle: "terminal", executionHostId: "local",
-      incarnationId: "incarnation",
-    } } };
-  } };
-  const restored = await new SessionRuntime({ ...f.runtime.options, adapter: async () => orca }).launchOwner({ goalId: f.goal.id,
-    name: "owner-consult-new", consultationOnly: true });
-  const after = (await f.service.read()).goals[0]!;
-  assert.notEqual(restored.scene.attemptId, original.scene.attemptId);
+  const statePath = join(f.workspace, ".atte", "state.json");
+  const raw = JSON.parse(await readFile(statePath, "utf8"));
+  raw.backendBinding = {
+    installationId: "legacy-orca-installation", backend: "orca", epoch: 0,
+    scopeGeneration: "legacy-orca-scope", status: "active",
+  };
+  raw.goals[0].scene = {
+    version: 1, backend: "orca", installationId: "legacy-orca-installation", backendEpoch: 0,
+    runtimeId: "orca-runtime", runtimeGeneration: "orca-generation",
+    bindingId: "orca-binding", attemptId: "orca-attempt",
+    locator: { kind: "orca", repoId: "repo", worktreeId: "worktree",
+      terminalHandle: "terminal", executionHostId: "local", incarnationId: "incarnation" },
+  };
+  await writeFile(statePath, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+  await f.control.registerWorkspace(f.workspace);
+  await assert.rejects(f.runtime.launchOwner({ goalId: f.goal.id,
+    name: "owner-consult-new", consultationOnly: true }), /只读|旧后端|不属于当前 Herdr/);
+  const afterState = await f.service.read(), after = afterState.goals[0]!;
+  assert.equal(after.scene?.bindingId, "orca-binding");
+  assert.equal(afterState.backendBinding?.backend, "orca", "register cannot overwrite old Orca history");
+  assert.equal(afterState.backendBinding?.installationId, "legacy-orca-installation");
   assert.deepEqual(after.attention, before.attention);
-  assert.equal(after.status, "active");
-  assert.equal(after.owner, "owner-consult-new");
-  assert.match(f.sent.at(-1)!.text, /只读取 goal show/);
-  assert.match(f.sent.at(-1)!.text, /scene-reply/);
-  assert.doesNotMatch(f.sent.at(-1)!.text, /执行目标 .*隔离目标/);
+  assert.equal(after.status, before.status);
+  assert.equal(after.owner, before.owner);
+  assert.equal(f.created.length, 0, "no Herdr scene is fabricated from an old Orca binding");
+  assert.equal(f.sent.length, 0);
 });
 
 test("completion captures native resume before closing only the goal's verified scene", async t => {
@@ -382,8 +371,7 @@ test("native resume never replaces a wrapper and preserves configured argv", asy
 async function writeForeignScene(
   f: { workspace: string; service: WorkspaceService; config: { installationId: string } },
   goalId: string,
-  backend: "herdr" | "orca",
-  handoff: boolean,
+  backend: "orca",
 ) {
   const path = join(f.workspace, ".atte", "state.json");
   const raw = JSON.parse(await readFile(path, "utf8"));
@@ -392,37 +380,118 @@ async function writeForeignScene(
     version: 1, backend, installationId: f.config.installationId, backendEpoch: 0,
     runtimeId: `${backend}-runtime`, runtimeGeneration: `${backend}-generation`,
     bindingId: `${backend}-binding`, attemptId: `${backend}-attempt`,
-    locator: backend === "herdr"
-      ? { kind: "herdr", session: "old", workspaceId: "w1", tabId: "t1", paneId: "p1" }
-      : { kind: "orca", repoId: "r1", worktreeId: "r1::/tmp/w", terminalHandle: "term-1",
-        executionHostId: "local", incarnationId: "inc-1" },
+    locator: { kind: "orca", repoId: "r1", worktreeId: "r1::/tmp/w", terminalHandle: "term-1",
+      executionHostId: "local", incarnationId: "inc-1" },
   };
-  if (handoff) goal.backendHandoff = {
-    operationId: "handoff-op", status: "skipped", method: "deferred", at: new Date().toISOString(),
-  };
-  else delete goal.backendHandoff;
   const { writeFile } = await import("node:fs/promises");
   await writeFile(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
 }
 
-test("a scene left on the previous backend is retired after a handoff and replaced on the current one", async t => {
+test("an old Orca scene cannot be retired or replaced by a new Herdr owner", async t => {
   const f = await fixture(t);
-  await writeForeignScene(f, f.goal.id, "orca", true);
+  await writeForeignScene(f, f.goal.id, "orca");
   const before = (await f.service.read()).goals[0]!;
   assert.equal(before.scene?.backend, "orca");
-  const recovered = await f.runtime.recoverOwnerForConsultation(f.goal.id);
-  assert.equal(recovered.scene.backend, "herdr", "the current backend owns the new scene");
-  assert.equal(f.created.length, 1);
-  const goal = (await f.service.read()).goals[0]!;
-  assert.equal(goal.scene?.backend, "herdr");
-  assert.equal(goal.sceneHistory?.some(scene => scene.backend === "orca"), true);
+  assert.equal(goalCanExecute(before), false);
+  assert.throws(() => { throw new ReadOnlyGoalError(before.id); }, /goal_read_only/);
+  await assert.rejects(f.runtime.recoverOwnerForConsultation(f.goal.id), /只读历史目标|旧后端/);
+  await assert.rejects(f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-new" }), /只读历史目标/);
+  const after = (await f.service.read()).goals[0]!;
+  assert.deepEqual(after.scene, before.scene, "history is not mutated");
+  assert.equal(after.sceneHistory?.some(scene => scene.backend === "orca") ?? false, false);
+  assert.equal(f.created.length, 0);
+  assert.deepEqual(f.stopped, []);
 });
 
-test("a foreign-backend scene without a handoff is refused with an actionable message", async t => {
+test("an old Orca scene cannot receive a Herdr send or recreate an owner", async t => {
   const f = await fixture(t);
-  await writeForeignScene(f, f.goal.id, "orca", false);
-  await assert.rejects(f.runtime.recoverOwnerForConsultation(f.goal.id), /另一个会话后端/);
+  await writeForeignScene(f, f.goal.id, "orca");
+  await assert.rejects(f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-new" }), /只读历史目标/);
   assert.equal(f.created.length, 0, "no second owner is created while the old scene is unverified");
   const goal = (await f.service.read()).goals[0]!;
   assert.equal(goal.scene?.backend, "orca");
+  await assert.rejects(f.runtime.send(goal.scene!, "old-orca-send", "不能重放"), /旧后端/);
+  assert.equal(f.sent.length, 0);
 });
+
+test("a core-marked read-only history goal is rejected before a Herdr scene or prompt exists", async t => {
+  const f = await fixture(t);
+  const statePath = join(f.workspace, ".atte", "state.json");
+  const raw = JSON.parse(await readFile(statePath, "utf8"));
+  raw.goals[0].readOnly = true;
+  await writeFile(statePath, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+  await assert.rejects(f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-history" }),
+    /只读历史目标/);
+  assert.equal(f.created.length, 0);
+  assert.equal(f.sent.length, 0);
+});
+
+for (const terminalCommand of ["goal.drop", "goal.complete"] as const) {
+  test(`migration-held goals reject execution until a human ends them with ${terminalCommand}`, async context => {
+    const setup = await fixture(context);
+    const concierge = await setup.runtime.prepareConcierge();
+    const { scene } = await setup.runtime.launchOwner({ goalId: setup.goal.id, name: "owner-before-migration" });
+    const originalConcierge = new SessionRuntime({
+      ...setup.runtime.options,
+      managedContext: {
+        installationId: setup.config.installationId, backend: "herdr", epoch: setup.config.epoch,
+        scopeGeneration: setup.config.scopeGeneration, role: "concierge",
+        attemptId: concierge.attemptId, goalId: setup.goal.id,
+      },
+      hostExecution: true,
+    });
+    assert.equal((await originalConcierge.send(scene, "before-migration", "核对旧现场")).status, "started");
+    const statePath = join(setup.workspace, ".atte", "state.json");
+    const raw = JSON.parse(await readFile(statePath, "utf8"));
+    raw.version = 4;
+    raw.goals[0].kind = "release";
+    await writeFile(statePath, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+    const migrated = await setup.service.read();
+    assert.equal(migrated.version, 5);
+    assert.equal(migrated.goals[0]!.executionHold, "migration-confirmation");
+    assert.equal(goalCanExecute(migrated.goals[0]!), false);
+    const sentBefore = setup.sent.length;
+    const createdBefore = setup.created.length;
+    await assert.rejects(
+      originalConcierge.send(scene, "after-migration", "未经人工确认继续旧目标"),
+      /goal_confirmation_required/,
+    );
+    await assert.rejects(
+      originalConcierge.launchOwner({ goalId: setup.goal.id, name: "owner-after-migration" }),
+      /goal_confirmation_required/,
+    );
+    await assert.rejects(
+      setup.runtime.recoverOwnerForConsultation(setup.goal.id),
+      /goal_confirmation_required/,
+    );
+    await assert.rejects(
+      setup.runtime.notifyGoal(migrated.goals[0]!, "继续旧目标"),
+      /goal_confirmation_required/,
+    );
+    await assert.rejects(setup.runtime.close(scene, setup.goal.id), /goal_confirmation_required/);
+    assert.equal(setup.sent.length, sentBefore, "No execution prompt reaches the original owner.");
+    assert.equal(setup.created.length, createdBefore, "No replacement owner or concierge is created.");
+    assert.deepEqual(setup.stopped, [], "The original owner is not closed.");
+    assert.equal((await originalConcierge.inspect([scene]))[0]?.identity, "match");
+    assert.equal((await setup.runtime.focus(scene)).status, "focused");
+    assert.deepEqual(await setup.service.read(), migrated, "Inspection and rejected sends preserve the hold and business state.");
+
+    const ended = await setup.service.execute({
+      type: terminalCommand, goalId: setup.goal.id, actor: "你", note: "用户明确结束这个旧目标。",
+    }) as Goal;
+    assert.equal(ended.status, terminalCommand === "goal.drop" ? "dropped" : "completed");
+    assert.equal(ended.executionHold, undefined, "A human ending the goal clears its migration hold.");
+    await setup.runtime.close(scene, setup.goal.id);
+    assert.deepEqual(setup.stopped, [scene.bindingId], "Only the original Herdr owner is closed.");
+    assert.equal((await setup.service.read()).goals[0]!.scene, undefined);
+    const restarted = await setup.service.execute({
+      type: "goal.restart", goalId: setup.goal.id, note: "用户明确要求按普通目标重新开始。",
+    }) as Goal;
+    assert.equal(restarted.status, "active");
+    assert.equal(restarted.executionHold, undefined);
+    assert.equal(restarted.kind, "delivery");
+    assert.equal(restarted.dispatch?.kind, "restart");
+    assert.equal(restarted.dispatch?.status, "pending");
+    assert.equal(goalCanExecute(restarted), true);
+  });
+}

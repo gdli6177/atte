@@ -13,6 +13,7 @@ import { join } from "node:path";
 import {
   spoolAgentRuntimeEvents,
   agentReceiptMarker,
+  WorkspaceStore,
   WorkspaceService,
   type AgentRuntimeEventV1,
   type Goal,
@@ -160,6 +161,7 @@ test("a settled turn reminds once, then hands protocol_missing to the concierge"
   const clock = fakeTimers();
   clock.setNow(base);
   const reminders: string[] = [], concierge: string[] = [];
+  let watchdogReports = 0;
   await service.execute({
     type: "agent.runtime.event",
     event: event(goalId, 1, "turn.started", {
@@ -178,14 +180,27 @@ test("a settled turn reminds once, then hands protocol_missing to the concierge"
     service: () => service,
     workspace: () => root,
     remindOwner: async (_goal, prompt) => { reminders.push(prompt); },
-    notifyConcierge: async (_goal, detail) => { concierge.push(detail); },
+    notifyConcierge: async (goal, detail) => {
+      concierge.push(detail);
+      const current = (await service.read()).goals.find(item => item.id === goal.id);
+      const basis = current?.watchdog?.basis;
+      if (!basis) throw new Error("missing watchdog basis");
+      await service.execute({
+        type: "watchdog.report",
+        goalId: goal.id,
+        at: new Date(clock.now).toISOString(),
+        basis,
+        outcome: "contacted",
+      });
+      watchdogReports += 1;
+    },
     now: () => clock.now,
     setTimer: clock.setTimer,
     clearTimer: clock.clearTimer,
   });
   await broker.recover();
   assert.equal(clock.scheduled.filter(item => !item.cleared).length, 1);
-  assert.equal(clock.scheduled[0]!.delay, 5_200);
+  assert.equal(clock.scheduled[0]!.delay, 10_200);
 
   await clock.fireFirstOpen();
   await eventually(async () => {
@@ -211,6 +226,7 @@ test("a settled turn reminds once, then hands protocol_missing to the concierge"
   assert.equal(state.status, "active");
   assert.equal(state.attention, null);
   assert.equal(concierge.length, 1);
+  assert.equal(watchdogReports, 1);
   assert.equal(state.watchdog?.attemptedAt !== undefined, true);
   await broker.stop();
 });
@@ -652,6 +668,30 @@ test("restart after reserving a reminder does not resend an uncertain delivery",
   await clock.fireFirstOpen();
   await eventually(() => assert.equal(concierge, 1));
   assert.equal(reminders, 0);
+  await broker.stop();
+});
+
+test("legacy read-only goals never recover receipts or schedule reminders", async () => {
+  const base = Date.now(), { root, service, goalId } = await fixture(base);
+  for (const item of [
+    event(goalId, 1, "turn.started", { turnId: "legacy" }),
+    event(goalId, 2, "turn.settled", { turnId: "legacy" }),
+  ]) await service.execute({ type: "agent.runtime.event", event: item });
+  await new WorkspaceStore(root).update("mark legacy read-only", state => {
+    const goal = state.goals.find(item => item.id === goalId)!;
+    goal.readOnly = true;
+    goal.readOnlyReason = "legacy-orca";
+  });
+  const clock = fakeTimers();
+  const broker = new AgentRuntimeBroker({
+    service: () => service, workspace: () => root,
+    remindOwner: async () => { assert.fail("a legacy goal must not receive a reminder"); },
+    notifyConcierge: async () => { assert.fail("a legacy goal must not be escalated"); },
+    now: () => clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer,
+  });
+  await broker.recover();
+  await broker.refresh();
+  assert.equal(clock.scheduled.length, 0);
   await broker.stop();
 });
 

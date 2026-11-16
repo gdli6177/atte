@@ -11,7 +11,7 @@ atte goal wait "$GOAL_ID" --reason "$WAITING_REASON" --owner "$WAITING_OWNER" --
 
 Use `progress` after an observable result, not as a heartbeat. Use `wait` only while a named external third party (a contact, organization or external service) outside the human and every Atte Agent is blocking work. `--owner` is required and stores the external party in `waitingFor`; it does not replace the execution owner. The CLI rejects missing targets, the human, the concierge and registered Agents.
 
-Human choices, confirmations, information or manual actions use `decide`; delivery uses `review`. Neither belongs in external waiting. Coordination with an owner or worker stays `active`; ending a turn or an idle terminal never proves external waiting. `remind` changes only the schedule, including on active goals.
+Human choices, confirmations, information or manual actions use `decide`; delivery uses `review`. Neither belongs in external waiting. Coordination with an owner stays `active`; ending a turn or an idle terminal never proves external waiting. `remind` changes only the schedule, including on active goals.
 
 Handing a waiting concierge goal back via `message`, `direct` or follow-up returns it to `active` and clears the old wait and reminder while an Agent processes it. Read the waiting activity/history to recover the original party and time; explicitly re-establish `wait` with an appropriate reminder if it is still an external dependency. Do not infer external completion from the message alone.
 
@@ -53,28 +53,10 @@ atte goal ship "$GOAL_ID" --operation merge --checks passed --root "$WORKSPACE"
 
 ## Work methods
 
-```sh
-atte skill list --root "$WORKSPACE" --json
-atte skill show "$PACK_ID" --root "$WORKSPACE" --json
-atte skill resolve "$GOAL_ID" --role owner --root "$WORKSPACE" --json
-atte skill attach "$GOAL_ID" "$PACK_ID" --root "$WORKSPACE"
-atte skill run "$PACK_ID" "$SCRIPT_ID" --goal "$GOAL_ID" --root "$WORKSPACE"
-```
-
-The current-case concierge may attach or detach a matching local method for its own
-goal. Owners and verifiers may read the catalog and resolve their current goal; only
-the managed current goal may run an installed, attached and approved script.
-
-Built-in role and process methods are selected automatically from the goal type. Local
-methods are additional, user-installed instructions for `owner` and/or `verifier`;
-they cannot claim the concierge role. At most eight local methods may be attached.
-Missing, disabled or changed packs fail closed before a new owner attempt starts.
-
-Script execution requires the script's current SHA-256 to have been approved by the
-human. It runs with a minimal environment, bounded output and a 120-second timeout.
-The CLI records an audit activity with the exit code and bounded stdout / stderr.
-Success never changes goal lifecycle and is not delivery, acceptance or release
-authorization.
+Atte 0.14 retires local method packs, method attachment, script approval and
+`atte skill run`. The concierge and owner instructions are built in. Use the current
+goal, project rules and retained protocol commands directly; do not attempt retired
+commands or reconstruct an executable method loader.
 
 ## Herdr owner session
 

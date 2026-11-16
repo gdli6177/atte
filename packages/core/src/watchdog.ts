@@ -1,5 +1,6 @@
 import { newId } from "./model.js";
 import type { Goal, WatchdogReason } from "./types.js";
+import { goalCanExecute } from "./retirement.js";
 
 const DEFAULT_NO_PROGRESS_MINUTES = 30;
 const OWNER_START_GRACE = 60_000;
@@ -48,7 +49,7 @@ function reasonLabel(reason: WatchdogReason, noProgressMinutes: number) {
           : `目标 ${noProgressMinutes} 分钟没有写回实质进展`;
 }
 function inspectable(goal: Goal) {
-  return goal.mode === "concierge" && goal.status === "active";
+  return goalCanExecute(goal) && goal.status === "active";
 }
 function record(goal: Goal, at: string, text: string) {
   goal.activities.push({ id: newId("act"), at, actor: "巡检", kind: "watchdog", text });

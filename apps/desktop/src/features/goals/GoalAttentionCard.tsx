@@ -22,6 +22,7 @@ import type { GoalReplyMode } from "./GoalReplyComposer.js";
 import { presentGoal, time } from "./goalPresentation.js";
 import type { GoalDetailService } from "./goalService.js";
 import { attentionRequest } from "../../../../../packages/core/src/model.js";
+import { isReadOnlyGoal } from "../../../../../packages/core/src/retirement.js";
 import { formatDecisionText } from "./decisionText.js";
 import { IconButton } from "../../ui/index.js";
 
@@ -46,10 +47,12 @@ export function GoalAttentionCard({
 }) {
   const [replyMode, setReplyMode] = useState<GoalReplyMode | null>(null);
   const view = presentGoal(goal, state);
-  const active = view.needsDecision || view.needsIntervention || view.dueFollowUp || view.dispatchFailed || goal.status === "review";
+  const readOnly = isReadOnlyGoal(goal);
+  const active = !readOnly && (view.needsDecision || view.needsIntervention || view.dueFollowUp || view.dispatchFailed || goal.status === "review");
   useEffect(() => {
     if (!active) onClose();
   }, [active]);
+  if (!active) return null;
   return (
     <Dialog.Root open onOpenChange={open => { if (!open) onClose(); }}>
       <Dialog.Portal>
@@ -61,11 +64,11 @@ export function GoalAttentionCard({
               <p><small>注意力 · {view.projectName}</small><strong>{view.label}</strong></p>
             </div>
             <div className="goal-detail-header-actions">
-              <button type="button" className="goal-scene-button" disabled={busy}
+              {!readOnly && <button type="button" className="goal-scene-button" disabled={busy}
                 title={hasGoalScene(goal) ? `打开 ${goal.owner} 的工作现场` : "打开当前工作区的管家现场"}
                 onClick={() => void service.openHerdr(goal.id, needsSceneRecovery(goal))}>
                 <SquareTerminal size={15} /><span>{goalSceneLabel(goal)}</span>
-              </button>
+              </button>}
               <Dialog.Close asChild><IconButton label="关闭"><X size={18} /></IconButton></Dialog.Close>
             </div>
           </header>

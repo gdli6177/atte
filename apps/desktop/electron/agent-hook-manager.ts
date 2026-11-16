@@ -18,10 +18,14 @@ import { promisify } from "node:util";
 import parseArgsStringToArgv from "string-argv";
 import type { AgentRuntimeAdapterId } from "../../../packages/core/src/types.js";
 import { withLock } from "../../../packages/core/src/storage.js";
+import {
+  HOOK_DIAGNOSTIC_REASONS,
+  HOOK_DIAGNOSTICS_MAX_BYTES,
+} from "../../../cli/src/hook-diagnostics.js";
 
 const exec = promisify(execFile);
 const manifestVersion = 1;
-const managedRevision = 2;
+const managedRevision = 3;
 const marker = "hook ingest --adapter";
 const supported = ["codex", "claude-code", "cursor", "qoder", "omp"] as const;
 export type ManagedAdapterId = typeof supported[number];
@@ -305,6 +309,16 @@ async function updateOwnedConfig(
   }, 2_000);
 }
 
+function isManagedOmpExtension(body: string | undefined) {
+  return body?.startsWith("// Atte managed OMP extension\n") ||
+    body?.startsWith("// Crewvane managed OMP extension\n") || false;
+}
+
+async function managedOmpBody(path: string) {
+  const body = await readOwnedConfig(path).catch(() => "");
+  return isManagedOmpExtension(body) ? body : undefined;
+}
+
 async function backupOnce(path: string) {
   const backup = `${path}.atte-backup`;
   const exists = await stat(path).then(() => true).catch(() => false);
@@ -389,6 +403,10 @@ export class AgentHookManager {
     return join(this.home, ".omp", "agent", "extensions", "atte.js");
   }
 
+  private legacyOmpPath() {
+    return join(dirname(this.configPath("omp")), "crewvane.js");
+  }
+
   private async detect(definition: AdapterDefinition) {
     let detection = this.detections.get(definition.id);
     if (!detection) {
@@ -466,9 +484,13 @@ export class AgentHookManager {
         configPath = this.configPath(id);
       let installed = json.installed;
       if (id === "omp") {
-        const body = await readFile(configPath, "utf8").catch(() => "");
-        installed = body.startsWith("// Atte managed OMP extension\n") ||
-          body.startsWith("// Crewvane managed OMP extension\n");
+        const body = await managedOmpBody(configPath);
+        installed = body !== undefined ||
+          await managedOmpBody(this.legacyOmpPath()) !== undefined;
+        if (body === undefined && await lstat(configPath).then(() => true).catch(() => false)) {
+          json.conflict = true;
+          json.detail = "冲突：OMP 扩展目录中已有同名用户文件或符号链接，Atte 已保护原文件。";
+        }
       }
       let status: HookInstallStatus = "not-installed";
       if (!detected) status = "not-installed";
@@ -505,6 +527,73 @@ export class AgentHookManager {
     return `// Atte managed OMP extension
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import * as fs from "node:fs";
+import { isAbsolute, join } from "node:path";
+
+function environment(name) {
+  return (process.env["ATTE_" + name] ?? process.env["CREWVANE_" + name])?.trim();
+}
+
+function recordFailure(reason) {
+  let lock;
+  let temporary;
+  try {
+    const reasons = ${JSON.stringify(HOOK_DIAGNOSTIC_REASONS)};
+    if (!reasons.includes(reason) ||
+      !["GOAL_ID", "ATTEMPT_ID", "HOOK_TOKEN", "AGENT_NAME", "WORKSPACE"].every(environment)) return;
+    const workspace = environment("WORKSPACE");
+    if (!isAbsolute(workspace)) return;
+    function directory(path, create = false) {
+      if (create && !fs.existsSync(path)) fs.mkdirSync(path, { mode: 0o700 });
+      const info = fs.lstatSync(path);
+      if (!info.isDirectory() || info.isSymbolicLink() ||
+        (process.getuid && info.uid !== process.getuid())) throw new Error();
+      return path;
+    }
+    directory(workspace);
+    const state = directory(join(workspace,
+      !fs.existsSync(join(workspace, ".atte")) && fs.existsSync(join(workspace, ".crewvane"))
+        ? ".crewvane" : ".atte"), true);
+    const runtime = directory(join(state, "runtime"), true);
+    const lockPath = join(runtime, "hook-diagnostics.lock");
+    try { fs.mkdirSync(lockPath, { mode: 0o700 }); }
+    catch {
+      const info = fs.lstatSync(lockPath);
+      if (info.isDirectory() && !info.isSymbolicLink() &&
+        (!process.getuid || info.uid === process.getuid()) &&
+        Date.now() - info.mtimeMs > 60_000) fs.rmdirSync(lockPath);
+      return;
+    }
+    lock = lockPath;
+    const path = join(runtime, "hook-diagnostics.json");
+    const counts = {};
+    if (fs.existsSync(path)) {
+      const info = fs.lstatSync(path);
+      if (!info.isFile() || info.isSymbolicLink() ||
+        (process.getuid && info.uid !== process.getuid())) return;
+      if (info.size <= ${HOOK_DIAGNOSTICS_MAX_BYTES}) {
+        try {
+          const previous = JSON.parse(fs.readFileSync(path, "utf8"));
+          if (previous?.version === 1)
+            for (const key of reasons)
+              if (Number.isSafeInteger(previous.counts?.[key]) && previous.counts[key] > 0)
+                counts[key] = previous.counts[key];
+        } catch {}
+      }
+    }
+    counts[reason] = Math.min(Number.MAX_SAFE_INTEGER, (counts[reason] || 0) + 1);
+    const body = JSON.stringify({ version: 1, counts,
+      lastFailure: { reason, at: new Date().toISOString() } }) + "\\n";
+    if (Buffer.byteLength(body) > ${HOOK_DIAGNOSTICS_MAX_BYTES}) return;
+    temporary = path + "." + process.pid + "." + randomUUID() + ".tmp";
+    fs.writeFileSync(temporary, body, { mode: 0o600, flag: "wx" });
+    fs.renameSync(temporary, path);
+  } catch {
+  } finally {
+    if (temporary) { try { fs.unlinkSync(temporary); } catch {} }
+    if (lock) { try { fs.rmdirSync(lock); } catch {} }
+  }
+}
 
 let currentSessionId =
   process.env.ATTE_ATTEMPT_ID || process.env.CREWVANE_ATTEMPT_ID || "omp-session";
@@ -559,20 +648,30 @@ function turnId(event, ctx) {
 }
 
 function report(pi, event, details = {}) {
-  if (!(process.env.ATTE_GOAL_ID || process.env.CREWVANE_GOAL_ID) ||
-      !(process.env.ATTE_ATTEMPT_ID || process.env.CREWVANE_ATTEMPT_ID) ||
-      !(process.env.ATTE_HOOK_TOKEN || process.env.CREWVANE_HOOK_TOKEN)) return;
+  if (!["GOAL_ID", "ATTEMPT_ID", "HOOK_TOKEN", "AGENT_NAME", "WORKSPACE"].every(environment)) return;
+  let failed = false;
+  const fail = reason => {
+    if (failed) return;
+    failed = true;
+    recordFailure(reason);
+  };
   try {
     const executable = process.env.ATTE_CLI_BIN || process.env.CREWVANE_CLI_BIN || "atte";
+    const payload = JSON.stringify({ hook_event_name: event, ...details });
     const child = spawn(executable, ["hook", "ingest", "--adapter", "omp"], {
       env: process.env,
       stdio: ["pipe", "ignore", "ignore"],
     });
-    child.on("error", () => {});
-    child.stdin.end(JSON.stringify({ hook_event_name: event, ...details }));
+    child.on("error", () => fail("spawn_error"));
+    child.stdin?.on("error", error => fail(error?.code === "EPIPE" ? "stdin_epipe" : "stdin_error"));
+    child.once("close", (code, signal) => {
+      if (code !== 0 || signal) fail("child_exit");
+    });
+    if (child.stdin) child.stdin.end(payload);
+    else fail("stdin_error");
     child.unref();
   } catch {
-    // Observation is fail-open. Never interfere with the OMP turn.
+    fail("sync_error");
   }
 }
 
@@ -646,10 +745,11 @@ export default function atteExtension(pi) {
     const path = this.configPath(definition.id);
     if (definition.id === "omp") {
       await withLock(dirname(path), async () => {
-        const body = await readOwnedConfig(path);
-        if (body?.startsWith("// Atte managed OMP extension\n") ||
-          body?.startsWith("// Crewvane managed OMP extension\n"))
-          await unlink(path);
+        for (const candidate of [path, this.legacyOmpPath()]) {
+          const body = await managedOmpBody(candidate);
+          if (body !== undefined && await managedOmpBody(candidate) === body)
+            await unlink(candidate);
+        }
       }, 2_000);
       return;
     }
@@ -688,20 +788,36 @@ export default function atteExtension(pi) {
       if (id === "omp") {
         const path = this.configPath(id);
         await updateOwnedConfig(path, existing => {
-          if (existing !== undefined &&
-            !existing.startsWith("// Atte managed OMP extension\n") &&
-            !existing.startsWith("// Crewvane managed OMP extension\n"))
+          if (existing !== undefined && !isManagedOmpExtension(existing))
             throw new Error("OMP 扩展目录中已有同名文件，Atte 已保护原文件");
           return this.ompExtension();
         });
       } else {
         await this.installJson(definition);
       }
+      let legacyRemovalFailed = false;
+      if (id === "omp") {
+        try {
+          const legacy = this.legacyOmpPath();
+          const body = await managedOmpBody(legacy);
+          if (body !== undefined) {
+            await backupOnce(legacy);
+            if (await managedOmpBody(legacy) !== body)
+              throw new Error("OMP 旧扩展已被其他程序更新；Atte 已保护原文件");
+            await unlink(legacy);
+          }
+        } catch {
+          legacyRemovalFailed = true;
+        }
+      }
       this.manifest.adapters[id] = {
         enabled: true,
         installed: true,
         waitingTrust: id === "codex" && !previous?.lastEventAt,
         managedRevision,
+        ...(legacyRemovalFailed
+          ? { detail: "安装失败：旧 OMP 扩展未能安全删除，Atte 已保护原文件" }
+          : {}),
         ...(detected.version ? { version: detected.version } : {}),
         ...(previous?.lastEventAt ? { lastEventAt: previous.lastEventAt } : {}),
       };
@@ -711,6 +827,7 @@ export default function atteExtension(pi) {
         enabled: previous?.enabled !== false,
         installed: previous?.installed ?? false,
         waitingTrust: false,
+        ...(previous?.managedRevision ? { managedRevision: previous.managedRevision } : {}),
         ...(detected.version ? { version: detected.version } : {}),
         detail: `${String(error instanceof Error ? error.message : error).includes("同名文件")
           ? "冲突" : "安装失败"}：${error instanceof Error ? error.message : String(error)}`,
@@ -775,8 +892,8 @@ export default function atteExtension(pi) {
       if (!detected) continue;
       if (saved?.installed) {
         const current = id === "omp"
-          ? (await readFile(this.configPath(id), "utf8").catch(() => ""))
-              .startsWith("// Atte managed OMP extension\n")
+          ? await managedOmpBody(this.configPath(id)) === this.ompExtension() &&
+            await managedOmpBody(this.legacyOmpPath()) === undefined
           : (await this.jsonStatus(definitions[id], detected)).installed;
         if (current && saved.managedRevision === managedRevision) continue;
       }

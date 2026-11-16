@@ -154,16 +154,15 @@ test("dropped concierge goals can restart, while active and personal goals canno
   }) as Goal;
   assert.equal(restarted.status, "active");
 
+  await assert.rejects(service.execute({
+    type: "goal.intake", text: "新的人工任务", handling: "self",
+  }), /feature_removed/);
   const personal = await service.execute({
     type: "goal.intake",
     text: "个人事项",
-    handling: "self",
   }) as Goal;
-  await service.execute({
-    type: "goal.complete",
-    goalId: personal.id,
-    note: "做完了",
-  });
+  await service.execute({ type: "goal.takeover", goalId: personal.id });
+  await service.execute({ type: "goal.drop", goalId: personal.id, note: "人工结束" });
   await assert.rejects(service.execute({
     type: "goal.restart",
     goalId: personal.id,

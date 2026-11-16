@@ -34,10 +34,10 @@ The regular work in between stays out of your way.
 
 Atte does not replace Codex, Claude Code, OMP, Cursor, Qoder, or another agent.
 It works with interactive CLI agents that can already run in a terminal, keeps
-the terminal sessions in Herdr or Orca, and adds the durable workflow around them:
+the terminal sessions in Herdr, and adds the durable workflow around them:
 state, ownership, waiting, evidence, approvals, and recovery.
 
-> **Status:** early preview (`0.13.x`). The desktop UI is currently in Simplified
+> **Status:** early preview (`0.14.x`). The desktop UI is currently in Simplified
 > Chinese and the packaged app supports macOS on Apple Silicon.
 
 ## Why Atte
@@ -51,7 +51,7 @@ Atte changes the unit of work from **terminal session** to **goal**.
 | Without a coordination layer | With Atte |
 | --- | --- |
 | You monitor a growing list of terminal tabs. | You scan one attention center. |
-| A finished-looking agent may be mistaken for finished work. | Delivery requires evidence plus independent review or human acceptance. |
+| A finished-looking agent may be mistaken for finished work. | Delivery requires real evidence plus human acceptance. |
 | Important context lives in chat history. | Goals keep the original request, attachments, messages, waiting state, and handoffs. |
 | "Done" means whatever the current session says. | `idle` or `done` is runtime state, not completion. |
 | Approvals are repeated from memory. | A decision ledger reuses explicit human decisions. |
@@ -68,11 +68,9 @@ quietly take over the work.
 
 ### Capture first, decide when to start
 
-The same input can save an idea for later, record something you will do yourself,
-or hand it to the concierge. The task pool keeps deferred work out of execution
-and stall checks. Personal tasks can be completed directly, with optional reminders
-in the attention panel. Delegating later preserves the original record, project,
-images, and history.
+Save an idea for later, or hand it to the concierge. Deferred work stays out of
+execution and stall checks. You can still take over an existing item yourself.
+Delegating later preserves the original record, project, images, and history.
 
 ### Attention instead of activity
 
@@ -87,29 +85,16 @@ The attention panel is intentionally narrow. It shows work when:
 Ordinary progress, a busy terminal, an idle agent, or a chat reply does not
 become an attention item.
 
-### Autonomous goals, with the human still in charge
+### A narrower loop, with the human still in charge
 
-A goal can carry a structured brief with its outcome, scope, completion criteria,
-external effects and verification plan. Atte then persists short execution
-continuations outside any Agent session: checkpoint, external wait, recovery,
-independent verification and human-decision triggers all survive restarts.
+Atte 0.14 focuses the loop on ordinary delivery: capture, concierge coordination,
+owner writeback, real delivery checks, and human acceptance. Experimental
+continuations, independent-verifier orchestration, automatic acceptance,
+boundary changes, Bot requests, local capability packs, and separate release-goal
+lifecycles were retired.
 
-Automatic acceptance is opt-in and resolves goal override > project > workspace.
-It can complete a delivery only after real evidence, a matching candidate and an
-independent reviewer pass the gate. You can pause or override any goal, require
-human review, inspect every record, or reopen completed work at any time.
-
-Production release is deliberately separate. Each release is its own goal, needs
-one approval for that environment and candidate, and still returns to you for a
-final result check after execution. A delivery acceptance is never release
-authority.
-
-A local Bot can use the same goal and event facts through `atte.bot.v1`.
-Bindings are human-created, project-scoped and revocable; Bots cannot accept
-work, approve releases or modify policy in the first phase.
-
-See the [autonomous goals specification](docs/product/autonomous-goals.md) for
-the full boundary, acceptance, continuation and release protocol.
+The watchdog remains. It still reconciles unassigned or stale owners, unreachable
+scenes, missing protocol receipts, and due external waits with the concierge.
 
 When a waiting item is due, the card asks for one plain-language update. The
 concierge reads that message and decides whether to keep waiting, resume,
@@ -119,8 +104,9 @@ user's exact words.
 
 ### Bring your own agent
 
-Configure the launch command and native arguments for the concierge, owners, and
-workers. A command such as `codex --model my-model`, an absolute script path, or
+Configure the launch command and native arguments for the concierge and owners.
+An owner left empty inherits the concierge command.
+A command such as `codex --model my-model`, an absolute script path, or
 another interactive CLI can be used directly. Atte does not own model keys,
 proxy API calls, or replace the agent runtime.
 
@@ -129,58 +115,30 @@ The desktop app includes its own verified Herdr binary, and the optional Herdr
 plugin adds attention, one-line goal intake, and concierge shortcuts inside
 Herdr.
 
-Settings can instead select [Orca](https://github.com/stablyai/orca) as the one
-active session backend. Orca provides its native work interface; Atte keeps
-goals, attention, evidence and acceptance in its own Core, never a second Orca
-task state. Install or update Orca from Settings, then switch explicitly. A
-switch preserves goals and messages, stops verified old scenes and resumes from
-case records rather than copying terminal history. Only one backend receives work.
+Legacy Orca goals remain readable as history, but Orca is no longer installed,
+updated, selected, dispatched, or recovered. Atte does not migrate an Orca
+terminal or silently create a replacement owner.
 
 The split between code and Skills is deliberate: code guarantees delivery,
 identity, idempotency, state and recovery; Skills guide concierge coordination,
 questioning and delivery practices. Scene answers use structured IDs to reach
 the matching attention item and concierge, so an old reply cannot close a new question.
 
-### Reusable work methods
+### Built-in working method
 
-Atte ships role and process Skills for the concierge, owners, independent
-verifiers, delivery, discovery, release review, Agent setup, and scene recovery.
-Teams can also install a local method pack from a folder, preview its roles and
-references, and attach it only to matching goals.
-
-Instruction-only packs need no scripting. If a pack declares deterministic
-scripts, installation is approval-neutral and each script must be approved
-against its current SHA-256. A changed script or pack invalidates the old
-approval. `atte skill run` records bounded audit output but never completes,
-accepts, or releases a goal.
-
-Create packs conversationally through the bundled
-`atte-local-pack-author` Skill or use `atte skill draft`, `validate`, and
-`install`. Built-ins cannot be replaced, local packs cannot claim the concierge
-role, and a goal can attach at most eight local methods.
-
-Skill resolution is explicit and bounded: Core constraints, role Skill, process
-Skill, goal-bound local methods, then the current task. Missing, disabled, or
-changed bindings fail closed before a new Agent turn starts.
+The concierge and owner instructions ship with Atte. Local method packs, method
+attachment, script approval, and script execution were retired in 0.14. Existing
+pack directories are preserved but are no longer executable or attachable.
 
 ### Choose your working scene
 
-Choose Herdr or Orca in Settings. One installation uses one backend at a time.
-A switch first verifies that the old managed Agents have stopped, then continues
-from saved goal records. Goals and attention remain in the same Atte store.
-
-In Herdr mode, “Open scene” launches the same session in iTerm2, Terminal, or Ghostty
+“Open scene” launches the same Herdr session in iTerm2, Terminal, or Ghostty
 by default, preserving native shortcuts, image paste, IME behavior, and terminal
 semantics. Atte reuses an existing window and remembers the terminal choice.
 An embedded lightweight scene remains available for quick inspection and shares
 the exact same Herdr session. When the clipboard contains only an image, the
 embedded scene sends one `Ctrl+V` to the active Agent so the Agent can read the
 system clipboard itself.
-
-Orca mode opens the native Orca window and focuses the registered terminal;
-there is no embedded mode. Settings can detect, install, or update the verified
-Orca version. Terminal history does not move between backends. Native Agent
-sessions resume only where verified; otherwise, work continues from goal records.
 
 ### Instant lifecycle, explicit decisions
 
@@ -194,7 +152,7 @@ A Hook proves only that a session or turn changed state. It never marks a goal
 complete, waiting on a third party, ready for review, or safe for an external
 action. Those facts still come from Atte's semantic CLI. After a turn stops,
 Atte waits briefly for that write-back, reminds the same owner once if it is
-missing, and then asks the concierge to reconcile. The selected backend and watchdog remain
+missing, and then asks the concierge to reconcile. Herdr and the watchdog remain
 the fallback when an Agent has no compatible Hook.
 
 ### Evidence before completion
@@ -205,7 +163,7 @@ A goal can be accepted only after an owner submits:
 - a location or URL when applicable; and
 - at least one real check that was actually executed.
 
-The terminal scrollback stays in the selected session backend. It is not silently copied into agent
+The terminal scrollback stays in Herdr. It is not silently copied into agent
 context or treated as proof of completion.
 
 ### Human control at hard boundaries
@@ -248,7 +206,7 @@ flowchart LR
     Human[You] --> Desktop[Atte Desktop]
     Desktop --> Core[Atte Core]
     CLI[Atte CLI] --> Core
-    Desktop <--> Sessions[Herdr or Orca: one selected backend]
+    Desktop <--> Sessions[Herdr]
     Sessions --> Concierge[Concierge]
     Sessions --> Owners[Owners and CLI Agents]
     Core <--> State[(.atte workspace)]
@@ -298,11 +256,12 @@ is damaged, redownload the latest release instead of bypassing Gatekeeper.
 ### First run
 
 1. Choose a dedicated workspace directory.
-2. Open **Settings**, install the Atte CLI and optional Atte Skills,
-   review **Agent access** and **Work methods**, then configure the agent launch
-   command for the concierge, owner, or worker.
-3. Prepare the concierge.
-4. Click **New goal**, describe the work in natural language, and attach
+2. Open **Settings**, review **Agent access**, then configure launch commands for
+   the concierge and owner. Leave the owner command empty to inherit the
+   concierge command. CLI and optional Skill installation are under the collapsed
+   **Advanced and maintenance** section.
+3. Use **Find concierge** in the main navigation to prepare or return to the concierge.
+4. Click **New item**, describe the work in natural language, and attach
    screenshots if useful.
 
 See the [user guide](docs/atte.md) and
@@ -328,11 +287,20 @@ atte goal list
 atte goal show <goal-id> --json
 atte board
 
-atte skill list
-atte skill validate ./my-method --json
-atte skill install ./my-method
-atte skill attach <goal-id> my-method
+atte capture "Idea to revisit later"
+atte goal start <goal-id> --by self
 ```
+
+Retired commands fail with `feature_removed` (exit 2) before workspace I/O.
+Historical Orca goals and old capability-pack records remain readable.
+
+```sh
+atte hook ingest --adapter omp
+atte doctor --json
+```
+
+`hook ingest` is fail-open: a transport or payload problem never fails the Agent
+turn. `doctor --json` includes sanitized Hook failure counts.
 
 Agent-facing state commands are deliberately explicit. For example:
 
@@ -354,7 +322,7 @@ Run `atte --help` after installation to see the complete protocol.
 apps/desktop/       Electron shell, React UI, in-app Herdr terminal, plugin
 packages/core/      Goals, attention, policy, storage, attachments, recovery
 cli/                Human commands and explicit agent state protocol
-skills/             Packaged Atte and local-pack-author Skills
+skills/             Packaged Atte protocol Skill; local-pack author is history
 scripts/            Desktop, Herdr, onboarding, and installer acceptance tests
 docs/               Product specification, architecture, QA, and release notes
 ```
@@ -399,19 +367,19 @@ packaged app with an interactive custom CLI. It does not require a model login.
   observe lifecycle events without replacing each Agent's runtime.
 - Atte coordinates goals and agent sites but does not sandbox third-party
   agents. Agent file access and network permissions remain governed by that CLI.
-- Agent execution requires either Herdr or the verified compatible Orca version.
-  Planning, records, reminders, and manual review remain readable if the selected
-  backend is temporarily unavailable.
-- Orca native Agent-session resume is not yet verified; switching to Orca resumes
-  from goal records. Existing goals remain usable, but terminal history is not migrated.
+- Agent execution requires Herdr. Planning, records, reminders, and human review
+  remain readable if Herdr is temporarily unavailable.
+- Legacy Orca goals stay visible as read-only history. They are not dispatched,
+  watched, recovered, or used to create replacement owners.
 
 ## Contributing
 
 Issues and focused pull requests are welcome.
 
 For a substantial feature, open an issue first so the change can be checked
-against Atte's product boundaries: one concierge per workspace, explicit
-state over prompt parsing, evidence before acceptance, and local-first data.
+against Atte's product boundaries: one concierge per workspace, Herdr as the
+supported execution backend, explicit state over prompt parsing, human
+acceptance after real evidence, and local-first data.
 
 Before opening a pull request:
 
