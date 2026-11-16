@@ -1,6 +1,6 @@
 {
   "name": "@atte/cli",
-  "version": "0.13.3",
+  "version": "0.13.4",
   "description": "Atte — The attention layer CLI",
   "license": "MIT",
   "type": "module",
