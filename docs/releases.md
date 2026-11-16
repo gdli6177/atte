@@ -18,6 +18,7 @@ GitHub 自动生成的 **Source code** 是源码，不是可安装应用。安�
 
 - 负责人现场崩溃后可核实退出并自动替换，旧 attempt 记入 `attemptHistory`；启动即退记为 `launch_failed` 并清理，可直接重试。
 - 巡检 stale 以负责人写回为基准，已有未答卡片不再重复升级；协调收件箱按 requestId 幂等，未确认投递 30 分钟后过期。
+- 关闭 Orca 后切回 Herdr 不再被“旧后端不可达”卡住；仅在受管进程已确认退出时继续。
 - 新增 `atte doctor`、`atte delivery`，管家 `status --json` 返回当前案卷摘要。详见[本版说明](release-notes/v0.13.8.md)。
 
 ## 0.13.7 安装与验收

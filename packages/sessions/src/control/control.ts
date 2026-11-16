@@ -303,7 +303,16 @@ export class SessionControl {
         const adapter = await hooks.adapter(journal.from, workspace.root);
         const nativeResume = new Set<string>();
         if (resources.length) {
-          await adapter.connect({ installationId: (await this.load()).installationId, cwd: workspace.root });
+          try {
+            await adapter.connect({ installationId: (await this.load()).installationId, cwd: workspace.root });
+          } catch (error) {
+            // The old app may already be closed. Its scenes cannot be observed,
+            // so quiescing must verify each managed process locally instead.
+            if (!error || typeof error !== "object" ||
+              (error as { code?: unknown }).code !== "backend_unreachable") throw error;
+            journal.resources.push(...resources);
+            continue;
+          }
           const observations = await adapter.inspectMany(resources.map(resource => resource.scene));
           for (const resource of resources) {
             const goal = resource.goalId && state.goals.find(item => item.id === resource.goalId);
@@ -401,8 +410,28 @@ export class SessionControl {
           if (journal.closed.some(receipt => receipt.bindingId === resource.scene.bindingId &&
             ["stopped", "already_stopped"].includes(receipt.status) && receipt.identityVerified)) continue;
           const adapter = await hooks.adapter(resource.scene.backend, resource.workspace);
-          await adapter.connect({ installationId: resource.scene.installationId, cwd: resource.workspace });
-          const receipt = await adapter.close(resource.scene);
+          let receipt;
+          try {
+            await adapter.connect({ installationId: resource.scene.installationId, cwd: resource.workspace });
+            receipt = await adapter.close(resource.scene);
+          } catch (error) {
+            // Leaving a backend that is no longer running is a normal way to
+            // switch: the old app cannot close its terminals any more. It is
+            // safe only when the managed process itself is verifiably gone.
+            if (!error || typeof error !== "object" ||
+              (error as { code?: unknown }).code !== "backend_unreachable") throw error;
+            if (!resource.scene.process)
+              throw new SessionError("backend_unreachable",
+                "旧后端未运行，且无法核实受管进程；为避免双重执行，切换已暂停。");
+            if (await localProcesses.alive(resource.scene.process))
+              throw new SessionError("backend_unreachable",
+                "旧后端未运行，但受管进程仍在；请先关闭该现场或恢复旧后端，再切换。");
+            receipt = {
+              status: "already_stopped" as const, bindingId: resource.scene.bindingId,
+              at: new Date().toISOString(), identityVerified: true,
+              detail: "旧后端未运行，已确认受管进程不存在。",
+            };
+          }
           journal.closed = [...journal.closed.filter(item => item.bindingId !== receipt.bindingId), receipt];
           await this.persist(journal, hooks);
           if (!receipt.identityVerified || !["stopped", "already_stopped"].includes(receipt.status))
