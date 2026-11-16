@@ -123,6 +123,15 @@ try {
       BrowserWindow.getAllWindows()[0].webContents.send("atte:event", { type: "backend-control", status: next });
       BrowserWindow.getAllWindows()[0].webContents.send("atte:event", { type: "orca-installation", status: next.orca });
     }, fixture);
+    // A status request started before the stubs were installed can still
+    // resolve and overwrite the renderer state. Publish again after it settles
+    // so the simulated state is the last write.
+    await page.waitForTimeout(250);
+    await app.evaluate(({ BrowserWindow }, next) => {
+      const contents = BrowserWindow.getAllWindows()[0].webContents;
+      contents.send("atte:event", { type: "backend-control", status: next });
+      contents.send("atte:event", { type: "orca-installation", status: next.orca });
+    }, fixture);
   };
   await publishOrca("missing");
   await expect(choice.locator(".backend-choice__state")).toHaveText("先安装");
