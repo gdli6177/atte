@@ -63,6 +63,7 @@ export function assertFeatureAvailable(command: AtteCommand): void {
 export function isReadOnlyGoal(goal: Goal): boolean {
   return goal.readOnly === true ||
     goal.readOnlyReason === "legacy-orca" ||
+    goal.readOnlyReason === "legacy-epoch" ||
     goal.scene?.backend === "orca" ||
     goal.agentRuntime?.attempt.scene?.backend === "orca" ||
     goal.ownerLaunchRecovery?.scene?.backend === "orca";
@@ -71,7 +72,7 @@ export function isReadOnlyGoal(goal: Goal): boolean {
 export class ReadOnlyGoalError extends Error {
   readonly code = "goal_read_only" as const;
   constructor(readonly goalId: string) {
-    super(`goal_read_only: 旧 Orca 目标 ${goalId} 仅供读取，不能修改、派发或恢复执行。`);
+    super(`goal_read_only: 旧后端目标 ${goalId} 仅供读取，不能修改、派发或恢复执行。`);
     this.name = "ReadOnlyGoalError";
   }
 }

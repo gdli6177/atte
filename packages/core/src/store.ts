@@ -280,9 +280,11 @@ export function validateState(value: unknown): WorkspaceState {
       if (receipt && receipt.status !== "written") receipt.status = "cancelled";
     }
     if (goal.readOnly !== undefined && goal.readOnly !== true) invalidState("目标只读标记无效。");
-    if (goal.readOnlyReason !== undefined && goal.readOnlyReason !== "legacy-orca")
+    if (goal.readOnlyReason !== undefined &&
+      goal.readOnlyReason !== "legacy-orca" && goal.readOnlyReason !== "legacy-epoch")
       invalidState("目标只读原因无效。");
-    if (goal.readOnlyReason === "legacy-orca") goal.readOnly = true;
+    if (goal.readOnlyReason === "legacy-orca" || goal.readOnlyReason === "legacy-epoch")
+      goal.readOnly = true;
     if (goal.readOnly === true) goal.readOnlyReason ??= "legacy-orca";
     if (goal.executionHold !== undefined && goal.executionHold !== "migration-confirmation")
       invalidState("目标执行暂停标记无效。");

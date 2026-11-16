@@ -105,6 +105,18 @@ function preservedOwnerResume(value: unknown): NonNullable<Goal["ownerResume"]> 
 function humanOnly(actor: string | undefined, message: string) {
   if (actor !== "你") throw new Error(message);
 }
+function assertMigrationConfirmationHuman(
+  item: Goal,
+  actor: string | undefined,
+  managed: ManagedSessionContext | undefined,
+) {
+  if (item.executionHold !== "migration-confirmation") return;
+  if (managed)
+    throw new Error("旧实验目标必须由人通过可信界面确认后才能继续");
+  humanOnly(actor ?? "你", "旧实验目标必须由人通过可信界面确认后才能继续");
+  if (item.attention?.kind !== "decision")
+    throw new Error("迁移确认状态无效；请保留原快照并重新读取目标");
+}
 function deliveryCandidate(value: unknown): DeliveryCandidate | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -491,6 +503,75 @@ export class WorkspaceService {
         }
       }
       switch (command.type) {
+        case "backend.recover-stale": {
+          const previous = state.backendBinding;
+          if (!previous)
+            throw new Error("stale_backend_epoch: 没有可恢复的旧后端绑定。");
+          if (previous.backend !== command.binding.backend ||
+            previous.installationId !== command.binding.installationId)
+            throw new Error("stale_backend_epoch: 旧工作区属于另一个 Atte 后端安装。");
+          if (previous.epoch === command.binding.epoch &&
+            previous.scopeGeneration === command.binding.scopeGeneration &&
+            previous.status === "active") return previous;
+          const at = nowIso();
+          const previousConcierge = Boolean(
+            state.concierge.scene || state.concierge.legacyScene || state.concierge.launch,
+          );
+          state.history = {
+            ...(state.history ?? { retiredAt: at, sourceVersion: 5 as const }),
+            ...(state.history?.backendBinding ? {} : { backendBinding: structuredClone(previous) }),
+            ...(state.history?.concierge || !previousConcierge
+              ? {}
+              : { concierge: structuredClone(state.concierge) }),
+          };
+          for (const item of state.goals) {
+            if (["completed", "dropped"].includes(item.status)) continue;
+            const staleExecution = Boolean(
+              item.scene || item.agentRuntime || item.ownerLaunchRecovery ||
+              item.legacyScene || item.sceneLaunch || item.herdr,
+            );
+            if (!staleExecution || isReadOnlyGoal(item)) continue;
+            item.history = {
+              retiredAt: item.history?.retiredAt ?? at,
+              ...(item.history ?? {}),
+              ...(item.history?.dispatch || !item.dispatch
+                ? {}
+                : { dispatch: structuredClone(item.dispatch) }),
+              ...(item.history?.attention || !item.attention
+                ? {}
+                : { attention: structuredClone(item.attention) }),
+            };
+            item.readOnly = true;
+            item.readOnlyReason = "legacy-epoch";
+            delete item.dispatch;
+            delete item.watchdog;
+            delete item.recovery;
+            delete item.sceneVisit;
+            delete item.sceneReply;
+            delete item.sceneLaunch;
+            delete item.executionHold;
+            delete item.live;
+            const receipt = item.agentRuntime?.receipt;
+            if (receipt && receipt.status !== "written") receipt.status = "cancelled";
+            item.attention = null;
+            item.remindAt = undefined;
+            item.waitingFor = undefined;
+            item.next = "旧 Herdr 控制代次已失效；现场已冻结为只读历史。";
+            item.activities.push({
+              id: newId("act"),
+              at,
+              actor: "系统",
+              kind: "session",
+              text: "旧 Herdr 控制代次已失效，目标现场已冻结为只读历史。",
+            });
+            stamp(item);
+          }
+          if (previousConcierge)
+            state.concierge = { session: "atte", status: "not_ready" };
+          state.backendEpoch = command.binding.epoch;
+          state.backendBinding = structuredClone(command.binding);
+          return state.backendBinding;
+        }
         case "backend.register": {
           if (state.backendBinding) {
             if (state.backendBinding.installationId !== command.binding.installationId ||
@@ -1047,8 +1128,8 @@ export class WorkspaceService {
           const item = goal(command.goalId);
           ongoing(item, false, true);
           if (item.mode === "manual" && item.status !== "backlog") return item;
-          if (item.executionHold && managed)
-            throw new Error("goal_confirmation_required: 旧实验目标必须由人确认后才能继续");
+          if (item.executionHold)
+            throw new Error("goal_confirmation_required: 请先用迁移决定批准或结束这个旧目标");
           delete item.executionHold;
           const fromBacklog = item.status === "backlog";
           if (fromBacklog && hasDueReminder(item)) {
@@ -1518,6 +1599,8 @@ export class WorkspaceService {
           if (!item.delivery)
             throw new Error("只有提交验收的目标才能通过验收");
           const actor = command.actor || "你";
+          if (managed)
+            throw new Error("成果验收必须由人通过桌面或可信注意力界面完成，受管 Agent 不能代替人验收");
           humanOnly(
             actor,
             "成果验收必须由人通过桌面或可信注意力界面完成，受管 Agent 不能代替人验收",
@@ -1547,6 +1630,7 @@ export class WorkspaceService {
           if (item.status === "review")
             throw new Error("待验收成果必须使用人工验收，不能直接标记完成");
           ongoing(item, true, true);
+          assertMigrationConfirmationHuman(item, command.actor, managed);
           const actor = command.actor || "你";
           const note = text(command.note, "用户确认完成的原话", 4000);
           const at = nowIso();
@@ -1574,6 +1658,7 @@ export class WorkspaceService {
         case "goal.drop": {
           const item = goal(command.goalId);
           ongoing(item, true, true);
+          assertMigrationConfirmationHuman(item, command.actor, managed);
           const actor = command.actor || "你";
           if (actor !== "你" && !command.note?.trim())
             throw new Error("管家放弃目标时必须记录用户明确放弃的原话");
@@ -1595,13 +1680,8 @@ export class WorkspaceService {
             throw new Error("当前没有需要解决的注意力事项");
           const at = nowIso(), note = command.note?.trim() ? text(command.note, "决定", 4000) : "";
           const migrationConfirmation = item.executionHold === "migration-confirmation";
-          if (migrationConfirmation) {
-            if (managed)
-              throw new Error("旧实验目标必须由人通过可信界面确认后才能继续");
-            humanOnly(command.actor, "旧实验目标必须由人通过可信界面确认后才能继续");
-            if (item.attention?.kind !== "decision")
-              throw new Error("迁移确认状态无效；请保留原快照并重新读取目标");
-          }
+          if (migrationConfirmation)
+            assertMigrationConfirmationHuman(item, command.actor, managed);
           const decisionAttention = item.attention?.kind === "decision" ? item.attention : undefined;
           const isDecision = Boolean(decisionAttention);
           const rejectedMigration = migrationConfirmation && command.outcome === "rejected";

@@ -516,7 +516,7 @@ export interface Goal {
   ownerLaunchRecovery?: OwnerLaunchRecovery;
   attachments?: GoalAttachment[];
   readOnly?: true;
-  readOnlyReason?: "legacy-orca";
+  readOnlyReason?: "legacy-orca" | "legacy-epoch";
   executionHold?: "migration-confirmation";
   history?: GoalRetiredHistory;
   acceptance?: AcceptanceRecord;
@@ -594,6 +594,7 @@ export interface WorkspaceRetiredHistory {
 type WorkspaceCommand =
   | { type: "snapshot" }
   | { type: "backend.register"; binding: BackendBinding }
+  | { type: "backend.recover-stale"; binding: BackendBinding }
   | { type: "scene.bind"; goalId?: string; scene: SceneReferenceV1; role?: "owner" | "verifier" | "concierge" }
   | { type: "scene.prepare"; goalId?: string; intent: SceneLaunchIntent }
   | { type: "scene.launch.result"; goalId?: string; role?: "owner" | "concierge" | "verifier"; requestId: string; status: SceneLaunchIntent["status"]; detail?: string }
@@ -714,7 +715,7 @@ type WorkspaceCommand =
     }
   | { type: "goal.resume"; goalId: string; note: string; mode: "concierge" | "manual" }
   | { type: "goal.restart"; goalId: string; note: string }
-  | { type: "goal.takeover"; goalId: string }
+  | { type: "goal.takeover"; goalId: string; actor?: string }
   | { type: "goal.delegate"; goalId: string }
   | { type: "goal.restore"; goalId: string }
   | { type: "goal.followup"; goalId: string; note?: string }

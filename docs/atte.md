@@ -1,6 +1,6 @@
 # Atte 使用说明
 
-版本：0.14.0
+版本：0.14.1
 
 ## 这是什么
 
@@ -14,7 +14,7 @@ Atte 不替代 Codex、Claude Code、OMP、Cursor、Qoder 等 CLI Agent，也不
 或管理模型凭据。它保存目标、现场身份、消息、等待、证据和验收事实，并把人的
 决定与 Agent 的显式写回连接起来。
 
-0.14.0 只支持 macOS Apple Silicon（arm64）。Herdr 是唯一执行后端；外部终端仍是
+0.14.1 只支持 macOS Apple Silicon（arm64）。Herdr 是唯一执行后端；外部终端仍是
 默认工作现场，内嵌轻现场作为回退。
 
 ## 核心概念

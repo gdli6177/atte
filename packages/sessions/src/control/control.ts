@@ -76,16 +76,25 @@ export class SessionControl {
     return withControlLock(this.directory, async () => {
       const control = await this.load();
       const entries = await this.registrations();
+      const service = new WorkspaceService(root), state = await service.read();
+      const binding = state.backendBinding;
+      if (!binding)
+        await service.execute({ type: "backend.register", binding: readyBinding(control) });
+      else if (binding.backend === "orca") {
+        // A synthetic v5 snapshot can still carry Orca history. Never rewrite
+        // it into Herdr; the goals remain read-only and cannot execute.
+      } else if (binding.backend !== "herdr" || binding.installationId !== control.installationId)
+        throw new SessionError(
+          "backend_installation_mismatch",
+          "工作区属于另一个 Atte 安装，不能自动接管旧后端；请先备份工作区并核对原安装。",
+        );
+      else if (binding.epoch !== control.epoch ||
+        binding.scopeGeneration !== control.scopeGeneration || binding.status !== "active")
+        await service.execute({ type: "backend.recover-stale", binding: readyBinding(control) });
       if (!entries.some(entry => entry.root === root)) {
         entries.push({ root, registeredAt: new Date().toISOString() });
         await atomicJSON(this.registryPath, entries.sort((left, right) => left.root.localeCompare(right.root)));
       }
-      const service = new WorkspaceService(root), state = await service.read();
-      const binding = state.backendBinding;
-      if (binding && (binding.backend !== "herdr" || binding.installationId !== control.installationId ||
-        binding.epoch !== control.epoch || binding.scopeGeneration !== control.scopeGeneration ||
-        binding.status !== "active")) return control;
-      await service.execute({ type: "backend.register", binding: readyBinding(control) });
       return control;
     });
   }

@@ -1,6 +1,6 @@
 # Atte 领域语言
 
-当前产品为 Atte 0.14.0：轻量注意力中心。产品行为以[使用说明](docs/atte.md)
+当前产品为 Atte 0.14.1：轻量注意力中心。产品行为以[使用说明](docs/atte.md)
 和[架构](docs/ARCHITECTURE.md)为准； `docs/product/` 中标注“历史规格”的文件
 只用于理解旧版本，不定义当前行为。
 

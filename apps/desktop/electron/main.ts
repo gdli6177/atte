@@ -41,6 +41,7 @@ import {
   SessionError,
   SessionRuntime,
   localAdapter,
+  receiptReminderDeliveryId,
   workspaceSessionName,
 } from "../../../packages/sessions/src/index.js";
 import { HerdrPlugin } from "./herdr-plugin.js";
@@ -310,9 +311,12 @@ async function installDetectedAgentHooks() {
 async function remindRuntimeOwner(goal: Goal, prompt: string) {
   const target = activeService(), current = (await target.read()).goals.find(item => item.id === goal.id);
   if (!current?.scene || isReadOnlyGoal(current)) throw new Error("负责人现场暂不可达或目标为只读历史");
+  const attemptId = current.agentRuntime?.attempt.attemptId;
+  const turnId = current.agentRuntime?.receipt?.turnId;
+  if (!attemptId || !turnId) throw new Error("负责人回合身份不完整，不能发送回执提醒");
   const receipt = await sessionRuntime(target.root).send(
     current.scene,
-    `receipt-reminder-${current.agentRuntime?.receipt?.turnId ?? randomUUID()}`,
+    receiptReminderDeliveryId(current.id, attemptId, turnId),
     prompt,
   );
   if (receipt.status === "rejected") throw new Error(receipt.detail ?? "负责人现场拒绝本次提醒。");

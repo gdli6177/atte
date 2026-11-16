@@ -142,6 +142,72 @@ test("interrupted switch metadata is retired with a new epoch and never becomes 
   assert.equal(persisted.maintenance, undefined);
 });
 
+test("an interrupted upgrade retires stale Herdr scenes and rebinds the workspace", async t => {
+  const { root, directory } = await fixture(t);
+  const control = new SessionControl(directory);
+  const original = await control.initialize();
+  await writeFile(join(directory, "backend.json"), JSON.stringify({
+    ...original, epoch: 3, phase: "recovery_required",
+    switchOperationId: "old-switch", maintenance: { id: "update", backend: "orca" },
+  }), { mode: 0o600 });
+  const service = new WorkspaceService(root);
+  const goal = await service.execute({ type: "goal.intake", text: "旧现场目标" }) as Goal;
+  const state = await service.read();
+  const scene: SceneReferenceV1 = {
+    version: 1, backend: "herdr", installationId: original.installationId,
+    runtimeId: "old-runtime", runtimeGeneration: "old-runtime-birth",
+    bindingId: "old-owner-binding", attemptId: "old-owner-attempt", backendEpoch: 3,
+    locator: {
+      kind: "herdr", session: "atte-test", workspaceId: "workspace-one",
+      tabId: "workspace-one:tab-one", paneId: "workspace-one:pane-one",
+    },
+  };
+  await writeFile(join(root, ".atte/state.json"), JSON.stringify({
+    ...state, backendEpoch: 3,
+    backendBinding: {
+      installationId: original.installationId, backend: "herdr", epoch: 3,
+      scopeGeneration: original.scopeGeneration, status: "active",
+    },
+    goals: state.goals.map(item => ({ ...item, scene })),
+  }, null, 2));
+
+  const upgraded = await control.initialize({ recoverInterrupted: true });
+  assert.equal(upgraded.epoch, 4);
+  await control.registerWorkspace(root);
+  const registered = await service.read();
+  assert.equal(registered.backendBinding?.epoch, 4);
+  assert.equal(registered.backendBinding?.scopeGeneration, upgraded.scopeGeneration);
+  assert.equal(registered.goals[0]?.id, goal.id);
+  assert.equal(registered.goals[0]?.readOnlyReason, "legacy-epoch");
+  assert.deepEqual(registered.goals[0]?.scene, scene);
+  assert.equal(registered.history?.backendBinding?.epoch, 3);
+  assert.equal(await control.canDispatch(), true);
+  assert.equal(await control.operation({
+    workspace: root, requestId: "after-stale-recovery", kind: "bind",
+  }, async () => "ok"), "ok");
+});
+
+test("a workspace from another Atte installation is refused without being registered", async t => {
+  const { root, directory } = await fixture(t);
+  const control = new SessionControl(directory);
+  await control.initialize();
+  const service = new WorkspaceService(root);
+  await service.execute({ type: "goal.intake", text: "另一个安装的工作区" });
+  const state = await service.read();
+  await writeFile(join(root, ".atte/state.json"), JSON.stringify({
+    ...state,
+    backendEpoch: 0,
+    backendBinding: {
+      installationId: "foreign-installation", backend: "herdr", epoch: 0,
+      scopeGeneration: "foreign-scope", status: "active",
+    },
+  }, null, 2));
+
+  await assert.rejects(control.registerWorkspace(root), /backend_installation_mismatch/);
+  assert.deepEqual(await control.registrations(), []);
+  assert.equal((await service.read()).backendBinding?.installationId, "foreign-installation");
+});
+
 test("a corrupted Herdr control file blocks dispatch instead of silently recreating identity", async t => {
   const { directory } = await fixture(t);
   const control = new SessionControl(directory);

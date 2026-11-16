@@ -610,7 +610,9 @@ export async function run(argv: string[], io = { out: console.log, error: consol
       else if (group === "goal" && action === "start") {
         const by = args.one("by");
         if (by !== "self" && by !== "concierge") throw new Error("--by 必须是 self 或 concierge");
-        command = { type: by === "self" ? "goal.takeover" : "goal.delegate", goalId: target! };
+        command = by === "self"
+          ? { type: "goal.takeover", goalId: target!, actor }
+          : { type: "goal.delegate", goalId: target! };
       }
       else if (group === "goal" && action === "restore") command = { type: "goal.restore", goalId: target! };
       else if (group === "goal" && action === "create") {
@@ -724,7 +726,8 @@ export async function run(argv: string[], io = { out: console.log, error: consol
         };
       }
       else if (group === "goal" && action === "resolve") command = {
-        type: "goal.resolve", goalId: target!, note: args.one("note") ?? args.one("reason"), actor,
+        type: "goal.resolve", goalId: target!, note: args.one("note") ?? args.one("reason"),
+        actor: actor ?? "你",
         outcome: (args.one("outcome") ?? "approved") as "approved" | "rejected",
         source: "cli",
       };

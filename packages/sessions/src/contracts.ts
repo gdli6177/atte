@@ -119,6 +119,7 @@ export interface SessionAdapter {
 export type SessionErrorCode =
   | "backend_missing" | "backend_unverified" | "backend_incompatible"
   | "backend_unreachable" | "backend_unsupported" | "backend_busy" | "backend_configuration_invalid"
+  | "backend_installation_mismatch"
   | "scene_read_only"
   | "scene_identity_mismatch" | "launch_unconfirmed" | "launch_failed" | "delivery_unconfirmed"
   | "focus_failed" | "stale_backend_epoch";

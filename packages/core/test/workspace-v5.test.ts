@@ -272,6 +272,36 @@ test("v4 auto-accepted delivery is revoked into human review, while a human acce
   assert.equal(accepted.acceptance?.kind, "human");
 });
 
+test("managed agents cannot clear a migration confirmation hold", async () => {
+  const { root, service } = await fixture();
+  const goal = await service.execute({ type: "goal.intake", text: "旧实验目标" }) as Goal;
+  const state = await service.read();
+  state.goals[0]!.autonomy = { attempts: { used: 0, limit: 3 } } as Goal["autonomy"];
+  await writeFile(join(root, ".atte/state.json"), `${JSON.stringify({ ...state, version: 4 }, null, 2)}\n`);
+  const held = (await new WorkspaceService(root).read()).goals[0]!;
+  assert.equal(held.executionHold, "migration-confirmation");
+  const managed = new WorkspaceService(root, {
+    installationId: "installation-one",
+    backend: "herdr",
+    epoch: 1,
+    scopeGeneration: "scope-one",
+    role: "concierge",
+    goalId: held.id,
+  } as ManagedSessionContext);
+  await assert.rejects(managed.execute({
+    type: "goal.complete", goalId: goal.id, actor: "你", note: "Agent supplied quote",
+  }), /必须由人/);
+  await assert.rejects(managed.execute({
+    type: "goal.drop", goalId: goal.id, actor: "你", note: "Agent supplied quote",
+  }), /必须由人/);
+  await assert.rejects(managed.execute({
+    type: "goal.takeover", goalId: goal.id, actor: "你",
+  }), /goal_confirmation_required/);
+  const after = await new WorkspaceService(root).read();
+  assert.equal(after.goals[0]!.executionHold, "migration-confirmation");
+  assert.equal(after.goals[0]!.status, "active");
+});
+
 test("v4 keeps delivery and discovery ordinary while release lifecycle and migration confirmation stay guarded", async () => {
   const { root, service } = await fixture();
   const discovery = await service.execute({
