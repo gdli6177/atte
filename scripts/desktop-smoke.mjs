@@ -888,9 +888,10 @@ try {
       const bounds = await page.locator(".goal-row-batch").first().evaluate(row => {
         const title = row.querySelector("strong").getBoundingClientRect();
         const checkbox = row.querySelector(".ui-checkbox__box").getBoundingClientRect();
-        return { titleX: title.x, checkboxRight: checkbox.right, titleWidth: title.width };
+        return { titleX: title.x, checkboxRight: checkbox.right,
+          copyWidth: row.querySelector(".goal-row-copy").getBoundingClientRect().width };
       });
-      assert.ok(bounds.titleX > bounds.checkboxRight && bounds.titleWidth > 100,
+      assert.ok(bounds.titleX > bounds.checkboxRight && bounds.copyWidth > 100,
         "batch goal titles must stay beside the checkbox with room to read");
     }
   }
