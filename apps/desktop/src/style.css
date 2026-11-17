@@ -413,6 +413,7 @@ h1 em { color: var(--accent); font-style: normal; }
 .attention-action-focus.review { --status-color: var(--mint); }
 .attention-action-focus.waiting { --status-color: var(--warm); }
 .attention-action-focus.blocked { --status-color: var(--danger); }
+.goal-attention-body .attention-agent-reply { margin: 0; }
 .attention-evidence { margin: 0; }
 .goal-attention-body .goal-delivery { margin: 0; padding: var(--space-4); }
 .goal-attention-body .goal-delivery .section-heading { gap: var(--space-2); }

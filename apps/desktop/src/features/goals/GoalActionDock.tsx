@@ -84,7 +84,7 @@ export function GoalActionDock({
           goal.mode !== "concierge"
         }
         heading={goal.status === "review" ? "给管家发消息" : undefined}
-        note={goal.status === "review" ? "补充要求或提出问题；发送后保留待验收状态，由管家判断下一步。" : undefined}
+        note={goal.status === "review" ? "普通提问发送后保留待验收状态；需要修改成果时，请明确说明，由管家退回并继续推进。" : undefined}
         onClose={() => setReplyMode(null)}
         onComplete={(receipt) => {
           setReplyMode(null);
@@ -179,7 +179,7 @@ export function GoalActionDock({
       <div className="goal-decision-row">
         <div className="goal-action-copy">
           <span>明确验收</span>
-          <strong>核对成果后验收；补充要求可以直接给管家发消息。</strong>
+          <strong>核对成果后验收；普通提问保留待验收，需要修改时由管家退回推进。</strong>
         </div>
         <div className="goal-action-buttons">
           <Button variant="secondary" onClick={() => setReplyMode("message")}>

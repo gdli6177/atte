@@ -46,7 +46,7 @@ import {
 } from "../../../packages/sessions/src/index.js";
 import { HerdrPlugin } from "./herdr-plugin.js";
 import { deliverGoalUpdate } from "./goal-delivery.js";
-import { reconcileSceneReply } from "./scene-reconciliation.js";
+import { reconcileSceneReply, requestNeutralSceneReply } from "./scene-reconciliation.js";
 import { SessionPoller } from "./session-poller.js";
 import { CoordinatorInbox, type CoordinatorInboxItem, type CoordinatorInboxStatus } from "./coordinator-inbox.js";
 import { CoordinatorDispatcher, type CoordinatorExecutionResult } from "./coordinator-dispatcher.js";
@@ -1103,24 +1103,6 @@ async function diagnosticsReport(): Promise<string> {
   ].join("\n");
 }
 
-async function requestNeutralSceneReply(workspace: string, goal: Goal) {
-  if (isReadOnlyGoal(goal) || goal.scene?.backend !== "herdr" || !goal.sceneVisit) return false;
-  const runtime = sessionRuntime(workspace);
-  const observation = (await runtime.inspect([goal.scene]))[0];
-  if (!observation || observation.identity !== "match" || !observation.reachable ||
-    observation.state !== "idle") return false;
-  const question = attentionRequest(goal)?.summary ?? "当前待处理事项";
-  const receipt = await runtime.send(
-    goal.scene,
-    `scene-reconcile-${goal.sceneVisit.id}`,
-    [
-      `用户已查看当前现场。如果「${question}」已在现场由用户明确答复，`,
-      `立即把这个明确事实与用户原话通过 atte goal scene-reply ${goal.id} 写回；`,
-      "不要只回复“已回答”。如果尚未处理，继续当前工作或保持原状态；后续仍需按 Atte 语义命令写回。",
-    ].join(""),
-  );
-  return receipt.status !== "rejected";
-}
 function watchWorkspaceState(target: WorkspaceService) {
   stateWatcher?.close();
   if (stateRefreshTimer) clearTimeout(stateRefreshTimer);
@@ -1337,7 +1319,7 @@ async function synchronize() {
     // This runs outside the coordinator queue: it talks only to the owner.
     for (const item of (await target.read()).goals.filter(goal => !isReadOnlyGoal(goal) && goal.sceneVisit?.status === "pending"))
       void reconcileSceneReply(target, item.id, {
-        requestSceneReply: async goal => requestNeutralSceneReply(workspace, goal),
+        requestSceneReply: async goal => requestNeutralSceneReply(sessionRuntime(workspace), goal),
       }).catch(() => {});
     const requests = (await target.execute({ type: "watchdog.inspect", at: new Date().toISOString() }) as WatchdogRequest[]).slice(0, 10);
     state = await target.read();
@@ -1533,7 +1515,7 @@ app.whenReady().then(async () => {
     ).catch(() => {});
     if (command.type === "scene.visit" && command.retry) {
       void reconcileSceneReply(target, command.goalId, {
-        requestSceneReply: goal => requestNeutralSceneReply(target.root, goal),
+        requestSceneReply: goal => requestNeutralSceneReply(sessionRuntime(target.root), goal),
       }, { graceMs: 0 }).catch(() => {});
     }
     if (["goal.accept", "goal.complete", "goal.drop"].includes(command.type)) {

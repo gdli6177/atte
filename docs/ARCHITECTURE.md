@@ -1,6 +1,6 @@
 # Atte 架构
 
-版本：0.14.1
+版本：0.14.2
 
 产品说明见[使用说明](atte.md)，领域术语见[CONTEXT.md](../CONTEXT.md)。
 
@@ -79,6 +79,7 @@ v5 只保留当前产品所需字段：
 ```text
 backlog -> active -> waiting -> active
                     \-> review -> completed
+                        review -> active (rework)
 active / waiting / review -> dropped
 ```
 
@@ -94,6 +95,18 @@ active / waiting / review -> dropped
 - `complete` / `rework` / `drop` / `resolve` 的最终状态来自人的明确操作或原话，
   管家只能记录用户已明确说出的事实；
 - `goal.remind` 只改提醒时间，不改变生命周期。
+
+整体交付范围由 A 延伸到 A2 时，Agent 在实质写回前核对最新记录，通过
+`goal update --title` 维护短而稳定的整体标题。标题更新不覆盖原始 `description`，
+不改变生命周期或交付；活动保留前后标题与实际操作者。普通进度不反复改名。
+
+待验收收到明确新增要求时，负责人先提交带当前 `attentionId` 的 `scene-reply`；
+管家核对原话与回执，先更新必要的标题，再用 `goal rework` 显式回到 `active`，
+读回确认后转达原负责人。来自桌面的消息同样保留 `review`，由管家根据明确原话
+执行退回。CLI 在锁内核对当前 attention 与 scene reply，旧回执不能处理新一轮交付。
+退回清除 attention 后，旧案卷 guard 不再用于后续状态写入。普通提问由负责人回答，
+保持 `review` 与交付；负责人以 `goal message` 保存答案时保留真实署名、原现场回执
+和派发记录，不再把答案当成人的新反馈重新派发。受管 Agent 不得验收。
 
 注意力由同一份状态派生，不建立第二份列表：
 
@@ -237,6 +250,10 @@ atte hook ingest --adapter <id>
 Hook 只观测会话、turn、阻塞、中断和可用回复。工具参数、工具输出和终端全文不进入
 目标；Prompt 与最新回复只保存有界文本和原文哈希。事件按 attempt 与单调序号去重，
 旧 attempt、旧 turn 和迟到事件只能进入诊断。
+
+注意力卡显示 `agentRuntime.lastReply` 作为“负责人最近回复”，保留换行并安全转义。
+它是现场观测，不是验收证据或状态写入，不追加整段对话到活动历史；UI 继续通过
+同一份工作区快照观察显式标题与状态写回。
 
 OMP extension revision 3 在写 stdin 前安装子进程与流错误处理器，避免 child 提前
 退出时未处理的 `EPIPE` 杀死 OMP。CLI ingest 同样有界读取；超限后丢弃载荷并继续

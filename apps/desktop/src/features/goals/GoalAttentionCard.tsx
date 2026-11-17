@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { Goal, WorkspaceState } from "../../../../../packages/core/src/types.js";
 import { GoalActionDock } from "./GoalActionDock.js";
+import { GoalAgentLastReply } from "./GoalAgentLastReply.js";
 import { GoalDeliveryEvidence } from "./GoalDeliveryEvidence.js";
 import { GoalAttachments } from "./GoalAttachments.js";
 import { GoalSceneSync } from "./GoalSceneSync.js";
@@ -87,6 +88,7 @@ export function GoalAttentionCard({
               </div>
             </section>
             <GoalSceneSync goal={goal} view={view} service={service} busy={busy} />
+            <GoalAgentLastReply reply={goal.agentRuntime?.lastReply} />
             {view.needsDecision && !view.sceneSync && view.contextActivity && (
               <section className="goal-handoff attention-evidence" aria-label="决定依据">
                 <header><span><Bot size={14} /></span><div><strong>{view.contextActivity.actor}</strong><small>负责人交接 · {time(view.contextActivity.at)}</small></div></header>

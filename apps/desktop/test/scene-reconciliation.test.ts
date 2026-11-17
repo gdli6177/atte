@@ -2,7 +2,8 @@ import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { WorkspaceService, attentionGoals, type Goal } from "../../../packages/core/src/index.js";
-import { reconcileSceneReply } from "../electron/scene-reconciliation.js";
+import type { SessionRuntime, SceneObservation } from "../../../packages/sessions/src/index.js";
+import { reconcileSceneReply, requestNeutralSceneReply } from "../electron/scene-reconciliation.js";
 import { HerdrClient } from "../electron/herdr.js";
 
 const roots: string[] = [];
@@ -152,4 +153,74 @@ test("safe owner reconciliation never prompts a working, blocked, unknown or rep
       }
     }
   }
+});
+
+test("the current session runtime sends guarded review reconciliation with the shared owner protocol", async () => {
+  const { service, id } = await fixture();
+  await service.execute({ type: "goal.resolve", goalId: id, note: "先交付核心功能" });
+  await service.execute({
+    type: "goal.review", goalId: id,
+    delivery: {
+      summary: "核心功能已交付。",
+      checks: [{ name: "验证", command: "检查核心功能", result: "passed" }],
+    },
+  });
+  await service.execute({ type: "scene.visit", goalId: id });
+  const before = await service.read();
+  const item: Goal = {
+    ...before.goals[0]!,
+    scene: {
+      version: 1, backend: "herdr", installationId: "installation-test", backendEpoch: 1,
+      bindingId: "binding-test", attemptId: "attempt-test", runtimeId: "runtime-test",
+      runtimeGeneration: "generation-test",
+      locator: {
+        kind: "herdr", session: "cv-test", workspaceId: "w1", tabId: "w1:t2", paneId: "w1:p2",
+      },
+    },
+  };
+  const sent: string[] = [];
+  let observation: SceneObservation = {
+    bindingId: item.scene!.bindingId, identity: "match", reachable: true,
+    state: "idle", observedAt: new Date().toISOString(), source: "backend",
+  };
+  const runtime: Pick<SessionRuntime, "inspect" | "send"> = {
+    async inspect(scenes) {
+      assert.deepEqual(scenes, [item.scene]);
+      return [observation];
+    },
+    async send(scene, deliveryId, text) {
+      assert.equal(deliveryId, `scene-reconcile-${item.sceneVisit!.id}`);
+      sent.push(text);
+      return {
+        status: "started", scene, deliveryId,
+        payloadSha256: "a".repeat(64), at: new Date().toISOString(),
+      };
+    },
+  };
+  assert.equal(await requestNeutralSceneReply(runtime, item), true);
+  assert.match(sent[0]!, /不是用户的新回复，不是继续执行的授权/);
+  assert.ok(sent[0]!.includes(item.attention!.id!));
+  assert.match(sent[0]!, /--attention-id <attentionRequest.id>/);
+  assert.match(sent[0]!, /用户本轮完整原话/);
+  assert.match(sent[0]!, /review→rework→active/);
+  assert.match(sent[0]!, /普通提问.*review/);
+  assert.match(sent[0]!, /不得.*goal accept/);
+  assert.doesNotMatch(sent[0]!, /如果尚未处理，继续当前工作/);
+  for (const state of ["working", "blocked", "unknown", "exited"] as const) {
+    observation = { ...observation, state };
+    assert.equal(await requestNeutralSceneReply(runtime, item), false);
+  }
+  for (const identity of ["mismatch", "unverifiable"] as const) {
+    observation = { ...observation, state: "idle", identity };
+    assert.equal(await requestNeutralSceneReply(runtime, item), false);
+  }
+  observation = { ...observation, identity: "match", reachable: false };
+  assert.equal(await requestNeutralSceneReply(runtime, item), false);
+  observation = { ...observation, reachable: true };
+  assert.equal(await requestNeutralSceneReply(runtime, {
+    ...item, sceneVisit: { ...item.sceneVisit!, attentionId: "old-attention" },
+  }), false);
+  assert.equal(await requestNeutralSceneReply(runtime, { ...item, readOnly: true }), false);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(await service.read(), before);
 });

@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
-import { WorkspaceService } from "../packages/core/src/index.ts";
+import { WorkspaceService, clipAgentRuntimeText } from "../packages/core/src/index.ts";
 import { auditVisualState, focusedVisualState } from "./lib/visual-audit.mjs";
 
 const artifacts = await mkdtemp(join(tmpdir(), "atte-ui-"));
@@ -29,6 +29,27 @@ const reviewed = await service.execute({
     checks: [{ name: "交互回归", command: "pnpm test:atte-ui", result: "passed" }],
   },
 });
+const ownerReply = "盘点结果已经写入。\n可以继续按结论合并入口。";
+const attemptId = "attempt-ui-followup";
+await service.execute({
+  type: "agent.runtime.register", goalId: goal.id,
+  attempt: {
+    goalId: goal.id, attemptId, agent: "owner-ui", adapter: "codex",
+    startedAt: new Date().toISOString(),
+  },
+  hookTokenHash: "a".repeat(64), capabilities: ["agent.response"],
+});
+async function observeReply(sequence, content) {
+  await service.execute({
+    type: "agent.runtime.event",
+    event: {
+      version: "v1", eventId: `ui-reply-${sequence}`, sequence,
+      at: new Date().toISOString(), source: "hook", agent: "owner-ui", adapter: "codex",
+      goalId: goal.id, attemptId, type: "agent.response", content: clipAgentRuntimeText(content),
+    },
+  });
+}
+await observeReply(1, ownerReply);
 const appPath = resolve(process.env.ATTE_APP_PATH ??
   "apps/desktop/release/Atte-darwin-arm64/Atte.app/Contents/MacOS/Atte");
 const application = await electron.launch({
@@ -122,6 +143,10 @@ try {
     await expect(page.getByRole("button", { name: "验收通过", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "问管家", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "退回修改", exact: true })).toHaveCount(0);
+    const reply = page.getByRole("region", { name: "负责人最近回复", exact: true });
+    await expect(reply).toBeVisible();
+    await expect(reply.locator("p")).toHaveText(ownerReply);
+    assert.equal(await reply.locator("p").evaluate(element => getComputedStyle(element).whiteSpace), "pre-wrap");
   }
   for (const value of ["dark", "light"]) {
     await theme(value);
@@ -268,6 +293,24 @@ try {
   }
   await page.setViewportSize({ width: 1440, height: 960 });
   await openReview();
+  const updatedTitle = "合并重复入口并验证现有使用方式";
+  const updatedReply = "已收到基于盘点结论的新要求。\n待管家退回推进后继续。";
+  const beforeObservation = (await service.read()).goals.find(item => item.id === goal.id);
+  await service.execute({
+    type: "goal.update", goalId: goal.id, patch: { title: updatedTitle }, actor: "owner-ui",
+  });
+  await observeReply(2, updatedReply);
+  await expect(page.locator(".goal-attention-title")).toHaveText(updatedTitle);
+  await expect(page.getByRole("region", { name: "负责人最近回复", exact: true }).locator("p")).toHaveText(updatedReply);
+  const observed = (await service.read()).goals.find(item => item.id === goal.id);
+  assert.equal(observed.status, "review");
+  assert.deepEqual(observed.delivery, beforeObservation.delivery);
+  assert.deepEqual(observed.attention, beforeObservation.attention);
+  assert.equal(observed.description, beforeObservation.description);
+  assert.equal(observed.activities.length, beforeObservation.activities.length + 1);
+  assert.equal(observed.activities.at(-1).actor, "owner-ui");
+  assert.ok(!observed.activities.some(activity => activity.text === updatedReply));
+  await capture("review-live-followup");
   await page.getByRole("button", { name: "给管家发消息", exact: true }).click();
   const feedback = "请补齐浅色截图，保留现有验收记录。";
   await page.getByLabel("发给管家的消息", { exact: true }).fill(feedback);

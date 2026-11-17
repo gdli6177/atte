@@ -666,7 +666,7 @@ type WorkspaceCommand =
   | { type: "goal.attachment.remove"; goalId: string; attachmentId: string; actor?: string }
   | { type: "attachments.cleanup"; retentionDays?: number; at?: string }
   | { type: "goal.delete"; goalId: string; actor?: string }
-  | { type: "goal.update"; goalId: string; patch: { title?: string; description?: string; next?: string; owner?: string; stageId?: string; waitingFor?: string; remindAt?: string | null; status?: "active" | "waiting" } }
+  | { type: "goal.update"; goalId: string; actor?: string; patch: { title?: string; description?: string; next?: string; owner?: string; stageId?: string; waitingFor?: string; remindAt?: string | null; status?: "active" | "waiting" } }
   | { type: "goal.message"; goalId: string; text: string; attachments?: GoalAttachment[]; actor?: string; routeToConcierge?: boolean }
   | {
       type: "goal.skill.attach";
