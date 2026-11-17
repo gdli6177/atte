@@ -638,7 +638,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
           kind: textArg(args.one("kind"), "--kind") as "delivery" | "discovery",
           actor,
         };
-      else if (group === "goal" && action === "update") command = { type: "goal.update", goalId: target!, patch: {
+      else if (group === "goal" && action === "update") command = { type: "goal.update", goalId: target!, actor, patch: {
         ...(args.has("stage") ? (() => { throw new Error("工序已移除；请直接更新目标下一步"); })() : {}),
         title: args.one("title"), description: args.one("description"), next: args.one("next"),
         owner: args.one("owner"),
@@ -654,7 +654,7 @@ export async function run(argv: string[], io = { out: console.log, error: consol
         const message = textArg(args.one("text"), "--text");
         const attachments = await importAttachmentFiles(service.root, args.all("attachment"));
         command = {
-          type: "goal.message", goalId: target!, text: message,
+          type: "goal.message", goalId: target!, text: message, actor,
           ...(attachments.length ? { attachments } : {}),
         };
       }

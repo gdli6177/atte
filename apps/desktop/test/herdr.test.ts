@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HerdrClient, terminalPrompt, type HerdrRunner } from "../electron/herdr.ts";
-import { agentReceiptMarker } from "../../../packages/core/src/index.ts";
+import { agentReceiptMarker, type Goal } from "../../../packages/core/src/index.ts";
 
 function fake(responses: Record<string, string>) {
   const calls: string[][] = [];
@@ -333,6 +333,122 @@ test("new goals notify the same concierge without creating an owner or another s
   assert.match(prompts[2]![3]!, /\/workspace\/\.atte\/attachments\/att_0123456789abcdef\.png/);
   assert.match(prompts[2]![3]!, /实际查看图片/);
   assert.ok(prompts.every(args => args.includes("--wait") && !args.includes("--timeout")));
+});
+
+function reviewProtocolGoal(): Goal {
+  return {
+    id: "goal_a2",
+    projectId: "personal",
+    title: "实现 A",
+    description: "实现 A；保留这条原始要求。",
+    mode: "concierge",
+    status: "review",
+    steps: [],
+    next: "等待人验收 A",
+    owner: "owner-a",
+    attention: {
+      id: "attention-a",
+      kind: "review",
+      summary: "请验收 A",
+      since: "2026-11-17T00:00:00.000Z",
+    },
+    herdr: {
+      session: "atte-test", workspaceId: "w1",
+      tabId: "w1:t2", paneId: "w1:p2", agent: "owner-a",
+    },
+    activities: [],
+    createdAt: "2026-11-17T00:00:00.000Z",
+    updatedAt: "2026-11-17T00:00:00.000Z",
+  };
+}
+
+test("已有管家收到 review 新要求时先更新整体标题再退回并转原负责人", async () => {
+  const mock = fake({ "agent prompt": "{}" });
+  const client = new HerdrClient(mock.runner, "atte-test");
+  const quote = "请继续做 A2。\n保留 A 的结果，并补齐异常场景。";
+  for (const kind of ["feedback", "scene_reply"] as const) {
+    const goal = reviewProtocolGoal();
+    goal.dispatch = { id: `dispatch-${kind}`, kind, note: quote, status: "pending", at: goal.updatedAt };
+    if (kind === "scene_reply") goal.sceneReply = {
+      id: "reply-a2", attentionId: "attention-a", quote,
+      summary: "用户要求在 A 的基础上继续做 A2，需先退回修改。", actor: "owner-a", at: goal.updatedAt,
+    };
+    const before = structuredClone(goal);
+    await client.notifyGoal({ session: "atte-test", agent: "concierge" }, goal.id, goal.title, goal);
+    assert.deepEqual(goal, before);
+    const prompt = mock.calls.at(-1)![3]!;
+    const title = prompt.indexOf("atte goal update goal_a2 --title");
+    const rework = prompt.indexOf("atte goal rework goal_a2 --note");
+    const active = prompt.indexOf("核实 status=active", rework);
+    const send = prompt.indexOf("atte owner send goal_a2 --text", active);
+    assert.ok(title >= 0 && rework > title && active > rework && send > active);
+    assert.match(prompt, /review→rework→active/);
+    assert.match(prompt, /--attention-id <attentionRequest.id>/);
+    assert.match(prompt, /--note "<用户本轮完整原话>"/);
+    assert.match(prompt, /普通提问.*review/);
+    assert.match(prompt, /由负责人用 goal message/);
+    assert.match(prompt, /管家不得调用 goal message/);
+    assert.match(prompt, /受管 Agent.*不得.*goal accept/);
+    assert.ok(prompt.includes(JSON.stringify(quote)));
+    if (kind === "scene_reply") {
+      assert.match(prompt, /--scene-reply-id <sceneReply.id>/);
+      assert.match(prompt, /旧 scope.*失效/);
+    }
+  }
+});
+
+test("已有管家的跟进巡检和协议刷新都收到标题与 review 守卫", async () => {
+  const mock = fake({ "agent prompt": "{}" });
+  const client = new HerdrClient(mock.runner, "atte-test");
+  const reference = { session: "atte-test", agent: "concierge" };
+  const goal = reviewProtocolGoal();
+  await client.notifyFollowUp(reference, goal.id, "核对当前事实", goal);
+  await client.notifyWatchdog(reference, [{ goalId: goal.id, reason: "settled" }]);
+  await client.refreshConcierge(reference, "/workspace");
+  const prompts = mock.calls.filter(args => args[1] === "prompt");
+  assert.equal(prompts.length, 3);
+  for (const prompt of prompts) {
+    assert.match(prompt[3]!, /每次实质写回/);
+    assert.match(prompt[3]!, /review→rework→active/);
+    assert.match(prompt[3]!, /受管 Agent.*不得.*goal accept/);
+  }
+  assert.match(prompts[2]![3]!, /没有当前案卷，禁止读取或修改目标/);
+});
+
+test("已有负责人的安全核对包含完整原话、标题和 review 退回协议", async () => {
+  const goal = reviewProtocolGoal();
+  const mock = fake({
+    "agent list": JSON.stringify({ result: { agents: [{
+      name: "owner-a", pane_id: "w1:p2", agent_status: "idle",
+    }] } }),
+    "agent prompt": "{}",
+  });
+  assert.equal(await new HerdrClient(mock.runner, "atte-test").requestSceneReply(goal), true);
+  const prompt = mock.calls.find(args => args[1] === "prompt")![3]!;
+  assert.match(prompt, /不是用户的新回复/);
+  assert.match(prompt, /atte goal show goal_a2 --json/);
+  assert.match(prompt, /--attention-id <attentionRequest.id>/);
+  assert.match(prompt, /--quote "<用户本轮完整原话>"/);
+  assert.match(prompt, /A\+A2/);
+  assert.match(prompt, /review→rework→active/);
+  assert.match(prompt, /负责人不得自行.*goal rework/);
+  assert.match(prompt, /不得去掉 --attention-id.*--scene-reply-id/);
+  assert.match(prompt, /受管 Agent.*不得.*goal accept/);
+});
+
+test("安全核对不会向仍有工作动画或尚未就绪的负责人输入协议", async () => {
+  for (const presence of [
+    { terminal_title_stripped: "π ⠋ 正在处理" },
+    { interactive_ready: false },
+  ]) {
+    const mock = fake({
+      "agent list": JSON.stringify({ result: { agents: [{
+        name: "owner-a", pane_id: "w1:p2", agent_status: "idle", ...presence,
+      }] } }),
+    });
+    assert.equal(await new HerdrClient(mock.runner, "atte-test").requestSceneReply(reviewProtocolGoal()), false);
+    assert.equal(mock.calls.some(args => args[1] === "prompt"), false);
+  }
 });
 
 test("watchdog keeps recovery with owners instead of asking the concierge to execute", async () => {

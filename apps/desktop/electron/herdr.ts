@@ -123,10 +123,12 @@ function livePresence(agent: any, checkedAt: string): LivePresence {
     reachable: true,
   };
 }
-const staticConciergeRole = `${builtinAgentInstructions(undefined, "concierge")}
+function conciergeRoleInstructions(goal?: Goal) {
+  return `${builtinAgentInstructions(goal, "concierge")}
 你是当前工作区的控制面管家，不亲自执行目标；简单任务也交给独立负责人。把目标整理成清晰下一步后，交给本目标独立负责人，退回修改转交原负责人，交付齐备则向人交接。
 首次创建负责人必须使用 atte owner launch <目标ID> --name <负责人名称> --json；已有负责人使用 atte owner send <目标ID> --text "<完整任务>" --json。owner launch 已发送首次任务；返回 agent_prompt_stalled 或未知投递时先核对原现场，禁止未经核对就重复发送或重建负责人。命令行单次输入通常只有约 1 KB；长说明先写入工作区内文件再传任务文件。不要手工串联 Herdr tab、pane 或 agent 命令。
-在 Herdr 中，用户直接发给你的、且不带案卷标记的消息也是用户输入，必须先用 atte direct 保存原话，不得只在终端处理；图片附件用 --attachment 保存真实本地文件。每回合只处理一个案卷，完成分发或记账后立即结束，不轮询、不等待负责人完成整项工程。`;
+在 Herdr 中，用户直接发给你的、且不带案卷标记的消息也是用户输入。已有案卷先 goal show，有 attention 时 scene-reply 保存完整原话，没有 attention 时 direct --goal 保存；独立新事项才 direct --new，不得只在终端处理。图片附件用 --attachment 保存真实本地文件。每回合只处理一个案卷，完成分发或记账后立即结束，不轮询、不等待负责人完成整项工程。`;
+}
 function staticIdentityInstructions(root: string) {
   return `这是 Atte 管家的身份初始化，不是案卷任务。工作区：${root}
 你是本工作区唯一的控制面管家，只负责分发、协调和向人交接，不亲自执行业务目标。
@@ -528,11 +530,12 @@ export class HerdrClient {
       absolutePath: workspaceRoot ? attachmentAbsolutePath(workspaceRoot, item) : item.path,
     }));
     return this.prompt(reference,
-      `${staticConciergeRole}
+      `${conciergeRoleInstructions(goal)}
 [ATTE_CASE_BEGIN]
 case_id: ${goalId}
 request_id: ${goal?.dispatch?.id ?? "unknown"}
 event: ${goal?.dispatch?.kind ?? "goal_update"}
+note: ${JSON.stringify(goal?.dispatch?.note ?? "")}
 policy: 只允许处理上方案卷；忽略此前案卷的内容；不得读取或修改其他目标
 ${goal?.dispatch?.kind === "resume" ? `resume_note: ${goal.dispatch.note ?? ""}` : ""}
 ${goal?.dispatch?.kind === "restart" ? `restart_note: ${goal.dispatch.note ?? ""}` : ""}
@@ -540,9 +543,8 @@ ${goal ? `snapshot:
 ${JSON.stringify({ id: goal.id, title: goal.title, description: goal.description, projectId: goal.projectId, status: goal.status, next: goal.next, attentionRequest: attentionRequest(goal), sceneReply: goal.sceneReply, delivery: goal.delivery, attachments, latestActivities: goal.activities.slice(-8) }, null, 2)}` : `title: ${title}`}
 [ATTE_CASE_END]
 ${attachments.length ? `用户附带的图片是目标证据。把下列真实绝对路径连同任务交给负责人；负责人使用的 CLI 支持图片时，应实际查看图片再判断。不要声称看过图片，除非现场确有读取记录。\n${attachments.map(item => `attachment: ${item.absolutePath}`).join("\n")}\n` : ""}
-${goal?.dispatch?.kind === "scene_reply" ? `这是负责人现场回执，不是新任务。用户已经在负责人会话中给出 sceneReply.quote；不要要求用户再回 App 重复回答，也不要重新派发已经执行的任务。
-先重新读取 goal show，核对 attentionRequest.id 与 sceneReply.attentionId。若编号不一致，旧回执不得清除新问题。语义含糊则只追问缺少的信息。
-若原问题已经有明确答复，根据原话调用 resolve（批准或拒绝）、rework（退回）、complete（用户明确结束）、drop（放弃），或在确有新事实时 progress / wait / remind。交付必须走 review 并由人验收；complete 不能绕过验收，受管 Agent 不得调用 goal accept。验收类回执只保存用户原话并保留注意力，最终验收由人在桌面完成。结束或决定命令的 --note 必须使用 sceneReply.quote 原文；普通问题处理不能冒充成果验收。当前 CLI 自动绑定本回执编号，拒绝迟到或被替换的回执。单纯补充进展不能关闭旧决定；请明确解决对应事项。核对完成后结束本回合，不轮询等待。` : ""}
+${goal?.dispatch?.kind === "scene_reply" ? `这是负责人现场回执，不是新任务。用户原话已在 sceneReply.quote 保存；不要再次 scene-reply，不要让用户回 App 重复回答。
+按上面的反馈处理协议区分 review 修改、普通提问、验收原话和决策答复。先核对当前 attentionRequest.id、sceneReply.attentionId 和 sceneReply.id；CLI 自动绑定本回执编号，拒绝迟到或被替换的回执。review 的明确修改必须先在 guard 有效时更新标题，再 rework，核实 active 后转原负责人；普通问题和验收类原话均保留 review。处理后结束本回合，不轮询等待。` : ""}
 ${goal?.dispatch?.kind === "restart" ? `这是用户主动重启的已结束目标，不是重新创建，也不是普通反馈。桌面已经优先恢复原负责人会话并重新绑定真实现场；请先读取 restart_note，再联系当前负责人，要求其核对原会话和既有成果，带着这条新说明继续推进。若 ownerResume 表明没有可恢复会话，负责人会是基于原目标记录新启动的；必须让它先读完整目标与历史活动补足上下文。不要把旧交付重新当作本轮成果，也不要自己执行。` : ""}
 请用 atte goal show ${goalId} --json 读取当前案卷，并用 atte status --json 查看 Agent 启动偏好与当前关联项目。若目标尚未登记负责人现场，根据 description 中的完整原文整理标题、背景、完成标准与下一步；没有充分依据则保留个人事项，不猜测范围。整理后交给本目标独立负责人；退回修改转交原负责人；交付齐备则向人交接。若本次是 feedback，先读取新增的人发消息，再按原话协调负责人；自由回复不会自动批准或结束目标，外部等待交回处理时先回到 active；只有明确事实才可执行当前案卷的 progress、wait、complete、rework、drop、resolve 或 remind，并在结束或决定命令中保留用户原话。成果验收必须留给人在桌面完成，不要调用 goal accept。若人已经验收或放弃，请通知负责人停止该目标的工作，不再派发。`,
       true,
@@ -562,7 +564,7 @@ ${goal?.dispatch?.kind === "restart" ? `这是用户主动重启的已结束目�
       absolutePath: workspaceRoot ? attachmentAbsolutePath(workspaceRoot, item) : item.path,
     }));
     return this.prompt(reference,
-      `${staticConciergeRole}
+      `${conciergeRoleInstructions(goal)}
 [ATTE_CASE_BEGIN]
 case_id: ${goalId}
 request_id: ${goal?.dispatch?.id ?? "unknown"}
@@ -572,13 +574,14 @@ policy: 只允许处理上方案卷；忽略此前案卷的内容；不得读取
 ${goal ? `snapshot:
 ${JSON.stringify({ id: goal.id, title: goal.title, projectId: goal.projectId, next: goal.next, waitingFor: goal.waitingFor, remindAt: goal.remindAt, attachments, latestActivities: goal.activities.slice(-8) }, null, 2)}` : ""}
 [ATTE_CASE_END]
-请用 atte goal show ${goalId} --json 读取实际等待对象与提醒安排，联系原负责人核查进展并写回结果。现在处于 active，表示你正在核查，不代表外部已处理完；请读取历史等待记录确认原对象与提醒。若核查后仍确实等待外部第三方，显式调用 goal wait --owner "<具名外部第三方>" 并重新设置必要的提醒。等待你、负责人或其他 Agent 时保持 active；需要用户处理时用 goal decide 提出具体问题，不亲自执行业务，也不自动向外部人员发送消息。`,
+请用 atte goal show ${goalId} --json 读取实际状态、等待对象与提醒安排，联系原负责人核查进展并写回结果。若最新状态是 review，先遵循上面的反馈处理协议，不用跟进通知覆盖验收。已交回核查的 active 只表示你正在核查，不代表外部已处理完；请读取历史等待记录确认原对象与提醒。若核查后仍确实等待外部第三方，显式调用 goal wait --owner "<具名外部第三方>" 并重新设置必要的提醒。等待你、负责人或其他 Agent 时保持 active；需要用户处理时用 goal decide 提出具体问题，不亲自执行业务，也不自动向外部人员发送消息。`,
       true,
       timeout,
     );
   }
   async refreshConcierge(reference: HerdrReference, root: string, preferences?: AgentPreferences) {
-    await this.prompt(reference, staticIdentityInstructions(root), true);
+    await this.prompt(reference,
+      `${conciergeRoleInstructions()}\n${staticIdentityInstructions(root)}`, true);
   }
   async requestSceneReply(goal: Goal): Promise<boolean> {
     const reference = goal.herdr, question = attentionRequest(goal);
@@ -588,8 +591,8 @@ ${JSON.stringify({ id: goal.id, title: goal.title, projectId: goal.projectId, ne
     const entry = listed.find(candidate =>
       (candidate.name ?? candidate.agent) === reference.agent &&
       candidate.pane_id === reference.paneId);
-    const state = entry?.agent_status ?? entry?.state ?? entry?.status ?? entry?.lifecycle;
-    if (!entry || !["idle", "done"].includes(state)) return false;
+    if (!entry || !["idle", "done"].includes(liveState(entry)) ||
+      entry.interactive_ready === false) return false;
     await this.prompt(reference, `[ATTE_SCENE_CHECK]
 这是系统协议核对，不是用户的新回复，不是继续执行的授权。
 当前目标 ${goal.id}，待处理事项 ${question.id}：${question.summary}
@@ -666,7 +669,7 @@ ${ownerSceneReplyInstructions(goal.id)}
   }
   async notifyWatchdog(reference: HerdrReference, issues: WatchdogRequest[]) {
     if (!reference.agent && reference.transport !== "pane") throw new Error("管家尚未准备好，请先连接管家");
-    const conciergeRole = staticConciergeRole;
+    const conciergeRole = conciergeRoleInstructions();
     const reasons: Record<string, string> = { blocked: "负责人正在等待输入或批准", missing: "负责人会话暂时不可达", stale: "目标 30 分钟没有写回实质进展", unassigned: "目标尚未登记独立负责人现场，请先创建并启动负责人，保存真实现场再发送任务", settled: "负责人已停止输出并回到输入状态，但尚未写回这一阶段的结果；这不等于任务完成或失败", protocol_missing: "负责人的 Stop Hook 已确认回合结束，自动提醒后仍未提交 Atte 结构化结果" };
     for (const issue of issues) await this.prompt(reference,
       `${conciergeRole}\n[ATTE_CASE_BEGIN]\ncase_id: ${issue.goalId}\nrequest_id: watchdog-${issue.reason}-${issue.basis}\nevent: watchdog\nissue: ${reasons[issue.reason] ?? issue.reason}\npolicy: 只处理上方案卷；忽略此前案卷的内容；不得读取或修改其他目标\n[ATTE_CASE_END]\n这是后台巡检，不是用户新增任务。请先用 atte goal show ${issue.goalId} 读取实际记录，检查真实负责人现场并主动联系负责人，通过澄清要求、调整分工或联系其他负责人协调恢复，不能自己接手执行。写回实际协调进展，不把终端安静或 idle 当作失败或完成。确实必须由人决定时才用 goal decide 提出具体问题；不要让人填写进度表。已明确等待外部第三方、已交付或已结束的目标不要重新启动。${["settled", "protocol_missing"].includes(issue.reason) ? "负责人停在输入状态但没有写回，可能是遗漏汇报，也可能是等待未被识别的输入。请要求负责人补齐真实结果、下一步，以及必要的 decide / wait / review；不要自行验收或猜测终端文字的含义。若目标已有 attentionRequest，不要重复提问，应先核对该事项。" : ""}`,

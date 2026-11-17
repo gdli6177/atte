@@ -181,6 +181,13 @@ test("launches the configured agent with an isolated owner environment", async (
   assert.match(prompt[3]!, /完整目标原文/);
   assert.match(prompt[3]!, /goal scene-reply/);
   assert.match(prompt[3]!, /不等于批准、验收或目标完成/);
+  assert.match(prompt[3]!, /每次实质写回/);
+  assert.match(prompt[3]!, /goal update .*--title/);
+  assert.match(prompt[3]!, /A\+A2/);
+  assert.match(prompt[3]!, /review→rework→active/);
+  assert.match(prompt[3]!, /负责人不得自行.*goal rework/);
+  assert.match(prompt[3]!, /普通提问.*review/);
+  assert.match(prompt[3]!, /受管 Agent.*不得.*goal accept/);
   assert.deepEqual(prompt.slice(-3), ["--wait", "--until", "working"]);
 
   const state = await service.read();
@@ -464,6 +471,9 @@ test("launches a custom interactive CLI and records its real foreground process"
   assert.match(launches.at(-1)![3]!, /你是当前 Atte 目标的唯一独立负责人/);
   assert.match(launches.at(-1)![3]!, /## 本次目标任务\n执行自定义任务/);
   assert.match(launches.at(-1)![3]!, /goal scene-reply/);
+  assert.match(launches.at(-1)![3]!, /review→rework→active/);
+  assert.match(launches.at(-1)![3]!, /goal update .*--title/);
+  assert.match(launches.at(-1)![3]!, /受管 Agent.*不得.*goal accept/);
   const state = await service.read();
   assert.equal(state.goals[0]?.herdr?.transport, "pane");
   assert.equal(state.goals[0]?.herdr?.processId, 42);

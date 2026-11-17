@@ -38,10 +38,18 @@ test("review offers one message entry and independent acceptance in both detail 
     const markup = renderToStaticMarkup(createElement(GoalActionDock, props));
     assert.equal((markup.match(/>给管家发消息<\/span>/g) ?? []).length, 1);
     assert.match(markup, /验收通过<\/span>/);
+    assert.equal((markup.match(/<button\b/g) ?? []).length, 2);
     assert.doesNotMatch(markup, /问管家|退回修改/);
     const composer = renderToStaticMarkup(createElement(GoalActionDock, { ...props, replyMode: "message" }));
     assert.match(composer, /发给管家的消息/);
     assert.match(composer, /发送后保留待验收状态/);
+    assert.match(composer, /普通提问发送后保留待验收状态/);
+    assert.match(composer, /需要修改成果时，请明确说明，由管家退回并继续推进/);
+    const failingComposer = renderToStaticMarkup(createElement(GoalActionDock, {
+      ...props, replyMode: "message", error: "发送失败",
+    }));
+    assert.match(failingComposer, /发送失败/);
+    assert.match(failingComposer, /添加图片/);
     const reconciled = renderToStaticMarkup(createElement(GoalActionDock, {
       ...props, view: { ...view, sceneSync: { label: "已保存", detail: "待核对", quote: "现场已答复" } },
     }));

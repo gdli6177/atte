@@ -188,7 +188,7 @@ function ongoing(item: Goal, allowReview = false, allowBacklog = false) {
   if (["completed", "dropped"].includes(item.status))
     throw new Error("已结束的目标不能继续修改");
   if (item.status === "review" && !allowReview)
-    throw new Error("目标正在等待验收，请先验收或退回修改");
+    throw new Error(`目标正在等待验收，请先验收或退回修改。收到明确新增要求时，先执行 atte goal rework ${item.id} --note "用户新增要求原话"，确认状态为 active 后再继续推进。`);
   if (item.status === "backlog" && !allowBacklog)
     throw new Error("这件事尚未开始，请先选择我来做或交给管家");
 }
@@ -1041,6 +1041,10 @@ export class WorkspaceService {
           if (item.status === "backlog" && command.routeToConcierge)
             throw new Error("这件事尚未开始，请先明确交给管家");
           const message = text(command.text, "消息", 12_000);
+          const actor = command.actor?.trim() ? text(command.actor, "操作者", 120)
+            : managed?.role === "owner" ? item.agentRuntime?.attempt.agent || item.owner : "你";
+          const ownerReviewReply = item.status === "review" && !command.routeToConcierge &&
+            (managed?.role === "owner" || actor === item.agentRuntime?.attempt.agent || actor === item.herdr?.agent);
           cancelAgentReceipt(item);
           cancelSceneReconciliation(item);
           const incomingAttachments = await validateGoalAttachments(this.root, command.attachments);
@@ -1063,7 +1067,7 @@ export class WorkspaceService {
             item.mode = "concierge";
             item.owner = item.herdr?.agent || "待分配负责人";
           }
-          if (item.mode === "concierge" && !item.executionHold && item.status !== "backlog") {
+          if (!ownerReviewReply && item.mode === "concierge" && !item.executionHold && item.status !== "backlog") {
             item.dispatch = {
               id: newId("handoff"),
               kind: "feedback",
@@ -1072,8 +1076,7 @@ export class WorkspaceService {
               at: nowIso(),
             };
           }
-          const at = nowIso(),
-            actor = command.actor?.trim() ? text(command.actor, "操作者", 120) : "你";
+          const at = nowIso();
           if (actor.startsWith("你")) delete item.sceneReply;
           item.activities.push({
             id: newId("act"),
@@ -1188,6 +1191,9 @@ export class WorkspaceService {
         case "goal.update": {
           const item = goal(command.goalId);
           ongoing(item, true, true);
+          const previousTitle = item.title;
+          const actor = command.actor || (managed?.role === "concierge" ? "concierge"
+            : managed?.role === "owner" ? item.agentRuntime?.attempt.agent || item.owner : "你");
           for (const field of [
             "title",
             "description",
@@ -1223,7 +1229,9 @@ export class WorkspaceService {
               item.remindAt = undefined;
             }
           }
-          activity(item, "progress", "已更新目标说明与下一步。");
+          activity(item, "progress", item.title !== previousTitle
+            ? `目标标题已更新：“${previousTitle}” → “${item.title}”。`
+            : "已更新目标说明与下一步。", actor);
           return item;
         }
         case "goal.kind.set": {
