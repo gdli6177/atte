@@ -79,7 +79,12 @@ test("a lifecycle timeout is saved as unconfirmed without creating a false failu
   assert.match(goal.dispatch?.detail ?? "", /不重复发送/);
   assert.match(goal.activities.at(-1)?.text ?? "", /送达状态待现场确认/);
 
-  await service.execute({
+  const owner = new WorkspaceService(service.root, {
+    installationId: "fixture", backend: "herdr", epoch: 0,
+    scopeGeneration: "fixture", role: "owner", goalId: id,
+    attemptId: "attempt-fixture",
+  });
+  await owner.execute({
     type: "goal.decide",
     goalId: id,
     question: "是否采用方案 A？",

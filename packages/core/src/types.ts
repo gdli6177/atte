@@ -240,11 +240,18 @@ export interface LiveEventTarget {
 export interface LiveEventReferenceUpdate {
   paneId?: string; tabId?: string; workspaceId?: string; agent?: string;
 }
-export interface LivePresence { state: LiveState; checkedAt: string; reachable?: boolean }
+export interface LivePresence {
+  state: LiveState;
+  checkedAt: string;
+  /** Start of the current uninterrupted state, not merely the last poll. */
+  stateSince?: string;
+  reachable?: boolean;
+}
 export type WatchdogReason = "blocked" | "missing" | "stale" | "unassigned" | "settled" | "protocol_missing";
 export interface WatchdogState {
   reason: WatchdogReason; basis: string; detectedAt: string;
   attemptedAt?: string; contactedAt?: string; escalatedAt?: string; lastError?: string;
+  nudgeFailures?: number;
 }
 export interface DeliveryCheck { name: string; command: string; result: "passed" | "failed"; note?: string }
 export interface DeliveryCandidate {
@@ -275,6 +282,18 @@ export interface Delivery {
   evidence?: Evidence[];
   submittedAt: string;
   submittedBy: string;
+  amendedAt?: string;
+  amendments?: DeliveryAmendment[];
+}
+export interface DeliveryAmendment {
+  id: string;
+  at: string;
+  actor: string;
+  note: string;
+  previousSummary: string;
+  summary: string;
+  addedChecks: DeliveryCheck[];
+  addedEvidenceIds: string[];
 }
 export type ContinuationTrigger =
   | "checkpoint"
@@ -461,10 +480,12 @@ export interface Activity {
   kind:
     | "created"
     | "message"
+  | "metadata"
     | "progress"
     | "waiting"
     | "decision"
     | "delivery"
+  | "delivery_amend"
     | "accepted"
     | "rework"
     | "dropped"
@@ -596,11 +617,28 @@ type WorkspaceCommand =
   | { type: "backend.register"; binding: BackendBinding }
   | { type: "backend.recover-stale"; binding: BackendBinding }
   | { type: "scene.bind"; goalId?: string; scene: SceneReferenceV1; role?: "owner" | "verifier" | "concierge" }
+  | {
+      type: "scene.reanchor";
+      goalId?: string;
+      bindingId: string;
+      attemptId: string;
+      scene: SceneReferenceV1;
+    }
+  | {
+      type: "scene.legacy.confirm";
+      goalId?: string;
+      bindingId: string;
+      attemptId: string;
+      reason: string;
+    }
   | { type: "scene.prepare"; goalId?: string; intent: SceneLaunchIntent }
   | { type: "scene.launch.result"; goalId?: string; role?: "owner" | "concierge" | "verifier"; requestId: string; status: SceneLaunchIntent["status"]; detail?: string }
   | { type: "scene.concierge.status"; status: WorkspaceState["concierge"]["status"]; detail?: string; live?: LivePresence; initializedAttemptId?: string }
   | { type: "scene.release"; goalId?: string; bindingId: string; role?: "owner" | "concierge" | "verifier" }
-  | { type: "scene.retire"; goalId: string; bindingId: string; attemptId: string }
+  | {
+      type: "scene.retire"; goalId: string; bindingId: string; attemptId: string;
+      expectedActivity?: { lastEventAt?: string; lastSemanticWriteAt?: string };
+    }
   | { type: "scene.legacy.clear"; goalId?: string; reason: string }
   | { type: "scene.observe"; scenes: Array<{ bindingId: string; presence: LivePresence }> }
   | { type: "backend.revoke"; operationId: string; expectedEpoch: number }
@@ -703,7 +741,7 @@ type WorkspaceCommand =
   | { type: "scene.visit"; goalId: string; retry?: boolean }
   | { type: "scene.cancel"; goalId: string; reason: "user-input" }
   | { type: "scene.check"; goalId: string; visitId: string; status: "checking" | "checked" | "failed"; detail?: string }
-  | { type: "goal.progress"; goalId: string; summary: string; next?: string; stageId?: string; actor?: string }
+  | { type: "goal.progress"; goalId: string; summary: string; next?: string; title?: string; stageId?: string; actor?: string }
   | {
       type: "goal.dispatch";
       goalId: string;
@@ -723,7 +761,26 @@ type WorkspaceCommand =
   | { type: "goal.decide"; goalId: string; question: string; next?: string; actor?: string; key?: string }
   | { type: "goal.risk"; goalId: string; category: HighRiskCategory; summary: string; actionKey?: string; actor?: string }
   | { type: "goal.ship"; goalId: string; operation: "merge" | "deploy"; checksPassed: boolean; actor?: string }
-  | { type: "goal.review"; goalId: string; delivery: Omit<Delivery, "submittedAt" | "submittedBy">; actor?: string }
+  | {
+      type: "goal.review";
+      goalId: string;
+      title?: string;
+      delivery: Omit<Delivery, "submittedAt" | "submittedBy" | "amendedAt" | "amendments">;
+      actor?: string;
+    }
+  | {
+      type: "goal.review.amend";
+      goalId: string;
+      deliveryId: string;
+      title?: string;
+      note: string;
+      summary?: string;
+      location?: string;
+      url?: string;
+      checks?: Delivery["checks"];
+      evidence?: Evidence[];
+      actor?: string;
+    }
   | {
       type: "goal.brief";
       goalId: string;
@@ -842,7 +899,7 @@ type WorkspaceCommand =
     }
   | { type: "goal.accept" | "goal.complete" | "goal.drop"; goalId: string; note?: string; actor?: string }
   | { type: "goal.resolve"; goalId: string; note?: string; actor?: string; outcome?: DecisionOutcome; source?: "desktop" | "herdr" | "cli" | "scene" }
-  | { type: "goal.rework"; goalId: string; note: string; actor?: string }
+  | { type: "goal.rework"; goalId: string; note: string; title?: string; actor?: string }
   | { type: "goal.remind"; goalId: string; at: string; note?: string }
   | { type: "session.set"; goalId?: string; reference: HerdrReference }
   | { type: "session.preserve"; goalId: string; resume: OwnerResume }

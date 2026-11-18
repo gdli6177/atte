@@ -582,7 +582,7 @@ for (const runtime of [process.execPath, "bun"]) {
 import extension from ${JSON.stringify(pathToFileURL(extension).href)};
 const handlers = new Map();
 extension({ on(name, handler) { handlers.set(name, handler); } });
-for (let index = 0; index < 6; index += 1)
+    for (let index = 0; index < 10; index += 1)
   handlers.get("input")({ text: "x".repeat(600_000) }, {});
 await new Promise(resolve => setTimeout(resolve, 300));
 console.log("OMP survived");
@@ -598,7 +598,7 @@ console.log("OMP survived");
       assert.match(stdout, /OMP survived/);
       assert.equal(stderr, "");
       const diagnostics = readHookDiagnostics(root);
-      assert.equal(diagnostics.counts.stdin_epipe, 6);
+      assert.equal(diagnostics.counts.stdin_epipe, 10);
       const body = await readFile(join(root, ".atte/runtime/hook-diagnostics.json"), "utf8");
       assert.doesNotMatch(body, /fixture|xxxxx|prompt|token|history/);
       assert.deepEqual((await readdir(join(root, ".atte/runtime"))).sort(), ["hook-diagnostics.json"]);
@@ -646,7 +646,7 @@ console.log("OMP survived");
   });
 }
 
-test("OMP upgrade converges revision 2 and legacy extensions to one revision 3 canonical file", async () => {
+test("OMP upgrade converges revision 2 and legacy extensions to one revision 4 canonical file", async () => {
   for (const canonical of [false, true]) {
     const { home, userData, manager } = await fixture(["omp"]);
     const directory = join(home, ".omp/agent/extensions");
@@ -671,7 +671,7 @@ test("OMP upgrade converges revision 2 and legacy extensions to one revision 3 c
     assert.equal(await lstat(join(directory, "crewvane.js")).then(() => true).catch(() => false), false);
     assert.equal(await readFile(join(directory, "crewvane.js.atte-backup"), "utf8"), old);
     assert.equal(await readFile(join(directory, "other.js"), "utf8"), user);
-    assert.equal((await json(join(userData, "agent-hooks.json"))).adapters.omp.managedRevision, 3);
+    assert.equal((await json(join(userData, "agent-hooks.json"))).adapters.omp.managedRevision, 4);
     await manager.autoInstallDetected();
     assert.equal((await stat(path)).mtimeMs, before.mtimeMs);
     assert.equal(await readFile(path, "utf8"), installed);

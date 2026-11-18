@@ -1,6 +1,7 @@
 import { appendFile, mkdir, rename, stat, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { arch, release, type } from "node:os";
+import type { HookDiagnosticsSnapshot } from "../../../cli/src/hook-diagnostics.js";
 
 /**
  * Sanitized, size-bounded diagnostics for support hand-offs.
@@ -43,6 +44,19 @@ export function compactPath(path: string, home?: string): string {
   return parts.length <= 2 ? path : `…/${parts.slice(-2).join("/")}`;
 }
 
+export function hookFailureSummary(snapshot: HookDiagnosticsSnapshot, startedAt: string) {
+  const counts = Object.entries(snapshot.counts)
+    .filter(([, count]) => count > 0)
+    .map(([reason, count]) => `${reason}=${count}`);
+  if (!counts.length) return "无失败";
+  const failure = snapshot.lastFailure;
+  const phase = failure && Date.parse(failure.at) >= Date.parse(startedAt)
+    ? "本次应用启动后" : "本次应用启动前的历史记录";
+  return `历史累计 ${counts.join(" · ")}${failure
+    ? ` · 最近=${failure.reason}@${failure.at}（${phase}）`
+    : ""}`;
+}
+
 export function redact(value: string, home?: string): string {
   let text = value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
   if (home && home.length > 1) {
@@ -74,6 +88,7 @@ interface Entry {
 }
 
 export class Diagnostics {
+  readonly startedAt: string;
   private readonly entries: Entry[] = [];
   private readonly options: DiagnosticsOptions;
   private directory?: string;
@@ -82,6 +97,7 @@ export class Diagnostics {
 
   constructor(options: DiagnosticsOptions) {
     this.options = options;
+    this.startedAt = (options.now?.() ?? new Date()).toISOString();
   }
 
   get logPath(): string | undefined {
@@ -180,6 +196,7 @@ export class Diagnostics {
     const lines: string[] = [
       "Atte 诊断日志（可整段粘贴给维护者）",
       `生成时间: ${now}`,
+      `本次应用启动: ${this.startedAt}`,
       `版本: ${this.options.version()}`,
       `系统: macOS ${release()} ${arch()} (${type()})`,
       `运行时: Electron ${process.versions.electron} · Chrome ${process.versions.chrome} · Node ${process.versions.node}`,

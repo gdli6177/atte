@@ -30,6 +30,7 @@ import {
 import type { WebhookSettings } from "../electron/webhook-notifications.js";
 import type { AgentHookAdapterStatus } from "../electron/agent-hook-manager.js";
 import type { CoordinatorInboxStatus } from "../electron/coordinator-inbox.js";
+import type { ApplicationUpdateStatus } from "../electron/application-updater.js";
 import "./style.css";
 
 const HerdrTerminal = lazy(() => import("./terminal.js").then(module => ({ default: module.HerdrTerminal })));
@@ -54,6 +55,7 @@ function App() {
   const [projectId, setProjectId] = useState("");
   const [filter, setFilter] = useState("all");
   const [modal, setModal] = useState<"new" | "project" | "attention" | "goal" | "task" | "edit" | "delivery" | "workspace" | "webhook" | "">("");
+  const [legacyRecovery, setLegacyRecovery] = useState<{ goalId?: string; reason: string }>();
   const [goalId, setGoalId] = useState("");
   const [intakeLater, setIntakeLater] = useState(false);
   const [error, setError] = useState("");
@@ -63,6 +65,14 @@ function App() {
   const [herdr, setHerdr] = useState<HerdrEnvironmentStatus>();
   const [cli, setCli] = useState<Awaited<ReturnType<typeof api.cliStatus>>>();
   const [skills, setSkills] = useState<Awaited<ReturnType<typeof api.skillsStatus>>>();
+  const [applicationUpdate, setApplicationUpdate] = useState<ApplicationUpdateStatus>({
+    enabled: false,
+    phase: "disabled",
+    currentVersion: "",
+    backgroundChecks: false,
+    canCheck: false,
+    canInstall: false,
+  });
   const [agentHooks, setAgentHooks] = useState<AgentHookAdapterStatus[]>([]);
   const [coordinatorQueue, setCoordinatorQueue] = useState<CoordinatorInboxStatus>();
   const [webhook, setWebhook] = useState<WebhookSettings>({
@@ -120,6 +130,7 @@ function App() {
     api.environment().then(async env => {
       setWorkspace(env.workspace);
       setVersion(env.version);
+      void api.applicationUpdate().then(setApplicationUpdate).catch(() => {});
       void refreshHerdr().catch(showError);
       if (!env.workspace) return;
       void api.coordinatorStatus().then(setCoordinatorQueue).catch(() => {});
@@ -138,6 +149,8 @@ function App() {
       if (event.type === "agent-runtime-status") setAgentHooks(event.status);
       if (event.type === "coordinator-status") setCoordinatorQueue(event.status);
       if (event.type === "cli-status") setCli(event.status);
+      if (event.type === "application-update") setApplicationUpdate(event.status);
+      if (event.type === "open-settings") setPage("settings");
       if (event.type === "open-goal") openGoal(event.goalId);
       if (event.type === "terminal-available") {
         setTerminal(current => current?.session === event.session
@@ -179,6 +192,7 @@ function App() {
     void api.agentRuntimeStatus().then(setAgentHooks).catch(showError);
     void api.agentChoices().then(setAgentOptions).catch(showError);
     void api.webhookSettings().then(setWebhook).catch(showError);
+    void api.applicationUpdate().then(setApplicationUpdate).catch(showError);
   }, [page]);
   useEffect(() => {
     if (!error || modal) return;
@@ -196,6 +210,9 @@ function App() {
   }
   async function openScene(id?: string, recover = false) {
     if (busy) return;
+    await openSceneNow(id, recover);
+  }
+  async function openSceneNow(id?: string, recover = false) {
     const item = id ? stateRef.current.goals.find(current => current.id === id) : undefined;
     if (item && isReadOnlyGoal(item)) {
       notify("这是只读历史，不再打开运行现场。");
@@ -212,8 +229,34 @@ function App() {
           ? "iTerm2" : result.lease.terminal === "terminal" ? "Terminal" : "Ghostty";
         notify(`已在 ${label} 打开${id ? "目标现场" : "全局管家"}。`);
       }
-    } catch (reason) { showError(reason); }
+    } catch (reason) {
+      if (String(reason).includes("legacy_confirmation_required"))
+        setLegacyRecovery({ goalId: id, reason: "" });
+      else showError(reason);
+    }
     finally { setBusy(false); }
+  }
+  async function confirmLegacyScene() {
+    if (!legacyRecovery || busy) return;
+    if (legacyRecovery.reason.trim().length < 4) {
+      setError("请写一句确认旧现场已经退出的依据。");
+      return;
+    }
+    const pending = legacyRecovery;
+    setBusy(true);
+    setError("");
+    try {
+      await api.confirmLegacyScene(pending.goalId, pending.reason.trim());
+      applyState(await api.command({ type: "snapshot" }));
+      setLegacyRecovery(undefined);
+      notify("已退休旧现场；没有关闭或杀死原终端。");
+      setBusy(false);
+      if (pending.goalId) await openSceneNow(pending.goalId, true);
+      else await openSceneNow();
+    } catch (reason) {
+      showError(reason);
+      setBusy(false);
+    }
   }
   function notify(text: string) {
     if (toastTimer.current !== undefined) clearTimeout(toastTimer.current);
@@ -341,6 +384,16 @@ function App() {
         notify(result.errors.length
           ? `Skills 已更新；${result.errors.length} 个目录因已有同名技能而跳过。`
           : "Atte Skills 已安装到检测到的 Agent。");
+      } else if (action === "update-check") {
+        const next = await api.checkApplicationUpdate();
+        setApplicationUpdate(next);
+        notify(next.phase === "downloaded" ? "更新已下载，可在设置中安装并重启。"
+          : next.phase === "error" ? next.detail ?? "检查更新失败。"
+            : next.latestVersion ? `发现 Atte ${next.latestVersion}，正在准备下载。`
+              : "Atte 已是最新版本。");
+      } else if (action === "update-install") {
+        await api.installApplicationUpdate();
+        return;
       }
       setAgentOptions(await api.agentChoices());
       setAgentHooks(await api.agentRuntimeStatus());
@@ -469,13 +522,23 @@ function App() {
               notify("项目上线策略已更新。");
             }}
             theme={theme} setTheme={setTheme} onAction={settingsAction} version={version}
+            applicationUpdate={applicationUpdate}
+            setApplicationUpdateBackground={async enabled => {
+              try {
+                const next = await api.setApplicationUpdateBackground(enabled);
+                setApplicationUpdate(next);
+                notify(enabled ? "已开启后台更新检查。" : "已关闭后台更新检查。");
+              } catch (reason) {
+                showError(reason);
+              }
+            }}
             workspace={workspace ?? ""}
             pickWorkspace={() => workspace ? setModal("workspace") : void pickWorkspace()}
             openWebhook={() => setModal("webhook")} />}
         </main>
       </div>
       {terminal && <Suspense fallback={null}><HerdrTerminal session={terminal.session}
-        title={terminal.title} goal={sceneContext} theme={theme} visible={terminal.visible && !modal}
+        title={terminal.title} goal={sceneContext} theme={theme} visible={terminal.visible && !modal && !legacyRecovery}
         onClose={() => setTerminal(current => current ? { ...current, visible: false } : current)}
         onOpenGoal={id => { setGoalId(id); setModal("goal"); }}
         onReturnToAttention={() => {
@@ -549,6 +612,27 @@ function App() {
             <Button type="submit" variant="primary" disabled={busy}>{busy ? "正在保存…" : "保存设置"}</Button>
           </div>
         </form>
+      </Modal>}
+      {legacyRecovery && <Modal title="确认旧现场已退出"
+        description="Atte 没有拿到这个旧现场的稳定进程归属证据，因此不会自动重绑、发送、关闭或另建负责人。"
+        error={error} onClose={() => { setLegacyRecovery(undefined); setError(""); }}>
+        <div className="ui-form">
+          <p className="ui-form__note">请先回到原终端核对。只有当你确认旧负责人已经退出时，才在这里退休旧 attempt。退休不会关闭或杀死旧 Pane。</p>
+          <Field label="确认依据" hint="例如：已经关闭旧终端窗口，或旧负责人明确表示已结束。">
+            <TextInput value={legacyRecovery.reason} maxLength={4_000} disabled={busy}
+              onChange={event => setLegacyRecovery(current =>
+                current ? { ...current, reason: event.target.value } : current)}
+              placeholder="写一句你如何确认旧负责人已经退出" />
+          </Field>
+          <div className="modal-actions">
+            <Button variant="secondary" disabled={busy}
+              onClick={() => { setLegacyRecovery(undefined); setError(""); }}>先不处理</Button>
+            <Button variant="primary" disabled={busy || legacyRecovery.reason.trim().length < 4}
+              onClick={() => void confirmLegacyScene()}>
+              {busy ? "正在确认…" : "确认已退出"}
+            </Button>
+          </div>
+        </div>
       </Modal>}
       {modal === "new" && <GoalIntakeForm error={error} busy={busy}
         initialHandling={intakeLater ? "later" : "concierge"}

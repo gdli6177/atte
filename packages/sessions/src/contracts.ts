@@ -1,6 +1,7 @@
 import type {
   LocalProcessIdentity, SceneReferenceV1,
 } from "../../core/src/index.js";
+export type { ProcessProbe, SceneOwnershipV1 } from "../../core/src/index.js";
 
 export type Compatibility = "missing" | "unverified" | "incompatible" | "compatible";
 export interface SessionCapabilities {
@@ -60,6 +61,9 @@ export interface SceneObservation {
   identity: "match" | "mismatch" | "unverifiable";
   reachable: boolean;
   state: "working" | "idle" | "blocked" | "exited" | "unknown";
+  ownership?: "live" | "uncertain" | "ended" | "legacy";
+  /** Present only when exact, stable ownership proves a safe generation re-anchor. */
+  reanchor?: SceneReferenceV1;
   observedAt: string;
   source: "backend";
   detail?: string;
@@ -110,6 +114,7 @@ export interface SessionAdapter {
   create(input: CreateSceneRequest): Promise<CreateSceneResult>;
   inspect(scene: SceneReferenceV1): Promise<SceneObservation>;
   inspectMany(scenes: SceneReferenceV1[]): Promise<SceneObservation[]>;
+  reanchor?(scene: SceneReferenceV1): Promise<SceneReferenceV1 | undefined>;
   send(input: SendSceneRequest): Promise<SendReceipt>;
   focus(scene: SceneReferenceV1): Promise<FocusResult>;
   close(scene: SceneReferenceV1): Promise<CloseReceipt>;
@@ -121,7 +126,8 @@ export type SessionErrorCode =
   | "backend_unreachable" | "backend_unsupported" | "backend_busy" | "backend_configuration_invalid"
   | "backend_installation_mismatch"
   | "scene_read_only"
-  | "scene_identity_mismatch" | "launch_unconfirmed" | "launch_failed" | "delivery_unconfirmed"
+  | "scene_identity_mismatch" | "scene_ended" | "legacy_confirmation_required"
+  | "launch_unconfirmed" | "launch_failed" | "delivery_unconfirmed"
   | "focus_failed" | "stale_backend_epoch";
 export class SessionError extends Error {
   constructor(readonly code: SessionErrorCode, message: string) {

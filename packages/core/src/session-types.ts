@@ -5,6 +5,21 @@ export interface LocalProcessIdentity {
   /** OS process start time, to distinguish PID reuse. */
   bornAt: string;
 }
+export type ProcessProbe =
+  | { status: "matched"; identity: LocalProcessIdentity; processGroupId?: number }
+  | { status: "absent"; detail?: string }
+  | { status: "unverifiable"; detail?: string };
+/** Stable process evidence captured before a managed Agent receives its first task. */
+export interface SceneOwnershipV1 {
+  version: 1;
+  samples: 2;
+  capturedAt: string;
+  shell: LocalProcessIdentity;
+  launcher: LocalProcessIdentity;
+  foreground: LocalProcessIdentity;
+  processGroupId: number;
+  tty?: string;
+}
 interface SceneIdentity {
   version: 1;
   installationId: string;
@@ -14,6 +29,7 @@ interface SceneIdentity {
   attemptId: string;
   backendEpoch: number;
   process?: LocalProcessIdentity;
+  ownership?: SceneOwnershipV1;
 }
 export type SceneReferenceV1 = SceneIdentity & (
   | {
@@ -106,15 +122,25 @@ function identifier(value: unknown, limit = 240): value is string {
   return typeof value === "string" && value.trim().length > 0 &&
     value.length <= limit && !/[\0\r\n]/.test(value);
 }
+function processIdentity(value: unknown): value is LocalProcessIdentity {
+  return object(value) && Number.isSafeInteger(value.pid) && (value.pid as number) > 0 &&
+    identifier(value.bornAt, 100);
+}
+export function isSceneOwnership(value: unknown): value is SceneOwnershipV1 {
+  return object(value) && value.version === 1 && value.samples === 2 &&
+    identifier(value.capturedAt) && Number.isSafeInteger(value.processGroupId) &&
+    (value.processGroupId as number) > 0 && processIdentity(value.shell) &&
+    processIdentity(value.launcher) && processIdentity(value.foreground) &&
+    (value.tty === undefined || identifier(value.tty));
+}
 export function isSceneReference(value: unknown): value is SceneReferenceV1 {
   if (!object(value) || value.version !== 1 ||
     !identifier(value.installationId) || !identifier(value.runtimeId) ||
     !identifier(value.runtimeGeneration) || !identifier(value.bindingId) ||
     !identifier(value.attemptId) || !Number.isSafeInteger(value.backendEpoch) ||
     (value.backendEpoch as number) < 0 || !object(value.locator)) return false;
-  if (value.process !== undefined && (!object(value.process) ||
-    !Number.isSafeInteger(value.process.pid) || (value.process.pid as number) <= 0 ||
-    !identifier(value.process.bornAt))) return false;
+  if (value.process !== undefined && !processIdentity(value.process)) return false;
+  if (value.ownership !== undefined && !isSceneOwnership(value.ownership)) return false;
   const loc = value.locator;
   if (value.backend === "herdr" && loc.kind === "herdr")
     return ["session", "workspaceId", "tabId", "paneId"].every(key => identifier(loc[key])) &&

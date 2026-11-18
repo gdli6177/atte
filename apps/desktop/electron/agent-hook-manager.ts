@@ -25,7 +25,7 @@ import {
 
 const exec = promisify(execFile);
 const manifestVersion = 1;
-const managedRevision = 3;
+export const managedRevision = 4;
 const marker = "hook ingest --adapter";
 const supported = ["codex", "claude-code", "cursor", "qoder", "omp"] as const;
 export type ManagedAdapterId = typeof supported[number];

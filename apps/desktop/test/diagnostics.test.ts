@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { Diagnostics, redact } from "../electron/diagnostics.ts";
+import { Diagnostics, hookFailureSummary, redact } from "../electron/diagnostics.ts";
 
 async function fixture(t: test.TestContext, options: { maxEntries?: number; maxBytes?: number; now?: () => Date } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "atte-diagnostics-"));
@@ -97,4 +97,19 @@ test("the report never includes workspace state or paths outside diagnostics", a
   const report = diagnostics.report();
   assert.match(report, /boom at ~\/app\/main\.js/);
   assert.doesNotMatch(report, /goal|message|attachment|title/);
+});
+
+test("hook failures from before app startup remain explicitly historical", async t => {
+  const startedAt = "2026-11-17T09:50:44.497Z";
+  const { diagnostics } = await fixture(t, { now: () => new Date(startedAt) });
+  assert.match(diagnostics.report(), /本次应用启动: 2026-11-17T09:50:44.497Z/);
+  assert.match(hookFailureSummary({
+    version: 1, counts: { child_exit: 83 },
+    lastFailure: { reason: "child_exit", at: "2026-11-17T09:45:14.745Z" },
+  }, startedAt), /历史累计 child_exit=83.*本次应用启动前的历史记录/);
+  assert.match(hookFailureSummary({
+    version: 1, counts: { child_exit: 84 },
+    lastFailure: { reason: "child_exit", at: "2026-11-17T09:55:00.000Z" },
+  }, startedAt), /本次应用启动后/);
+  assert.equal(hookFailureSummary({ version: 1, counts: {} }, startedAt), "无失败");
 });

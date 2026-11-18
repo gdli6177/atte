@@ -10,12 +10,12 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { Button } from "../../ui/index.js";
+import { Button, Field, TextInput } from "../../ui/index.js";
 import type { Goal } from "../../../../../packages/core/src/types.js";
 import type { GoalDetailService } from "./goalService.js";
 import { attentionRequest } from "../../../../../packages/core/src/model.js";
 
-export type GoalReplyMode = "message" | "drop" | "restart";
+export type GoalReplyMode = "message" | "rework" | "drop" | "restart";
 type ReplyImage = { key: string; file: File; preview: string };
 
 const attachmentFormats = new Set([
@@ -65,6 +65,7 @@ export function GoalReplyComposer({
   secondaryAction?: ReactNode;
 }) {
   const [message, setMessage] = useState("");
+  const [title, setTitle] = useState(goal.title);
   const [replyImages, setReplyImages] = useState<ReplyImage[]>([]);
   const [validation, setValidation] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -102,6 +103,12 @@ export function GoalReplyComposer({
       placeholder: "告诉管家为什么重启，以及这次要接着推进什么。",
       submit: "重启并交给管家",
       note: "会优先恢复原负责人会话；原目标记录和消息都会保留",
+    },
+    rework: {
+      heading: "补充要求，退回继续",
+      placeholder: "写清楚要补什么、改什么；目标会退回跟进中，管家会带着这条要求继续推进。",
+      submit: "退回并继续",
+      note: "会回到跟进中并通知管家；同一轮补证不增加审查轮次，真正的成果变化才进入新一轮",
     },
   }[mode];
   const labels = {
@@ -178,6 +185,19 @@ export function GoalReplyComposer({
         onComplete("目标已放弃，记录仍可查看");
         return;
       }
+      if (mode === "rework") {
+        await service.command({
+          type: "goal.rework",
+          goalId: goal.id,
+          attentionId: attentionRequest(goal)?.id,
+          note: body,
+          ...(title.trim() && title.trim() !== goal.title
+            ? { title: title.trim() }
+            : {}),
+        });
+        onComplete("已退回继续；你的补充要求已交给管家");
+        return;
+      }
       const inputs = await Promise.all(
         replyImages.map(async (image) => ({
           name: image.file.name,
@@ -214,6 +234,14 @@ export function GoalReplyComposer({
           </button>
         )}
       </div>
+      {mode === "rework" && (
+        <Field label="更新目标标题（可选）"
+          hint="如果任务范围已经变化，用一句话概括现在的完整范围；原始需求不会改写。">
+          <TextInput value={title} maxLength={160} disabled={busy}
+            onChange={event => setTitle(event.target.value)}
+            placeholder="用一句话概括现在的任务范围" />
+        </Field>
+      )}
       <div
         className={`goal-reply-box ${dragging ? "dragging" : ""}`}
         onDragEnter={(event) => {

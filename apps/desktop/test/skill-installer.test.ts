@@ -141,6 +141,27 @@ test("protocol changes update managed skills even when the app version is unchan
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("user-modified managed skills are reported as conflicts and never overwritten", async () => {
+  const root = await mkdtemp(join(tmpdir(), "atte-skill-modified-"));
+  try {
+    const source = join(root, "source"), home = join(root, "home");
+    await mkdir(source, { recursive: true });
+    await writeFile(join(source, "SKILL.md"), "# Atte\n");
+    const installer = new AtteSkillInstaller(source, home, "0.6.0");
+    await installer.install();
+    const installed = join(home, ".agents", "skills", "atte");
+    await writeFile(join(installed, "SKILL.md"), "# User edited this managed skill\n");
+    const status = await installer.status();
+    assert.equal(status.targets.find(target => target.id === "agents")?.phase, "conflict");
+    const result = await installer.install();
+    assert.ok(result.errors.some(error => error.id === "agents"));
+    assert.equal(await readFile(join(installed, "SKILL.md"), "utf8"),
+      "# User edited this managed skill\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("installs the local pack author beside the main skill on every detected Agent target", async () => {
   const root = await mkdtemp(join(tmpdir(), "atte-multi-skill-"));
   try {

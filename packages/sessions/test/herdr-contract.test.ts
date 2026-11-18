@@ -25,7 +25,11 @@ async function fixture(t: test.TestContext) {
   const adapter = new HerdrAdapter({
     executable: "/mock/herdr", session: "cv-owned", directory: root,
     socketIdentity: async () => generation,
+    ownershipSampleDelayMs: 1,
     processes: { identity: async pid => ({ pid, bornAt: "birth" }),
+      probe: async (identity, processGroupId) => alive
+        ? { status: "matched", identity, ...(processGroupId ? { processGroupId } : {}) }
+        : { status: "absent" },
       alive: async () => alive, hasChild: async () => alive },
     run: async args => {
       commands.push(args);
@@ -45,6 +49,13 @@ async function fixture(t: test.TestContext) {
       }
       if (command === "pane send-text") { paneText = args[3]!; return ""; }
       if (command === "pane send-keys") return "";
+      if (command === "pane process-info") return envelope({ process_info: {
+        shell_pid: 100, foreground_process_group_id: 300, tty: "ttys001",
+        foreground_processes: [
+          { pid: 200, name: "zsh" },
+          { pid: 300, name: agentKind.toLowerCase() },
+        ],
+      } });
       if (command === "agent read") return `${history}\n› ${paneText || "Ask Codex to do anything"}\n\n  model · workspace`;
       if (command === "agent send-keys") {
         assert.equal(args[2], "w1:p1");

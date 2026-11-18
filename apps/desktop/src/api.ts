@@ -6,6 +6,7 @@ import type { SkillsInstallResult, SkillsStatus } from "../electron/skill-instal
 import type { CacheCleanupResult, CacheStatus } from "../electron/cache-maintenance.js";
 import type { AgentHookAdapterStatus, ManagedAdapterId } from "../electron/agent-hook-manager.js";
 import type { CoordinatorInboxStatus } from "../electron/coordinator-inbox.js";
+import type { ApplicationUpdateStatus } from "../electron/application-updater.js";
 import type {
   ExternalSceneLease,
   SceneSettings,
@@ -21,6 +22,10 @@ export interface DesktopApi {
   openAttachment(goalId: string, attachmentId: string): Promise<void>;
   selectWorkspace(): Promise<string | null>; selectProject(): Promise<string | null>;
   environment(): Promise<{ workspace?: string; version: string }>;
+  applicationUpdate(): Promise<ApplicationUpdateStatus>;
+  checkApplicationUpdate(): Promise<ApplicationUpdateStatus>;
+  setApplicationUpdateBackground(enabled: boolean): Promise<ApplicationUpdateStatus>;
+  installApplicationUpdate(): Promise<void>;
   herdrStatus(): Promise<HerdrStatus & { session: string; plugin: HerdrPluginStatus }>;
   cacheMaintenanceStatus(): Promise<CacheStatus>;
   cleanCache(): Promise<CacheCleanupResult>;
@@ -55,6 +60,7 @@ export interface DesktopApi {
   writeTerminal(session: string, data: string): Promise<void>;
   resizeTerminal(session: string, cols: number, rows: number): Promise<void>;
   openScene(goalId?: string, recover?: boolean): Promise<SceneOpenResult>;
+  confirmLegacyScene(goalId: string | undefined, reason: string): Promise<boolean>;
   openExternalScene(goalId?: string): Promise<ExternalSceneLease>;
   openHerdr(goalId?: string): Promise<void>; openUrl(url: string): Promise<void>; showCli(): Promise<void>;
   openRecoveryBackup(): Promise<void>;

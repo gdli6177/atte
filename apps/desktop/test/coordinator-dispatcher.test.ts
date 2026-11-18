@@ -81,6 +81,46 @@ test("a failed item does not block later queued cases", async () => {
   assert.equal(status.processed, 2);
 });
 
+test("shutdown pauses new cases and preserves uncertain in-flight work for restart", async () => {
+  const { inbox, events, root } = await fixture();
+  let release: () => void = () => {};
+  let started: () => void = () => {};
+  const executing = new Promise<void>(resolve => { started = resolve; });
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  const dispatcher = new CoordinatorDispatcher(inbox, {
+    execute: async item => {
+      events.push(item.requestId);
+      started();
+      await blocked;
+      return { status: "sent" };
+    },
+    onStatus: () => {},
+  });
+  await dispatcher.enqueue({
+    goalId: "goal_inflight", requestId: "inflight", kind: "goal", priority: "normal",
+  });
+  await dispatcher.enqueue({
+    goalId: "goal_queued", requestId: "queued", kind: "goal", priority: "normal",
+  });
+  const draining = dispatcher.drain();
+  await executing;
+  const paused = dispatcher.pause();
+  const interrupted = await inbox.recoverInterrupted();
+  assert.equal(interrupted.length, 1);
+  assert.equal(interrupted[0]!.item.status, "unconfirmed");
+  release();
+  await paused;
+  await draining;
+  await dispatcher.drain();
+  assert.deepEqual(events, ["inflight"]);
+  const stored = await CoordinatorInbox.open(root);
+  const status = await stored.status();
+  assert.equal(status.queued, 1);
+  assert.equal(status.unconfirmed, 1, "a late send result cannot erase shutdown uncertainty");
+  assert.equal(status.failed, 0);
+  assert.equal((await stored.claimNext())?.requestId, "queued");
+});
+
 test("a live unconfirmed turn pauses the queue until the next drain", async () => {
   const { inbox, events } = await fixture();
   let calls = 0;

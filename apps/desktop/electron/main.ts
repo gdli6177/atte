@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, Tray } from "electron";
+import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, Tray } from "electron";
 import { existsSync, watch, type FSWatcher } from "node:fs";
 import { access, chmod, lstat, mkdir, readFile, readlink, realpath, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -56,6 +56,7 @@ import { AtteSkillInstaller } from "./skill-installer.js";
 import { clearManagedCaches, inspectManagedCaches } from "./cache-maintenance.js";
 import {
   AgentHookManager,
+  managedRevision as managedHookRevision,
   type ManagedAdapterId,
 } from "./agent-hook-manager.js";
 import { AgentRuntimeBroker } from "./agent-runtime-broker.js";
@@ -67,15 +68,22 @@ import {
 } from "./external-terminal.js";
 import { SessionCommandHost } from "./session-command-host.js";
 import { legacyCliPaths, removeOwnedLegacyCli } from "./legacy-cli.js";
-import { compactPath, Diagnostics } from "./diagnostics.js";
+import { compactPath, Diagnostics, hookFailureSummary } from "./diagnostics.js";
 import { OwnerWriteObserver } from "./owner-write-observer.js";
 import { readHookDiagnostics } from "../../../cli/src/hook-diagnostics.js";
+import {
+  ApplicationUpdater,
+  type ApplicationUpdateStatus,
+} from "./application-updater.js";
+import { createElectronUpdaterEngine } from "./electron-updater-engine.js";
+import { settleAllWithin } from "./shutdown-flush.js";
 /** Owner CLI processes write state directly; the watcher must start coordination. */
+const ownerWriteTasks = new Set<Promise<void>>();
 const ownerWrites = new OwnerWriteObserver({
   onWrite(goal, activityId) {
-    if (!root || isReadOnlyGoal(goal)) return;
+    if (!root || isReadOnlyGoal(goal) || shuttingDown) return;
     const target = new WorkspaceService(root);
-    void (async () => {
+    const task = (async () => {
       // The CLI already wrote on disk. Queue a coordinator case of its own
       // instead of inventing a pending goal dispatch: a failed delivery must
       // stay a queue alert, never a goal-level failure the user has to clear.
@@ -92,14 +100,21 @@ const ownerWrites = new OwnerWriteObserver({
       if (root !== target.root) return;
       broadcastSnapshot(await target.read(), target.root);
       broadcastCoordinatorStatus(await inbox.status());
-    })().catch(error => {
+    })();
+    ownerWriteTasks.add(task);
+    void task.catch(error => {
       diagnostics.record("session", "owner-write-notify", error);
-    });
+    }).finally(() => ownerWriteTasks.delete(task));
   },
 });
 const exec = promisify(execFile);
-let window: BrowserWindow, tray: Tray, root: string | undefined, service: WorkspaceService | undefined, syncing = false, quitting = false;
+let window: BrowserWindow, tray: Tray, root: string | undefined, service: WorkspaceService | undefined, syncing = false, quitting = false, shuttingDown = false;
 let stateWatcher: FSWatcher | undefined, stateRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+let synchronizeTimer: ReturnType<typeof setInterval> | undefined;
+let shutdownPromise: Promise<void> | undefined;
+let shutdownComplete = false;
+let quitAfterShutdown = false;
+let updateNotification: Notification | undefined;
 const selections = new Set<string>();
 const knownGoalStatuses = new Map<string, GoalStatus>();
 let knownGoalStatusWorkspace: string | undefined;
@@ -148,6 +163,7 @@ let tools: Executables, herdrInstallation: HerdrInstallation, herdrPlugin: Herdr
 let coordinatorInbox: CoordinatorInbox | undefined, coordinatorDispatcher: CoordinatorDispatcher | undefined;
 let herdrHostBridge: HerdrHostBridge | undefined;
 let sessionControl: SessionControl;
+let applicationUpdater: ApplicationUpdater | undefined;
 const sessionRuntimes = new Map<string, SessionRuntime>();
 const sessionHosts = new Map<string, Promise<SessionCommandHost>>();
 const sessionPoller = new SessionPoller();
@@ -282,6 +298,119 @@ function broadcastAgentRuntimeStatus(
         status,
       });
   }).catch(() => {});
+}
+function fallbackApplicationUpdateStatus(): ApplicationUpdateStatus {
+  return {
+    enabled: false,
+    phase: "disabled",
+    currentVersion: app.getVersion(),
+    backgroundChecks: false,
+    canCheck: false,
+    canInstall: false,
+    detail: "当前构建未启用应用更新。",
+  };
+}
+function applicationUpdateStatus() {
+  return applicationUpdater?.status() ?? fallbackApplicationUpdateStatus();
+}
+function broadcastApplicationUpdate(status: ApplicationUpdateStatus) {
+  if (window && !window.isDestroyed())
+    window.webContents.send("atte:event", { type: "application-update", status });
+}
+function notifyApplicationUpdateReady(status: ApplicationUpdateStatus) {
+  if (!Notification.isSupported()) return;
+  const version = status.latestVersion ? ` ${status.latestVersion}` : "";
+  const notification = new Notification({
+    title: "Atte 更新已准备好",
+    body: `Atte${version} 已下载。打开设置，点击“安装并重启”后生效。`,
+  });
+  notification.on("click", () => {
+    updateNotification = undefined;
+    window?.show();
+    window?.focus();
+    window?.webContents.send("atte:event", { type: "open-settings" });
+  });
+  notification.on("close", () => {
+    if (updateNotification === notification) updateNotification = undefined;
+  });
+  updateNotification = notification;
+  notification.show();
+}
+async function coordinatedShutdown(): Promise<void> {
+  if (shutdownPromise) return shutdownPromise;
+  shutdownPromise = (async () => {
+    shuttingDown = true;
+    quitting = true;
+    diagnostics.record("app", "shutdown", "开始协调退出");
+    applicationUpdater?.pause();
+    if (synchronizeTimer) {
+      clearInterval(synchronizeTimer);
+      synchronizeTimer = undefined;
+    }
+    if (stateRefreshTimer) {
+      clearTimeout(stateRefreshTimer);
+      stateRefreshTimer = undefined;
+    }
+    stateWatcher?.close();
+    stateWatcher = undefined;
+    const settled = await settleAllWithin([
+      ...handoffs.values(),
+      ...ownerWriteTasks,
+      cacheMaintenanceQueue,
+      cliInstallQueue,
+      ...preparations.values(),
+      coordinatorDispatcher?.pause() ?? Promise.resolve(),
+    ]);
+    if (!settled.settled)
+      diagnostics.record("app", "shutdown", "等待在途工作超时，已停止本地桥；未自动重放未确认投递");
+    await coordinatorInbox?.recoverInterrupted().catch(error => {
+      diagnostics.record("app", "shutdown-inbox-recovery", error);
+    });
+    await coordinatorInbox?.flush().catch(error => {
+      diagnostics.record("app", "shutdown-inbox-flush", error);
+    });
+    const stopping = [
+      agentRuntimeBroker?.stop(),
+      herdrHostBridge?.stop(),
+      ...[...sessionHosts.values()].map(async pending => {
+        const host = await pending;
+        await host.stop();
+      }),
+    ].filter((value): value is Promise<void> => Boolean(value));
+    await Promise.allSettled(stopping);
+    terminals.dispose();
+    diagnostics.record("app", "shutdown", "本地桥已停止；Herdr 与 Agent 未关闭");
+    await diagnostics.flush().catch(() => undefined);
+  })().finally(() => {
+    shutdownComplete = true;
+  });
+  await shutdownPromise;
+}
+async function initializeApplicationUpdater() {
+  const testMode = environmentValue(process.env, "ATTE_DISABLE_UPDATE") === "1" ||
+    Object.keys(process.env).some(key =>
+      key.startsWith("TEST_") || key.startsWith("ATTE_TEST_"));
+  const enabled = app.isPackaged &&
+    existsSync(join(process.resourcesPath, "app-update.yml")) &&
+    !testMode;
+  applicationUpdater = new ApplicationUpdater({
+    enabled,
+    currentVersion: app.getVersion(),
+    settingsPath: join(app.getPath("userData"), "application-update.json"),
+    engine: enabled
+      ? createElectronUpdaterEngine({
+        info: message => diagnostics.record("app", "updater-info", message),
+        warn: message => diagnostics.record("app", "updater-warn", message),
+        error: message => diagnostics.record("app", "updater-error", message),
+      })
+      : undefined,
+    onStatus: broadcastApplicationUpdate,
+    onDownloaded: notifyApplicationUpdateReady,
+    beforeInstall: async () => {
+      await coordinatedShutdown();
+    },
+  });
+  await applicationUpdater.start();
 }
 async function agentRuntimeStatus() {
   if (!agentHookManager) return [];
@@ -586,6 +715,8 @@ async function executeCoordinatorItem(
   target: WorkspaceService,
   item: CoordinatorInboxItem,
 ): Promise<CoordinatorExecutionResult> {
+  if (shuttingDown)
+    return { status: "deferred", detail: "应用正在退出，本次通知保留在队列中。" };
   if (root !== target.root)
     return { status: "cancelled", detail: "工作区已切换，本次收件未发送。" };
   const queuedGoal = (await target.read()).goals.find(goal => goal.id === item.goalId);
@@ -793,6 +924,7 @@ async function drainCoordinatorQueue(target: WorkspaceService) {
   });
 }
 async function dispatchGoal(target: WorkspaceService, goalId: string): Promise<void> {
+  if (shuttingDown) return;
   if (root !== target.root) return;
   if (!await sessionControl.canDispatch()) return;
   const key = `${target.root}:${goalId}`;
@@ -1029,9 +1161,13 @@ async function sceneForGoal(target: WorkspaceService, goalId?: string) {
   if (isReadOnlyGoal(item)) throw new Error("该目标为只读历史，不能打开或恢复现场");
   if (item.scene) {
     const observed = (await sessionRuntime(target.root).inspect([item.scene]))[0];
+    if (observed?.identity !== "match")
+      throw new Error(observed?.ownership === "legacy"
+        ? "旧现场没有稳定的进程归属证据；请在目标详情确认原负责人已经退出，再恢复现场。"
+        : "现场身份尚未稳定确认；未自动创建新负责人，请稍后重试或核对原终端。");
     if (observed?.identity === "match" && observed.state === "exited")
       throw new Error("原现场已结束，请在目标详情点击“恢复并进入现场”。未自动创建新负责人。");
-    return item.scene;
+    return (await target.read()).goals.find(goal => goal.id === goalId)?.scene ?? item.scene;
   }
   return prepareConcierge(target);
 }
@@ -1057,28 +1193,35 @@ async function diagnosticsReport(): Promise<string> {
   });
   await attempt("CLI", async () => {
     const status = await cliStatus();
-    return `installed=${status.installed}`;
+    const owned = await realpath(status.path).catch(() => "") === join(status.directory, "atte");
+    const managedVersion = owned
+      ? await exec(status.path, ["--version"], { timeout: 2_000, maxBuffer: 4_096 })
+        .then(result => result.stdout.trim()).catch(() => "无法读取")
+      : "未安装受管 CLI";
+    return `installed=${status.installed} · bundled=${app.getVersion()} · managed=${managedVersion}`;
   });
   await attempt("Skills", async () => {
     const status = await skillsStatus();
-    return `installed=${status.installed}/${status.available}`;
+    return `installed=${status.installed}/${status.available} · bundled=${status.version}` +
+      ` · managed=${status.targets.filter(target => target.managedVersion)
+        .map(target => `${target.id}:${target.managedVersion}`).join(",") || "-"}`;
+  });
+  await attempt("应用更新", () => {
+    const status = applicationUpdateStatus();
+    return `enabled=${status.enabled} · phase=${status.phase}` +
+      ` · current=${status.currentVersion} · latest=${status.latestVersion ?? "-"}` +
+      ` · checked=${status.lastCheckedAt ?? "-"}`;
   });
   await attempt("Agent 接入", async () => {
     const adapters = await agentRuntimeStatus();
     return adapters.length
-      ? adapters.map(adapter => `${adapter.id}=${adapter.status}/${adapter.installed ? "installed" : "absent"}`).join(" · ")
+      ? `Hook revision=${managedHookRevision} · ` +
+        adapters.map(adapter => `${adapter.id}=${adapter.status}/${adapter.installed ? "installed" : "absent"}`).join(" · ")
       : "无";
   });
   await attempt("Hook 观测", async () => {
     if (!root) return "未打开工作区";
-    const status = readHookDiagnostics(root);
-    const counts = Object.entries(status.counts)
-      .filter(([, count]) => count > 0)
-      .map(([reason, count]) => `${reason}=${count}`);
-    if (!counts.length) return "无失败";
-    return `${counts.join(" · ")}${status.lastFailure
-      ? ` · 最近=${status.lastFailure.reason}@${status.lastFailure.at}`
-      : ""}`;
+    return hookFailureSummary(readHookDiagnostics(root), diagnostics.startedAt);
   });
   await attempt("协调收件箱", async () => {
     const status = await (await ensureCoordinatorInbox()).inbox.status();
@@ -1462,12 +1605,33 @@ app.whenReady().then(async () => {
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" })); window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   window.on("close", (event) => { if (!quitting) { event.preventDefault(); window.hide(); } });
+  nativeAutoUpdater.on("before-quit-for-update", () => { quitting = true; });
   window.webContents.on("render-process-gone", (_event, details) =>
     diagnostics.record("renderer", "render-process-gone", `${details.reason} (exit ${details.exitCode})`));
   window.webContents.on("unresponsive", () => diagnostics.record("renderer", "unresponsive"));
   window.webContents.on("did-fail-load", (_event, code, description, url) =>
     diagnostics.record("renderer", "did-fail-load", `${code} ${description}`));
   ipcMain.handle("atte:environment", (event) => { sender(event); return { workspace: root, version: app.getVersion() }; });
+  ipcMain.handle("atte:application-update", event => {
+    sender(event);
+    return applicationUpdateStatus();
+  });
+  ipcMain.handle("atte:application-update-check", async event => {
+    sender(event);
+    if (!applicationUpdater) return fallbackApplicationUpdateStatus();
+    return applicationUpdater.check();
+  });
+  ipcMain.handle("atte:application-update-background", async (event, enabled: unknown) => {
+    sender(event);
+    if (typeof enabled !== "boolean") throw new Error("自动更新设置无效");
+    if (!applicationUpdater) return fallbackApplicationUpdateStatus();
+    return applicationUpdater.setBackgroundChecks(enabled);
+  });
+  ipcMain.handle("atte:application-update-install", async event => {
+    sender(event);
+    if (!applicationUpdater) throw new Error("当前构建未启用应用更新");
+    await applicationUpdater.install();
+  });
   ipcMain.handle("atte:import-attachments", async (event, inputs: { name: string; bytes: ArrayBuffer }[]) => {
     sender(event);
     const target = activeService();
@@ -1663,6 +1827,18 @@ app.whenReady().then(async () => {
     if (recover !== undefined && typeof recover !== "boolean") throw new Error("无效的恢复参数。");
     return openPreferredScene(activeService(), goalId, recover);
   });
+  ipcMain.handle("atte:confirm-legacy-scene", async (event, goalId: unknown, reason: unknown) => {
+    sender(event);
+    if (goalId !== undefined && (typeof goalId !== "string" || !goalId.trim()))
+      throw new Error("旧现场确认参数无效。");
+    if (typeof reason !== "string" || reason.trim().length < 4 || reason.length > 4_000)
+      throw new Error("请写明确认旧现场已退出的原因。");
+    const target = activeService();
+    return sessionRuntime(target.root).confirmLegacyScene(
+      typeof goalId === "string" ? goalId : undefined,
+      reason.trim(),
+    );
+  });
   ipcMain.handle("atte:open-scene-external", async (event, goalId?: string) => {
     sender(event);
     return openExternalSceneForGoal(activeService(), goalId);
@@ -1712,6 +1888,13 @@ app.whenReady().then(async () => {
       { role: "quit" },
     ] }, { role: "editMenu" }, { role: "viewMenu" }]));
   await window.loadURL(rendererURL);
+  await initializeApplicationUpdater().catch(error => {
+    diagnostics.record("app", "updater-init", error);
+    if (!window.isDestroyed()) window.webContents.send("atte:event", {
+      type: "diagnostic",
+      message: `应用更新初始化失败：${error instanceof Error ? error.message : String(error)}`,
+    });
+  });
   if (environmentValue(process.env, "TEST_SKIP_HERDR_SETUP") !== "1")
     void prepareHerdrCompanions().catch(() => { /* persistent readiness error is shown by the renderer */ });
   const saved = await readFile(join(app.getPath("userData"), "workspaces.json"), "utf8").then(JSON.parse).catch(() => null), workspace = environmentValue(process.env, "TEST_WORKSPACE") ?? saved?.selected;
@@ -1719,15 +1902,17 @@ app.whenReady().then(async () => {
   if (environmentValue(process.env, "TEST_PREPARE_CONCIERGE") === "1") {
     void prepareConcierge().catch((error) => window.webContents.send("atte:event", { type: "diagnostic", message: String(error) }));
   }
-  setInterval(() => void synchronize(), 10_000); void synchronize();
+  synchronizeTimer = setInterval(() => void synchronize(), 10_000);
+  void synchronize();
 });
 app.on("activate", () => window?.show());
-app.on("before-quit", () => {
+app.on("before-quit", event => {
   quitting = true;
-  stateWatcher?.close();
-  if (stateRefreshTimer) clearTimeout(stateRefreshTimer);
-  void agentRuntimeBroker?.stop().catch(() => {});
-  for (const host of sessionHosts.values()) void host.then(value => value.stop()).catch(() => {});
-  void herdrHostBridge?.stop().catch(() => {});
-  terminals.dispose();
+  if (shutdownComplete) return;
+  event.preventDefault();
+  if (quitAfterShutdown) return;
+  quitAfterShutdown = true;
+  void coordinatedShutdown().finally(() => {
+    if (shutdownComplete) app.quit();
+  });
 });

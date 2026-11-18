@@ -574,7 +574,16 @@ pnpm test:installers
 1. PR 的 **Desktop installers** 工作流执行类型检查、测试、打包与安装验收。
 2. 合并前确认真实试用记录和所有未解决风险。
 3. 根目录、CLI 和桌面包版本一致后，准备 `docs/release-notes/v<version>.md`，再创建并推送完全匹配的标签，例如 `v<version>`。
-4. 标签工作流重跑验收，核对标签与包版本，从对应的 release-notes 文件读取说明，再创建包含 DMG、ZIP、SHA256SUMS 的 prerelease 草稿。
+4. 标签工作流重跑验收，核对标签与包版本，从对应的 release-notes 文件读取说明，再创建包含 DMG、ZIP、SHA256SUMS 与 `latest-mac.yml` 的稳定版草稿；草稿不带 prerelease 标记，人工发布前不会被更新器看到。
 5. 检查附件与说明后发布。发布后真实下载所有附件，核对 SHA-256，并在一台独立 Mac 上启动应用和安装 CLI。
 
 标签工作流不合并 PR，也不自动公开 Release。
+
+标签构建要求仓库 Secrets 中存在固定自签名身份：
+
+- `ATTE_MACOS_CERTIFICATE_P12`：P12 的 Base64；
+- `ATTE_MACOS_CERTIFICATE_PASSWORD`：P12 密码；
+- `ATTE_MACOS_SIGN_IDENTITY`：证书常用名；
+- `ATTE_MACOS_SIGN_FINGERPRINT`：40 位 SHA-1 指纹。
+
+缺少任一项时发布构建直接失败，不回退 ad-hoc。证书私钥必须跨版本复用，否则自动更新无法保持同一应用身份。

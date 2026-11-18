@@ -14,6 +14,14 @@ test("a process created after a cached process table is immediately verified by 
   const pid = child.pid!;
   const bornAt = execFileSync("/bin/ps", ["-p", String(pid), "-o", "lstart="],
     { env: { ...process.env, LC_ALL: "C" } }).toString().trim();
+  const processGroupId = Number(execFileSync("/bin/ps", ["-p", String(pid), "-o", "pgid="],
+    { env: { ...process.env, LC_ALL: "C" } }).toString().trim());
+  const matched = await localProcesses.probe({ pid, bornAt });
+  assert.equal(matched.status, "matched");
+  if (matched.status === "matched") assert.equal(matched.processGroupId, processGroupId);
   assert.equal(await localProcesses.alive({ pid, bornAt }), true);
-  assert.equal(await localProcesses.alive({ pid, bornAt: `${bornAt}-different` }), false);
+  assert.equal((await localProcesses.probe({ pid, bornAt: `${bornAt}-different` })).status, "absent");
+  assert.equal((await localProcesses.probe({ pid, bornAt }, processGroupId + 1)).status, "absent");
+  assert.equal((await localProcesses.probe({ pid: 2_147_483_646, bornAt: "missing" })).status, "absent");
+  assert.equal((await localProcesses.probe({ pid: 0, bornAt: "" })).status, "unverifiable");
 });

@@ -83,8 +83,10 @@ export function GoalActionDock({
           (goal.status === "waiting" || goal.status === "review") &&
           goal.mode !== "concierge"
         }
-        heading={goal.status === "review" ? "给管家发消息" : undefined}
-        note={goal.status === "review" ? "普通提问发送后保留待验收状态；需要修改成果时，请明确说明，由管家退回并继续推进。" : undefined}
+        heading={replyMode === "message" && goal.status === "review" ? "给管家发消息" : undefined}
+        note={replyMode === "message" && goal.status === "review"
+          ? "普通提问发送后保留待验收状态；需要修改成果时，请用“补充要求，退回继续”。"
+          : undefined}
         onClose={() => setReplyMode(null)}
         onComplete={(receipt) => {
           setReplyMode(null);
@@ -179,11 +181,14 @@ export function GoalActionDock({
       <div className="goal-decision-row">
         <div className="goal-action-copy">
           <span>明确验收</span>
-          <strong>核对成果后验收；普通提问保留待验收，需要修改时由管家退回推进。</strong>
+          <strong>核对成果后验收；普通提问保留待验收，补充要求则退回继续。</strong>
         </div>
         <div className="goal-action-buttons">
           <Button variant="secondary" onClick={() => setReplyMode("message")}>
             给管家发消息
+          </Button>
+          <Button variant="secondary" icon={<RotateCcw size={15} />} onClick={() => setReplyMode("rework")}>
+            补充要求，退回继续
           </Button>
           <Button
             variant="primary"

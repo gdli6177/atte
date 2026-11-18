@@ -1,6 +1,6 @@
 # Atte 架构
 
-版本：0.14.2
+版本：0.14.3
 
 产品说明见[使用说明](atte.md)，领域术语见[CONTEXT.md](../CONTEXT.md)。
 
@@ -108,6 +108,11 @@ active / waiting / review -> dropped
 保持 `review` 与交付；负责人以 `goal message` 保存答案时保留真实署名、原现场回执
 和派发记录，不再把答案当成人的新反馈重新派发。受管 Agent 不得验收。
 
+同一候选成果只补检查或证据时，Agent 使用 `goal review --amend --delivery-id`。
+补证保留原 `Delivery.id`、提交时间、attention 与审查轮次，只追加检查、证据、
+可选标题和一次 `delivery_amend` 活动；审查上限裁决期间仍可补证。成果实际改变
+时不能使用 amend，必须重新 `goal review` 并消耗新一轮。
+
 注意力由同一份状态派生，不建立第二份列表：
 
 | 来源 | 注意力类型 |
@@ -154,7 +159,10 @@ human > attention > normal > background
 - 超过无进展阈值：`stale`。
 
 巡检请求先进入协调收件箱。联系管家失败会保留失败信息并形成 `intervention`；
-已联系 10 分钟仍无恢复进展时升级给人。看门狗、提醒和回执恢复都在 0.14 保留。
+看门狗按 30 分钟提醒一次，联系失败后 5 分钟重试，连续 3 次失败才升级给人。
+`stale` 请求标记为 `backgroundOnly`，只做后台核对，时间流逝本身不会直接打扰人；
+新鲜 `working`、Hook 或语义写回会抑制只基于时间的升级。看门狗、提醒和回执恢复
+都在 0.14 保留。
 回执提醒成功交给管家时，`contactedAt` 只由协调收件箱的派发路径记账一次；
 Broker 不再额外写一次成功的 `watchdog.report`，避免重复“已请管家核对”。
 
@@ -201,6 +209,13 @@ Herdr 是唯一执行后端。`packages/sessions` 提供：
 或未经核实的 locator 不能发送输入或关闭新现场。创建和发送在外部副作用前记录请求；
 响应丢失时按同一 request / binding 核对，不重建正文或自动重放。身份核实时失败则
 拒绝发送，不把 shell 或已退出的 Pane 当成负责人。
+
+0.14.3 的现场归属证据包含 Shell、launcher、前台进程、进程组和 TTY 的两次采样。
+运行时 generation 改变时，只有同一 Pane 与连续一致的进程身份才允许自动
+`scene.reanchor`；重绑保留 binding、attempt、attention、交付与业务状态，只更新
+运行时身份。没有 ownership 的旧现场、归属不确定或已结束的现场不会静默重绑、
+发送、关闭或另建负责人。人确认旧负责人已退出后执行 `scene.legacy.confirm`，
+只退休旧 attempt，不关闭或杀死旧 Pane；仍有新鲜 Hook/语义写回或现场仍可达时拒绝。
 
 每个工作区使用独立的 Herdr Session。应用自带经过 SHA-256 校验的 Herdr TUI CLI，
 并提供 `Session Host` 私有通道，使沙箱中的受管 Agent 不必自行查询系统进程或开放
@@ -255,7 +270,7 @@ Hook 只观测会话、turn、阻塞、中断和可用回复。工具参数、�
 它是现场观测，不是验收证据或状态写入，不追加整段对话到活动历史；UI 继续通过
 同一份工作区快照观察显式标题与状态写回。
 
-OMP extension revision 3 在写 stdin 前安装子进程与流错误处理器，避免 child 提前
+OMP extension revision 4 在写 stdin 前安装子进程与流错误处理器，避免 child 提前
 退出时未处理的 `EPIPE` 杀死 OMP。CLI ingest 同样有界读取；超限后丢弃载荷并继续
 排空到 EOF，2 秒超时，任何失败都不向 Agent 回合返回非零退出码。
 
@@ -283,7 +298,21 @@ Codex 等待原生 `/hooks` 信任；损坏配置、未来 schema、非普通文
 复用明确批准或拒绝。
 
 `goal.review` 默认最多三轮。达到上限后的新提交转为 `intervention`，只有人明确
-允许才增加一轮。
+允许才增加一轮。同一交付的 `goal.review --amend` 不消耗轮次；只有实际改变成果的
+重新交付才计入下一轮。
+
+## 应用更新与签名
+
+正式包使用固定自签名证书（`dev.atte.desktop`），不依赖付费 Apple Developer ID
+或公证；发布构建强制使用持久签名身份并执行严格 `codesign --verify`，开发包才允许
+ad-hoc 回退。打包产物包含 `Contents/Resources/app-update.yml`，发布脚本从最终
+签名 ZIP 生成 `latest-mac.yml` 的 SHA-512 与大小。
+
+`ApplicationUpdater` 启动 5 秒后检查，之后每 6 小时后台检查并下载；下载完成只发
+一次系统通知。安装/重启必须由人点击，安装前先协调式退出：停止新派发，等待在途
+工作最多 8 秒，flush 协调收件箱，停止本地 Socket/终端桥，不关闭 Herdr 或 Agent。
+0.14.2 没有更新器，所以第一次升级到 0.14.3 仍需手动安装；此后版本可在设置中
+后台检查并下载，手动点击安装。
 
 ## 桌面 IPC 与安全
 
@@ -310,10 +339,12 @@ Session 名称、TTY lease 和用户文本在进入系统命令前校验。渲�
 
 - `Atte-<version>-macOS-arm64.dmg`
 - `Atte-<version>-macOS-arm64.zip`
+- `latest-mac.yml`
 - `SHA256SUMS.txt`
 
 应用包包含 Electron、Atte CLI 的 Node runtime 和经过校验的 Herdr TUI CLI。构建
-完成 Electron 嵌套代码签名后再制作附件。ad-hoc 签名不等于 Apple 公证。
+完成 Electron 嵌套代码签名后再制作附件。固定自签名不等于 Apple Developer ID
+签名或 Apple 公证。
 
 验证覆盖：
 

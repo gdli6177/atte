@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { AtteCommand, GoalAttachment } from "../../../packages/core/src/index.js";
+import type { ApplicationUpdateStatus } from "./application-updater.js";
 contextBridge.exposeInMainWorld("atte", {
   command: (command: AtteCommand) => ipcRenderer.invoke("atte:command", command),
   importAttachments: (inputs: { name: string; bytes: ArrayBuffer }[]) =>
@@ -10,6 +11,14 @@ contextBridge.exposeInMainWorld("atte", {
     ipcRenderer.invoke("atte:open-attachment", goalId, attachmentId) as Promise<void>,
   selectWorkspace: () => ipcRenderer.invoke("atte:workspace"), selectProject: () => ipcRenderer.invoke("atte:project"),
   environment: () => ipcRenderer.invoke("atte:environment"), herdrStatus: () => ipcRenderer.invoke("atte:herdr-status"),
+  applicationUpdate: () =>
+    ipcRenderer.invoke("atte:application-update") as Promise<ApplicationUpdateStatus>,
+  checkApplicationUpdate: () =>
+    ipcRenderer.invoke("atte:application-update-check") as Promise<ApplicationUpdateStatus>,
+  setApplicationUpdateBackground: (enabled: boolean) =>
+    ipcRenderer.invoke("atte:application-update-background", enabled) as Promise<ApplicationUpdateStatus>,
+  installApplicationUpdate: () =>
+    ipcRenderer.invoke("atte:application-update-install") as Promise<void>,
   cacheMaintenanceStatus: () => ipcRenderer.invoke("atte:cache-status"),
   cleanCache: () => ipcRenderer.invoke("atte:cache-clean"),
   agentChoices: () => ipcRenderer.invoke("atte:agent-choices"),
@@ -42,6 +51,8 @@ contextBridge.exposeInMainWorld("atte", {
   writeTerminal: (session: string, data: string) => ipcRenderer.invoke("atte:terminal-write", session, data),
   resizeTerminal: (session: string, cols: number, rows: number) => ipcRenderer.invoke("atte:terminal-resize", session, cols, rows),
   openScene: (goalId?: string, recover?: boolean) => ipcRenderer.invoke("atte:open-scene", goalId, recover),
+  confirmLegacyScene: (goalId: string | undefined, reason: string) =>
+    ipcRenderer.invoke("atte:confirm-legacy-scene", goalId, reason) as Promise<boolean>,
   openExternalScene: (goalId?: string) => ipcRenderer.invoke("atte:open-scene-external", goalId),
   openHerdr: (goalId?: string) => ipcRenderer.invoke("atte:open-herdr", goalId), openUrl: (url: string) => ipcRenderer.invoke("atte:open-url", url), showCli: () => ipcRenderer.invoke("atte:show-cli"),
   openRecoveryBackup: () => ipcRenderer.invoke("atte:open-recovery-backup"),

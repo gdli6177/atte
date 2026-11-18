@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { WorkspaceStore, newId } from "./store.js";
 import { progressBasis } from "./watchdog.js";
 import {
@@ -16,6 +17,7 @@ import type {
   Evidence,
   Goal,
   GoalAttachment,
+  LivePresence,
   WorkspaceState,
 } from "./types.js";
 import { sameScene, validatedScene, type ManagedSessionContext } from "./session-types.js";
@@ -146,31 +148,38 @@ function evidenceItems(value: unknown, at: string, checks: Delivery["checks"]): 
     const ids = new Set<string>();
     return value.map((item, index) => {
       if (!item || typeof item !== "object" || Array.isArray(item))
-        throw new Error(`第 ${index + 1} 条证据无效`);
+        throw new Error(`第 ${index + 1} 条证据无效：必须是对象`);
       const evidence = item as Partial<Evidence>,
-        evidenceId = id(evidence.id),
         kind = evidence.kind,
         result = evidence.result;
-      if (ids.has(evidenceId)) throw new Error("证据 ID 不能重复");
+      let evidenceId: string;
+      try { evidenceId = id(evidence.id); }
+      catch { throw new Error(`第 ${index + 1} 条证据的 id 无效：需要 1-100 位字母、数字、下划线或短横线`); }
+      if (ids.has(evidenceId))
+        throw new Error(`第 ${index + 1} 条证据的 id 重复：${evidenceId}`);
       ids.add(evidenceId);
-      if (!isEvidenceKind(kind) || !["observed", "passed", "failed"].includes(String(result)))
-        throw new Error(`证据 ${evidenceId} 的类型或结果无效`);
+      if (!isEvidenceKind(kind))
+        throw new Error(`证据 ${evidenceId} 的 kind 无效：必须是 command、artifact、url、attachment 或 inspection`);
+      if (!["observed", "passed", "failed"].includes(String(result)))
+        throw new Error(`证据 ${evidenceId} 的 result 无效：必须是 observed、passed 或 failed`);
       if (evidence.sha256 !== undefined && !/^[a-f0-9]{64}$/i.test(evidence.sha256))
-        throw new Error(`证据 ${evidenceId} 的 SHA-256 无效`);
-      const observedAt = evidence.observedAt ? iso(evidence.observedAt) : at;
+        throw new Error(`证据 ${evidenceId} 的 sha256 无效：需要 64 位十六进制摘要`);
+      let observedAt: string;
+      try { observedAt = evidence.observedAt ? iso(evidence.observedAt) : at; }
+      catch { throw new Error(`证据 ${evidenceId} 的 observedAt 无效：需要 ISO 时间`); }
       return {
         id: evidenceId,
         kind,
-        label: text(evidence.label, "证据名称", 240),
+        label: text(evidence.label, `证据 ${evidenceId} 的 label`, 240),
         result: result as Evidence["result"],
         observedAt,
-        ...(evidence.command ? { command: text(evidence.command, "证据命令", 2_000) } : {}),
-        ...(evidence.location ? { location: text(evidence.location, "证据位置", 2_000) } : {}),
+        ...(evidence.command ? { command: text(evidence.command, `证据 ${evidenceId} 的 command`, 2_000) } : {}),
+        ...(evidence.location ? { location: text(evidence.location, `证据 ${evidenceId} 的 location`, 2_000) } : {}),
         ...(evidence.sourceRevision
-          ? { sourceRevision: text(evidence.sourceRevision, "证据修订", 240) }
+          ? { sourceRevision: text(evidence.sourceRevision, `证据 ${evidenceId} 的 sourceRevision`, 240) }
           : {}),
         ...(evidence.sha256 ? { sha256: evidence.sha256.toLowerCase() } : {}),
-        ...(evidence.note ? { note: text(evidence.note, "证据说明", 4_000) } : {}),
+        ...(evidence.note ? { note: text(evidence.note, `证据 ${evidenceId} 的 note`, 4_000) } : {}),
       };
     });
   }
@@ -183,6 +192,26 @@ function evidenceItems(value: unknown, at: string, checks: Delivery["checks"]): 
     command: check.command,
     ...(check.note ? { note: check.note } : {}),
   }));
+}
+function deliveryChecks(value: unknown): Delivery["checks"] {
+  if (!Array.isArray(value) || value.length < 1)
+    throw new Error("提交验收至少需要一项真实检查记录");
+  const checks = value.map((check, index) => {
+    if (!check || typeof check !== "object" || Array.isArray(check))
+      throw new Error(`第 ${index + 1} 项检查无效`);
+    const item = check as Partial<Delivery["checks"][number]>;
+    if (item.result !== "passed" && item.result !== "failed")
+      throw new Error(`第 ${index + 1} 项检查结果无效；必须是 passed 或 failed`);
+    return {
+      name: text(item.name, `第 ${index + 1} 项检查名称`, 200),
+      command: text(item.command, `第 ${index + 1} 项检查命令或操作`, 1000),
+      result: item.result,
+      ...(item.note ? { note: text(item.note, `第 ${index + 1} 项检查说明`, 2000) } : {}),
+    } satisfies Delivery["checks"][number];
+  });
+  if (checks.some(check => check.result !== "passed"))
+    throw new Error("仍有检查未通过，请修复后再提交验收");
+  return checks;
 }
 function ongoing(item: Goal, allowReview = false, allowBacklog = false) {
   if (["completed", "dropped"].includes(item.status))
@@ -212,7 +241,7 @@ function runtimeText(value: unknown, label: string): AgentRuntimeText | undefine
   };
 }
 const semanticActivityKinds = new Set<Goal["activities"][number]["kind"]>([
-  "progress", "waiting", "decision", "delivery", "accepted", "rework",
+  "progress", "waiting", "decision", "delivery", "delivery_amend", "accepted", "rework",
   "dropped", "resolved", "ship",
 ]);
 const runtimeEventTypes = new Set<AgentRuntimeEventType>([
@@ -438,11 +467,10 @@ export class WorkspaceService {
         body: string,
         actor = "你",
       ) => {
-        // Any structured non-system write proves that the Agent received the
-        // prompt, even when Herdr's immediate lifecycle probe timed out.
-        // Promote a stale delivery receipt before recording the real activity
-        // so later decisions and progress are not hidden behind "unconfirmed".
-        if (item.dispatch?.status === "unconfirmed" && actor !== "系统") {
+        // Only an authenticated managed owner proves that the dispatched task
+        // reached the Agent. Desktop edits and older actor-labelled writes do
+        // not establish delivery on their own.
+        if (item.dispatch?.status === "unconfirmed" && managed?.role === "owner") {
           item.dispatch.status = "sent";
           delete item.dispatch.detail;
         }
@@ -468,6 +496,26 @@ export class WorkspaceService {
           text: text(body, "记录", 12_000),
         });
         stamp(item);
+      };
+      const observedPresence = (
+        current: Goal["live"],
+        presence: LivePresence,
+        coalesce = true,
+      ): LivePresence | undefined => {
+        const checkedAt = iso(presence.checkedAt),
+          observed = Date.parse(checkedAt);
+        if (current && observed < Date.parse(current.checkedAt)) return;
+        const uninterrupted = current?.state === presence.state &&
+          current.reachable === presence.reachable;
+        if (coalesce && uninterrupted &&
+          observed - Date.parse(current.checkedAt) < 30_000) return;
+        return {
+          ...presence,
+          checkedAt,
+          stateSince: uninterrupted
+            ? current.stateSince ?? current.checkedAt
+            : checkedAt,
+        };
       };
       const cancelAgentReceipt = (item: Goal) => {
         const receipt = item.agentRuntime?.receipt;
@@ -631,7 +679,10 @@ export class WorkspaceService {
           state.concierge.status = command.status;
           if (command.detail) state.concierge.detail = text(command.detail, "状态说明", 1000);
           else delete state.concierge.detail;
-          if (command.live) state.concierge.live = structuredClone(command.live);
+          if (command.live) {
+            const observed = observedPresence(state.concierge.live, command.live);
+            if (observed) state.concierge.live = observed;
+          }
           return state.concierge;
         }
         case "scene.bind": {
@@ -670,12 +721,102 @@ export class WorkspaceService {
           }
           return item;
         }
+        case "scene.reanchor": {
+          if (managed)
+            throw new Error("现场重绑只能由桌面在稳定进程证据下执行");
+          const next = validatedScene(command.scene),
+            current = command.goalId ? goal(command.goalId).scene : state.concierge.scene;
+          if (!current || current.bindingId !== command.bindingId ||
+            current.attemptId !== command.attemptId)
+            throw new Error("scene_identity_mismatch: 原现场已经变化，不能重绑。");
+          if (!current.ownership || !next.ownership ||
+            !isDeepStrictEqual(current.ownership, next.ownership) ||
+            next.bindingId !== current.bindingId || next.attemptId !== current.attemptId ||
+            next.installationId !== current.installationId ||
+            next.backendEpoch !== current.backendEpoch ||
+            next.backend !== current.backend ||
+            JSON.stringify(next.locator) !== JSON.stringify(current.locator) ||
+            (next.process &&
+              (next.process.pid !== next.ownership.launcher.pid ||
+                next.process.bornAt !== next.ownership.launcher.bornAt)))
+            throw new Error("scene_identity_mismatch: 重绑证据没有保留原 Pane 与负责人身份。");
+          if (command.goalId) {
+            const item = goal(command.goalId);
+            item.scene = next;
+            if (item.agentRuntime) item.agentRuntime.attempt.scene = structuredClone(next);
+            activity(item, "session", "Herdr 运行时已变化，但 Pane、进程组和负责人进程身份保持稳定；已安全重绑原现场。", "系统");
+          } else {
+            state.concierge.scene = next;
+            if (state.concierge.initializedAttemptId === next.attemptId)
+              state.concierge.status = "ready";
+          }
+          return next;
+        }
+        case "scene.legacy.confirm": {
+          if (managed)
+            throw new Error("旧现场只能由人确认后退休");
+          const reason = text(command.reason, "旧现场确认原因", 4_000),
+            current = command.goalId ? goal(command.goalId).scene : state.concierge.scene;
+          if (!current || current.bindingId !== command.bindingId ||
+            current.attemptId !== command.attemptId)
+            throw new Error("scene_identity_mismatch: 旧现场已经变化，不能重复处理。");
+          if (current.ownership)
+            throw new Error("该现场已有稳定进程证据；请使用安全重绑，不应按旧现场退休。");
+          const item = command.goalId
+            ? state.goals.find(candidate => candidate.id === command.goalId)
+            : undefined;
+          const now = Date.now(),
+            recent = [
+              item?.agentRuntime?.lastSemanticWriteAt,
+              item?.agentRuntime?.lastEventAt,
+              item?.live?.state === "working" ? item.live.checkedAt : undefined,
+            ].map(value => Date.parse(value ?? "")).filter(value => Number.isFinite(value));
+          if (recent.some(value => now - value <= 2 * 60_000))
+            throw new Error("旧现场仍有新鲜的 Hook 或负责人写回；请先核对原负责人，不能判定其已退出。");
+          if (item) {
+            item.sceneHistory = [...(item.sceneHistory ?? []), structuredClone(current)].slice(-20);
+            if (item.agentRuntime) {
+              const retired: NonNullable<Goal["attemptHistory"]>[number] = {
+                attemptId: item.agentRuntime.attempt.attemptId,
+                agent: item.agentRuntime.attempt.agent,
+                scene: structuredClone(current),
+                retiredAt: nowIso(),
+                reason: "superseded",
+              };
+              item.attemptHistory = [...(item.attemptHistory ?? []), retired].slice(-20);
+            }
+            delete item.scene;
+            delete item.sceneLaunch;
+            delete item.live;
+            delete item.sceneVisit;
+            delete item.sceneReply;
+            delete item.agentRuntime;
+            delete item.ownerLaunchRecovery;
+            delete item.watchdog;
+            delete item.recovery;
+            activity(item, "session",
+              `你确认旧 Herdr 现场已退出；已退休原 attempt，未关闭或杀死旧 Pane。原因：${reason}`,
+              "你");
+          } else {
+            delete state.concierge.scene;
+            delete state.concierge.live;
+            delete state.concierge.launch;
+            delete state.concierge.initializedAttemptId;
+            state.concierge.status = "not_ready";
+            delete state.concierge.detail;
+          }
+          return true;
+        }
         case "scene.retire": {
           // Only the trusted transport calls this after a fresh, identity-bound
           // exited observation. It retires the binding, not the business goal.
           const item = goal(command.goalId);
           if (!item.scene || item.scene.bindingId !== command.bindingId || item.scene.attemptId !== command.attemptId)
             throw new Error("scene_identity_mismatch: 原现场已经变化，不能恢复。");
+          if (command.expectedActivity &&
+            (item.agentRuntime?.lastEventAt !== command.expectedActivity.lastEventAt ||
+              item.agentRuntime?.lastSemanticWriteAt !== command.expectedActivity.lastSemanticWriteAt))
+            throw new Error("scene_identity_mismatch: 退出核对期间收到新的 Hook 或负责人写回，未退休原现场。");
           item.sceneHistory = [...(item.sceneHistory ?? []), item.scene].slice(-20);
           if (item.agentRuntime) {
             const retired: NonNullable<Goal["attemptHistory"]>[number] = {
@@ -739,16 +880,11 @@ export class WorkspaceService {
             if (item && !goalCanExecute(item)) continue;
             const current = item?.live ?? (state.concierge.scene?.bindingId === observation.bindingId
               ? state.concierge.live : undefined);
-            if (current?.state === observation.presence.state &&
-              current?.reachable === observation.presence.reachable) continue;
-            const presence = { ...observation.presence, checkedAt: iso(observation.presence.checkedAt) };
+            const presence = observedPresence(current, observation.presence);
+            if (!presence) continue;
             if (item) {
               item.live = presence;
               observeSceneWork(item, presence);
-              if (presence.state === "working") {
-                delete item.watchdog;
-                delete item.recovery;
-              }
             } else if (state.concierge.scene?.bindingId === observation.bindingId) {
               state.concierge.live = presence;
               if (!presence.reachable) {
@@ -1192,6 +1328,15 @@ export class WorkspaceService {
           const item = goal(command.goalId);
           ongoing(item, true, true);
           const previousTitle = item.title;
+          const previous = structuredClone({
+            title: item.title,
+            description: item.description,
+            next: item.next,
+            owner: item.owner,
+            waitingFor: item.waitingFor,
+            remindAt: item.remindAt,
+            status: item.status,
+          });
           const actor = command.actor || (managed?.role === "concierge" ? "concierge"
             : managed?.role === "owner" ? item.agentRuntime?.attempt.agent || item.owner : "你");
           for (const field of [
@@ -1229,9 +1374,19 @@ export class WorkspaceService {
               item.remindAt = undefined;
             }
           }
-          activity(item, "progress", item.title !== previousTitle
-            ? `目标标题已更新：“${previousTitle}” → “${item.title}”。`
-            : "已更新目标说明与下一步。", actor);
+          const changed = [
+            item.title !== previous.title ? "标题" : undefined,
+            item.description !== previous.description ? "原始说明" : undefined,
+            item.next !== previous.next ? "下一步" : undefined,
+            item.owner !== previous.owner ? "负责人" : undefined,
+            item.waitingFor !== previous.waitingFor ? "外部等待" : undefined,
+            item.remindAt !== previous.remindAt ? "跟进时间" : undefined,
+            item.status !== previous.status ? "状态" : undefined,
+          ].filter((value): value is string => Boolean(value));
+          if (!changed.length) return item;
+          activity(item, "metadata", item.title !== previousTitle
+            ? `范围标题已更新：“${previousTitle}” → “${item.title}”；变更字段：${changed.join("、")}。`
+            : `已更新元数据：${changed.join("、")}。`, actor);
           return item;
         }
         case "goal.kind.set": {
@@ -1368,6 +1523,7 @@ export class WorkspaceService {
             summary = actor.startsWith("你")
               ? text(command.summary, "实际结果", 12_000)
               : substantiveAgentText(command.summary, "实际结果", 12_000);
+          if (command.title) item.title = text(command.title, "范围标题", 500);
           item.status = "active";
           item.remindAt = undefined;
           item.waitingFor = undefined;
@@ -1526,27 +1682,8 @@ export class WorkspaceService {
           const item = goal(command.goalId),
             delivery = command.delivery;
           ongoing(item, true);
-          if (
-            !delivery ||
-            !Array.isArray(delivery.checks) ||
-            delivery.checks.length < 1
-          )
-            throw new Error("提交验收至少需要一项真实检查记录");
-          const checks = delivery.checks.map((check) => ({
-            name: text(check.name, "检查名称", 200),
-            command: text(check.command, "检查命令或操作", 1000),
-            result:
-              check.result === "passed"
-                ? ("passed" as const)
-                : check.result === "failed"
-                  ? ("failed" as const)
-                  : (() => {
-                      throw new Error("无效的检查结果");
-                    })(),
-            ...(check.note ? { note: text(check.note, "检查说明", 2000) } : {}),
-          }));
-          if (checks.some((check) => check.result !== "passed"))
-            throw new Error("仍有检查未通过，请修复后再提交验收");
+          if (!delivery) throw new Error("提交验收至少需要一项真实检查记录");
+          const checks = deliveryChecks(delivery.checks);
           const at = nowIso(),
             candidate = deliveryCandidate(delivery.candidate),
             evidence = evidenceItems(delivery.evidence, at, checks);
@@ -1568,6 +1705,7 @@ export class WorkspaceService {
             activity(item, "decision", item.attention.summary, "系统");
             return item;
           }
+          if (command.title) item.title = text(command.title, "范围标题", 500);
           if (item.delivery) item.deliveryHistory = [...(item.deliveryHistory ?? []), structuredClone(item.delivery)];
           item.delivery = {
             id: newId("delivery"),
@@ -1598,6 +1736,73 @@ export class WorkspaceService {
           );
           delete item.watchdog;
           delete item.recovery;
+          return item;
+        }
+        case "goal.review.amend": {
+          const item = goal(command.goalId);
+          ongoing(item, true);
+          if (item.status !== "review" || !item.delivery)
+            throw new Error("只有当前正在等待验收的交付可以补充说明或证据");
+          if (item.delivery.id !== command.deliveryId)
+            throw new Error("交付已经变化；请重新读取当前目标后再补充证据");
+          const at = nowIso(),
+            note = text(command.note, "补充原因", 4_000),
+            previousTitle = item.title,
+            previousSummary = item.delivery.summary,
+            addedChecks = command.checks === undefined ? [] : deliveryChecks(command.checks),
+            addedEvidence = command.evidence === undefined
+              ? []
+              : evidenceItems(command.evidence, at, item.delivery.checks),
+            existingIds = new Set((item.delivery.evidence ?? []).map(evidence => evidence.id)),
+            duplicate = addedEvidence.find(evidence => existingIds.has(evidence.id));
+          if (duplicate)
+            throw new Error(`证据 ID 已存在：${duplicate.id}`);
+          if (command.title) item.title = text(command.title, "范围标题", 500);
+          if (command.summary !== undefined)
+            item.delivery.summary = substantiveAgentText(command.summary, "成果摘要", 12_000);
+          if (command.location !== undefined)
+            item.delivery.location = text(command.location, "交付位置", 2_000);
+          if (command.url !== undefined)
+            item.delivery.url = text(command.url, "链接", 2_000);
+          if (addedChecks.length)
+            item.delivery.checks = [...item.delivery.checks, ...addedChecks];
+          if (addedEvidence.length)
+            item.delivery.evidence = [...(item.delivery.evidence ?? []), ...addedEvidence];
+          const changed =
+            item.delivery.summary !== previousSummary ||
+            command.location !== undefined ||
+            command.url !== undefined ||
+            addedChecks.length > 0 ||
+            addedEvidence.length > 0 ||
+            item.title !== previousTitle;
+          if (!changed)
+            throw new Error("补充内容没有实际变化；请增加证据、检查或更正说明");
+          item.delivery.amendedAt = at;
+          item.delivery.amendments = [
+            ...(item.delivery.amendments ?? []),
+            {
+              id: newId("amendment"),
+              at,
+              actor: command.actor || (managed?.role === "owner"
+                ? item.agentRuntime?.attempt.agent || item.owner : "管家"),
+              note,
+              previousSummary,
+              summary: item.delivery.summary,
+              addedChecks,
+              addedEvidenceIds: addedEvidence.map(evidence => evidence.id),
+            },
+          ].slice(-30);
+          activity(
+            item,
+            "delivery_amend",
+            `补充当前交付：${note}` +
+              (addedChecks.length ? `；新增检查 ${addedChecks.length} 项` : "") +
+              (addedEvidence.length ? `；新增证据 ${addedEvidence.length} 条` : "") +
+              (item.delivery.summary !== previousSummary ? "；更正成果说明" : "") +
+              (command.title ? "；更新范围标题" : "") +
+              "。未改变候选成果，不增加审查轮次。",
+            command.actor || "管家",
+          );
           return item;
         }
         case "goal.accept": {
@@ -1657,6 +1862,7 @@ export class WorkspaceService {
           if (item.status !== "review")
             throw new Error("只有待验收目标可以退回");
           const at = nowIso();
+          if (command.title) item.title = text(command.title, "范围标题", 500);
           item.status = "active";
           item.attention = null;
           item.next = text(command.note, "修改意见", 4000);
@@ -2057,14 +2263,10 @@ export class WorkspaceService {
             concierge.detail = text(command.detail, "状态说明", 1000);
           else delete concierge.detail;
           if (command.live === null) delete concierge.live;
-          if (command.live)
-            concierge.live = {
-              state: command.live.state,
-              checkedAt: iso(command.live.checkedAt),
-              ...(command.live.reachable === undefined
-                ? {}
-                : { reachable: Boolean(command.live.reachable) }),
-            };
+          if (command.live) {
+            const observed = observedPresence(concierge.live, command.live);
+            if (observed) concierge.live = observed;
+          }
           state.concierge = concierge;
           return state.concierge;
         }
@@ -2079,13 +2281,9 @@ export class WorkspaceService {
               )
             )
               throw new Error("无效的 Herdr 状态");
-            item.live = {
-              state: presence.state,
-              checkedAt: iso(presence.checkedAt),
-              ...(presence.reachable === undefined ? {} : { reachable: Boolean(presence.reachable) }),
-            };
-            delete item.recovery;
-            if (presence.state === "working") delete item.watchdog;
+            const observed = observedPresence(item.live, presence);
+            if (!observed) continue;
+            item.live = observed;
             observeSceneWork(item, item.live);
             if (
               presence.state !== "blocked" &&
@@ -2128,13 +2326,9 @@ export class WorkspaceService {
               (target.paneId !== undefined && reference.paneId !== target.paneId) ||
               (target.tabId !== undefined && reference.tabId !== target.tabId) ||
               (target.workspaceId !== undefined && reference.workspaceId !== target.workspaceId)) continue;
-            item.live = {
-              state: command.presence.state,
-              checkedAt: iso(command.presence.checkedAt),
-              ...(command.presence.reachable === undefined ? {} : { reachable: Boolean(command.presence.reachable) }),
-            };
-            delete item.recovery;
-            if (command.presence.state === "working") delete item.watchdog;
+            const observed = observedPresence(item.live, command.presence);
+            if (!observed) continue;
+            item.live = observed;
             observeSceneWork(item, item.live);
             if (command.reference)
               item.herdr = { ...reference, ...structuredClone(command.reference) };
@@ -2159,13 +2353,9 @@ export class WorkspaceService {
               };
             }
             const current = state.concierge;
-            current.live = {
-              state: command.presence.state,
-              checkedAt: iso(command.presence.checkedAt),
-              ...(command.presence.reachable === undefined
-                ? {}
-                : { reachable: Boolean(command.presence.reachable) }),
-            };
+            const observed = observedPresence(current.live, command.presence);
+            if (!observed) return { matched };
+            current.live = observed;
             if (command.presence.reachable === false) {
               current.status = "not_ready";
               current.detail = "管家现场已关闭或不可达，请恢复管家。";

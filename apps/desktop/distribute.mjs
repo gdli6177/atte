@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { latestMacYaml } from "./update-artifacts.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const exec = promisify(execFile);
@@ -26,6 +27,7 @@ const app = join(here, "release", "Atte-darwin-arm64", "Atte.app");
 const stem = `Atte-${metadata.version}-macOS-arm64`;
 const stage = await mkdtemp(join(tmpdir(), "atte-installer-"));
 const dmg = join(output, `${stem}.dmg`);
+const zip = join(output, `${stem}.zip`);
 
 async function createDmg() {
   for (let attempt = 1; attempt <= 4; attempt += 1) {
@@ -45,6 +47,19 @@ async function createDmg() {
   }
 }
 
+async function fileHashes(path) {
+  const sha256 = createHash("sha256");
+  const sha512 = createHash("sha512");
+  for await (const chunk of createReadStream(path)) {
+    sha256.update(chunk);
+    sha512.update(chunk);
+  }
+  return {
+    sha256: sha256.digest("hex"),
+    sha512: sha512.digest("base64"),
+  };
+}
+
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 try {
@@ -52,22 +67,32 @@ try {
   await symlink("/Applications", join(stage, "Applications"));
   await writeFile(join(stage, "安装说明.txt"),
     "Atte\n\n将 Atte.app 拖入 Applications 后，从应用程序打开。\n" +
-    "适用于 Apple Silicon Mac。本内测版采用完整 ad-hoc 签名，但尚未使用 Apple Developer ID 签名与公证。\n" +
+    "适用于 Apple Silicon Mac。本版使用固定自签名证书，但未使用 Apple Developer ID 签名与公证。\n" +
     "若提示“无法验证开发者”，请在 macOS 系统设置 > 隐私与安全性中选择“仍要打开”。\n" +
     "若提示“已损坏”，请核对 SHA-256 并从 GitHub Releases 重新下载当前版本，不要继续使用 v0.3.0。\n" +
     "使用说明：https://github.com/gdli6177/atte/blob/main/docs/atte.md\n");
   await createDmg();
   await exec("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app,
-    join(output, `${stem}.zip`)], { timeout: 180_000 });
+    zip], { timeout: 180_000 });
   const files = [`${stem}.dmg`, `${stem}.zip`];
   const sums = [];
   for (const name of files) {
-    const hash = createHash("sha256");
-    for await (const chunk of createReadStream(join(output, name))) hash.update(chunk);
-    sums.push(`${hash.digest("hex")}  ${name}`);
+    const hashes = await fileHashes(join(output, name));
+    sums.push(`${hashes.sha256}  ${name}`);
   }
+  const zipInfo = await stat(zip);
+  const zipHashes = await fileHashes(zip);
+  await writeFile(join(output, "latest-mac.yml"), latestMacYaml({
+    version: metadata.version,
+    fileName: `${stem}.zip`,
+    sha512: zipHashes.sha512,
+    size: zipInfo.size,
+  }));
   await writeFile(join(output, "SHA256SUMS.txt"), sums.join("\n") + "\n");
-  console.log(JSON.stringify({ output, files: [...files, "SHA256SUMS.txt"] }));
+  console.log(JSON.stringify({
+    output,
+    files: [...files, "latest-mac.yml", "SHA256SUMS.txt"],
+  }));
 } finally {
   await rm(stage, { recursive: true, force: true });
 }

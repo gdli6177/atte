@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inspectWatchdog, reportWatchdog } from "../src/watchdog.js";
+import { inspectWatchdog, progressBasis, reportWatchdog } from "../src/watchdog.js";
 import { attentionGoals, type Goal } from "../src/index.js";
 const start = "2030-01-01T08:00:00.000Z";
 const after = (minutes: number) => new Date(Date.parse(start) + minutes * 60_000).toISOString();
@@ -37,22 +37,21 @@ test("preparing concierge and pending human decisions do not trigger unassigned-
   item.attention={kind:"decision",summary:"请人决定范围",since:start};
   assert.deepEqual(inspectWatchdog([item],after(2)),[]);
 });
-test("no-progress check contacts concierge first, deduplicates, and escalates only after no recovery", () => {
+test("no-progress check stays background, deduplicates, and never escalates only because time passed", () => {
   const item = goal();
   assert.deepEqual(inspectWatchdog([item], after(29)), []);
   const [request] = inspectWatchdog([item], after(31));
   assert.equal(request?.reason, "stale");
+  assert.equal(request?.backgroundOnly, true);
   assert.equal(attentionGoals([item], Date.parse(after(31))).length, 0);
   reportWatchdog(item, after(31), request!.basis, "contacted");
   assert.deepEqual(inspectWatchdog([item], after(32)), []);
   assert.equal(item.attention, null);
   assert.deepEqual(inspectWatchdog([item], after(41)), []);
-  assert.equal(structuredClone(item).attention?.source, "watchdog");
-  assert.match(structuredClone(item).attention?.summary ?? "", /目标「巡检事项」/);
-  assert.match(structuredClone(item).attention?.summary ?? "", /30 分钟没有写回实质进展/);
-  assert.match(structuredClone(item).attention?.summary ?? "", /你：已交代事项/);
+  assert.equal(item.attention, null);
+  assert.equal(inspectWatchdog([item], after(61))[0]?.reason, "stale");
   const count = item.activities.length;
-  inspectWatchdog([item], after(42));
+  inspectWatchdog([item], after(62));
   assert.equal(item.activities.length, count);
 });
 test("workspace no-progress minutes replace the default stale threshold", () => {
@@ -62,8 +61,8 @@ test("workspace no-progress minutes replace the default stale threshold", () => 
   assert.equal(request?.reason, "stale");
   reportWatchdog(item, after(11), request!.basis, "contacted");
   assert.deepEqual(inspectWatchdog([item], after(20), 10), []);
-  assert.equal(inspectWatchdog([item], after(21), 10).length, 0);
-  assert.match(structuredClone(item).attention?.summary ?? "", /10 分钟没有写回实质进展/);
+  assert.equal(item.attention, null);
+  assert.equal(inspectWatchdog([item], after(41), 10)[0]?.reason, "stale");
 });
 test("blocked or missing owner is checked without treating idle or waiting as failure", () => {
   const item = goal();
@@ -159,17 +158,26 @@ test("an idle owner cannot hide a fresh structured attention request", () => {
   assert.equal(item.attention.kind, "decision");
   assert.equal(item.recovery, undefined);
 });
-test("an unreachable concierge becomes actionable, and successful retry clears only its own failure", () => {
+test("three consecutive concierge nudge failures become actionable and retry on a five-minute cadence", () => {
   const item = goal(), [request] = inspectWatchdog([item], after(31));
   reportWatchdog(item, after(31), request!.basis, "failed", "会话未运行");
-  assert.equal(item.attention?.kind, "intervention");
-  assert.deepEqual(inspectWatchdog([item], after(31.5)), []);
-  assert.equal(inspectWatchdog([item], after(32)).length, 1);
-  reportWatchdog(item, after(32), request!.basis, "contacted");
   assert.equal(item.attention, null);
-  item.attention = { kind: "decision", summary: "范围由人决定", since: after(33) };
-  reportWatchdog(item, after(33), request!.basis, "failed", "再度断线");
-  assert.equal(item.attention.kind, "decision");
+  assert.equal(item.watchdog?.nudgeFailures, 1);
+  assert.deepEqual(inspectWatchdog([item], after(31.5)), []);
+  const second = inspectWatchdog([item], after(36))[0];
+  assert.equal(second?.reason, "stale");
+  reportWatchdog(item, after(36), second!.basis, "failed", "再次断线");
+  assert.equal(item.attention, null);
+  assert.equal(item.watchdog?.nudgeFailures, 2);
+  assert.deepEqual(inspectWatchdog([item], after(39)), []);
+  const third = inspectWatchdog([item], after(41))[0];
+  assert.equal(third?.reason, "stale");
+  reportWatchdog(item, after(41), third!.basis, "failed", "第三次断线");
+  const escalated = structuredClone(item);
+  assert.equal(escalated.attention?.kind, "intervention");
+  assert.match(escalated.attention?.summary ?? "", /连续 3 次未能联系管家/);
+  assert.equal(item.watchdog?.nudgeFailures, 3);
+  assert.deepEqual(inspectWatchdog([item], after(90)), []);
 });
 test("late patrol replies cannot override fresh progress or completed work", () => {
   const item = goal(), [request] = inspectWatchdog([item], after(31));
@@ -202,4 +210,104 @@ test("an unresolved card is not escalated twice", () => {
   const count = item.activities.length;
   assert.deepEqual(inspectWatchdog([item], after(41)), []);
   assert.equal(item.activities.length, count, "the existing card already asks for the same action");
+});
+
+test("blocked and missing need fresh observations; cached terminal state cannot win", () => {
+  const cachedBlocked = goal();
+  cachedBlocked.live = { state: "blocked", checkedAt: start, reachable: true };
+  assert.equal(inspectWatchdog([cachedBlocked], after(31))[0]?.reason, "stale");
+
+  const freshBlocked = goal();
+  freshBlocked.live = { state: "blocked", checkedAt: after(31), reachable: true };
+  assert.equal(inspectWatchdog([freshBlocked], after(31))[0]?.reason, "blocked");
+
+  const cachedMissing = goal();
+  cachedMissing.live = { state: "unknown", checkedAt: start, reachable: false };
+  assert.equal(inspectWatchdog([cachedMissing], after(31))[0]?.reason, "stale");
+
+  const freshMissing = goal();
+  freshMissing.live = { state: "unknown", checkedAt: after(31), reachable: false };
+  assert.equal(inspectWatchdog([freshMissing], after(31))[0]?.reason, "missing");
+});
+
+test("fresh working observation overrides an older blocked Hook event", () => {
+  const item = goal();
+  item.agentRuntime = {
+    attempt: {
+      goalId: item.id, attemptId: "attempt", agent: "owner", adapter: "codex",
+      startedAt: start,
+    },
+    capabilities: ["agent.blocked"],
+    lastEventId: "event",
+    lastEventType: "agent.blocked",
+    lastEventAt: after(30),
+    lastSequence: 1,
+    hookTokenHash: "hash",
+  };
+  item.live = { state: "working", checkedAt: after(31), reachable: true };
+  const [request] = inspectWatchdog([item], after(31));
+  assert.equal(request?.reason, "stale");
+  assert.equal(request?.backgroundOnly, true);
+});
+
+test("settled duration uses the start of the uninterrupted idle state", () => {
+  const item = goal();
+  item.live = {
+    state: "idle",
+    checkedAt: after(2),
+    stateSince: start,
+    reachable: true,
+  };
+  assert.equal(inspectWatchdog([item], after(2.4))[0]?.reason, "settled");
+  item.live.stateSince = after(1.8);
+  assert.deepEqual(inspectWatchdog([item], after(2.4)), []);
+  assert.equal(inspectWatchdog([item], after(3.4))[0]?.reason, "settled");
+});
+
+test("progress basis only follows owner business writes and explicit dispatch boundaries", () => {
+  const item = goal();
+  item.activities.push(
+    { id: "metadata", kind: "metadata", at: after(10), actor: "负责人", text: "改了标题" },
+    { id: "message", kind: "message", at: after(11), actor: "负责人", text: "普通留言" },
+    { id: "concierge", kind: "progress", at: after(12), actor: "管家", text: "管家核对" },
+    { id: "watchdog", kind: "watchdog", at: after(13), actor: "巡检", text: "巡检" },
+  );
+  assert.equal(progressBasis(item), start);
+  item.activities.push({
+    id: "amend", kind: "delivery_amend", at: after(14), actor: "owner-test",
+    text: "补充了同一轮证据",
+  });
+  assert.equal(progressBasis(item), after(14));
+  item.dispatch = { status: "sent", at: after(15) };
+  assert.equal(progressBasis(item), after(15));
+  item.agentRuntime = {
+    attempt: {
+      goalId: item.id, attemptId: "attempt", agent: "owner", adapter: "codex",
+      startedAt: after(16),
+    },
+    capabilities: [],
+    lastEventId: "event",
+    lastEventType: "turn.started",
+    lastEventAt: after(16),
+    lastSequence: 1,
+    hookTokenHash: "hash",
+  };
+  assert.equal(progressBasis(item), after(16));
+});
+
+test("future-skewed timestamps cannot suppress a stale owner", () => {
+  const item = goal();
+  item.agentRuntime = {
+    attempt: {
+      goalId: item.id, attemptId: "attempt", agent: "owner", adapter: "codex",
+      startedAt: "2031-01-01T08:00:00.000Z",
+    },
+    capabilities: [],
+    lastEventId: "event",
+    lastEventType: "turn.started",
+    lastEventAt: "2031-01-01T08:00:00.000Z",
+    lastSequence: 1,
+    hookTokenHash: "hash",
+  };
+  assert.equal(inspectWatchdog([item], after(31))[0]?.reason, "stale");
 });

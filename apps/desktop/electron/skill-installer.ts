@@ -111,11 +111,17 @@ export class AtteSkillInstaller {
           .then(text => JSON.parse(text).sourceDigest)
           .catch(() => undefined)
         : undefined,
-      digest = await sourceDigest(source);
+      digest = await sourceDigest(source),
+      installedDigest = present && storedDigest !== undefined
+        ? await sourceDigest(path) : undefined;
     return !present
       ? "not-installed"
       : storedVersion === undefined
         ? "conflict"
+        : storedDigest === undefined
+          ? "outdated"
+          : installedDigest !== storedDigest
+            ? "conflict"
         : storedVersion === this.version && storedDigest === digest
           ? "installed"
           : "outdated";

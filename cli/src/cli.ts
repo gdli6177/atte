@@ -19,6 +19,7 @@ import { attachOwner } from "./owner-attach.js";
 import { ingestAgentHook } from "./hook-ingest.js";
 import { readHookDiagnostics } from "./hook-diagnostics.js";
 import { readHookInput } from "./hook-input.js";
+import { probeDoctorScenes } from "./doctor.js";
 import {
   SessionControl,
   SessionRuntime,
@@ -32,6 +33,13 @@ declare const __ATTE_VERSION__: string | undefined;
 const cliVersion = typeof __ATTE_VERSION__ === "string" ? __ATTE_VERSION__ : "0.0.0-dev";
 async function doctorReport(service: WorkspaceService) {
   const state = await service.read(), directory = workspaceDataDirectory(service.root);
+  const probe = await probeDoctorScenes({
+    workspace: service.root,
+    state,
+    environment: process.env,
+  });
+  const sceneChecks = new Map(probe.scenes.map(scene => [scene.goalId, scene]));
+  const priorReachability = new Map(state.goals.map(goal => [goal.id, goal.live?.reachable]));
   const size = async (name: string) =>
     await stat(join(directory, name)).then(info => info.size).catch(() => 0);
   const inbox = await readFile(join(directory, "coordinator-inbox.json"), "utf8")
@@ -47,9 +55,11 @@ async function doctorReport(service: WorkspaceService) {
     if (goal.dispatch && ["failed", "unconfirmed"].includes(goal.dispatch.status))
       items.push({ goalId: goal.id, title: goal.title, kind: `dispatch_${goal.dispatch.status}`,
         detail: goal.dispatch.detail ?? "派发结果未确认" });
-    if (goal.live?.reachable === false)
-      items.push({ goalId: goal.id, title: goal.title, kind: "scene_unreachable",
-        detail: `负责人现场不可达（最后核对 ${goal.live.checkedAt}）` });
+    const scene = sceneChecks.get(goal.id);
+    if (scene && scene.status !== "reachable" &&
+      (!scene.legacy || priorReachability.get(goal.id) === false))
+      items.push({ goalId: goal.id, title: goal.title, kind: `scene_${scene.status}`,
+        detail: `负责人现场 ${scene.status}（最后观察 ${scene.lastObservedAt ?? scene.checkedAt ?? "未知"}）` });
     if (goal.agentRuntime?.receipt?.reminderError)
       items.push({ goalId: goal.id, title: goal.title, kind: "reminder_error",
         detail: goal.agentRuntime.receipt.reminderError });
@@ -73,16 +83,24 @@ async function doctorReport(service: WorkspaceService) {
       eventsBytes: await size("events.jsonl"),
     },
     inbox: counts,
-    deadScenes: state.goals
-      .filter(goal => goal.live?.reachable === false && (goal.scene || goal.herdr))
-      .map(goal => ({
-        goalId: goal.id, title: goal.title,
-        backend: goal.scene?.backend ?? "herdr",
-        attemptId: goal.scene?.attemptId,
-        pid: goal.scene?.process?.pid,
-        paneId: goal.herdr?.paneId,
-        checkedAt: goal.live?.checkedAt,
+    deadScenes: probe.scenes
+      .filter(scene => scene.status !== "reachable" &&
+        (!scene.legacy || priorReachability.get(scene.goalId) === false))
+      .map(scene => ({
+        goalId: scene.goalId, title: scene.title, backend: scene.backend,
+        attemptId: scene.attemptId, pid: scene.pid, paneId: scene.paneId,
+        checkedAt: scene.checkedAt, status: scene.status,
+        lastObservedAt: scene.lastObservedAt, stateSince: scene.stateSince,
+        ...(scene.detail ? { detail: scene.detail } : {}),
+        legacy: scene.legacy, hints: scene.hints,
       })),
+    probe: {
+      status: probe.status,
+      checkedAt: probe.checkedAt,
+      timeoutMs: probe.timeoutMs,
+      ...(probe.detail ? { detail: probe.detail } : {}),
+    },
+    hints: probe.hints,
     issues,
     hookDiagnostics,
   };
@@ -117,6 +135,7 @@ const usage = `Atte — The attention layer
 
 人的消息入口（保存原话，不从文本推断批准或完成）：
   atte status [--json]
+  atte --version | -v
   atte doctor [--json]（只读：版本、后端、状态库、收件箱积压与异常现场）
   atte delivery REQUEST_ID [--json]（查询一次协调投递的当前状态）
   atte attention [--json]
@@ -145,17 +164,20 @@ Agent 状态协议（仅在明确事实发生后使用）：
   atte goal kind ID --kind delivery|discovery
   atte goal update ID [--title TEXT] [--description TEXT] [--next TEXT]
     [--owner TEXT] [--status active|waiting] [--waiting-for 外部第三方] [--remind-at ISO]
-  atte goal progress ID --summary TEXT [--next TEXT] [--owner NAME]
+  atte goal progress ID --summary TEXT [--next TEXT] [--title TEXT] [--owner NAME]
   atte goal wait ID --reason TEXT --owner 外部第三方 [--remind-at ISO]
   atte goal decide ID --question TEXT [--next TEXT] [--key KEY]
   atte goal risk ID --category CATEGORY --summary TEXT [--key KEY]
   atte goal ship ID --operation merge|deploy --checks passed|failed
-  atte goal review ID --summary TEXT [--location TEXT] [--url URL]
+  atte goal review ID [--title TEXT] --summary TEXT [--location TEXT] [--url URL]
     --check "名称::命令或操作::passed::说明"（可重复）
     [--candidate-revision REV] [--candidate-digest SHA256] [--evidence-file PATH]
+  atte goal review ID --amend --delivery-id ID --note TEXT
+    [--summary TEXT] [--location TEXT] [--url URL]
+    [--check "名称::命令或操作::passed::说明" ...] [--evidence-file PATH]
   atte goal accept ID [--note TEXT]
   atte goal complete ID --note "用户明确确认完成的原话"
-  atte goal rework ID --note TEXT
+  atte goal rework ID --note TEXT [--title TEXT]
   atte goal resolve ID --note TEXT [--outcome approved|rejected]
   atte goal drop ID --reason TEXT
   atte goal remind ID --at ISO [--note TEXT]
@@ -184,7 +206,7 @@ function parse(argv: string[]) {
     if (!token.startsWith("--")) { positional.push(token); continue; }
     const [name, inline] = token.slice(2).split(/=(.*)/s);
     if (!name) throw new Error("无效参数");
-    if (["json", "all", "help", "new", "once", "current", "self", "initialize"].includes(name)) { values.set(name, ["true"]); continue; }
+    if (["json", "all", "help", "new", "once", "current", "self", "initialize", "amend"].includes(name)) { values.set(name, ["true"]); continue; }
     const value = inline ?? argv[++index];
     if (value === undefined || (inline === undefined && value.startsWith("--"))) throw new Error(`--${name} 需要一个值`);
     if (values.has(name) && !["check", "attachment", "criterion", "from", "project", "operation", "evidence", "role", "arg", "approve-script"].includes(name)) throw new Error(`--${name} 不能重复`);
@@ -192,6 +214,36 @@ function parse(argv: string[]) {
   }
   return { positional, one: (name: string) => values.get(name)?.[0], all: (name: string) => values.get(name) ?? [], has: (name: string) => values.has(name) };
 }
+const reviewUsage = `atte goal review ID [--title TEXT] --summary TEXT [--location TEXT] [--url URL]
+  --check "名称::命令或操作::passed::说明" ... [--evidence-file PATH]
+
+补充当前待验收交付（不改变候选成果、不增加审查轮次）：
+atte goal review ID --amend --delivery-id DELIVERY_ID --note TEXT [--title TEXT]
+  [--summary TEXT] [--location TEXT] [--url URL]
+  [--check "名称::命令或操作::passed::说明" ...] [--evidence-file PATH]
+
+--evidence-file 必须是 JSON 数组，最多 100 条；示例：
+[
+  {
+    "id": "ev_tests",
+    "kind": "command",
+    "label": "回归测试通过",
+    "result": "passed",
+    "observedAt": "2026-11-17T10:00:00Z",
+    "command": "pnpm test",
+    "location": "docs/review.md",
+    "note": "完整报告写在这里"
+  }
+]
+
+字段契约：
+- 必填：id、kind、label、result
+- kind：command | artifact | url | attachment | inspection
+- result：observed | passed | failed
+- observedAt 可省略，默认使用提交时间
+- 可选：command、location、sourceRevision、sha256、note
+- id 必须唯一；详细 Markdown 报告请用 --location，--evidence-file 只放结构化证据元数据
+`;
 function hookJsonRequested(argv: string[]) {
   return argv.some(token => token === "--json" || token === "--json=true");
 }
@@ -430,6 +482,18 @@ async function currentHerdrAgent(paneId: string) {
   }
 }
 export async function run(argv: string[], io = { out: console.log, error: console.error }): Promise<number> {
+  if (argv.length === 1 && (argv[0] === "--version" || argv[0] === "-v")) {
+    io.out(cliVersion);
+    return 0;
+  }
+  if (argv.some(token => token.startsWith("--version="))) {
+    io.error("atte: --version 不接受值；请直接运行 atte --version");
+    return 2;
+  }
+  if (argv.includes("--help") && argv[0] === "goal" && argv[1] === "review") {
+    io.out(reviewUsage);
+    return 0;
+  }
   if (argv[0] === "hook" && argv[1] === "ingest")
     return hookIngestFailOpen(argv, io);
   try {
@@ -648,7 +712,11 @@ export async function run(argv: string[], io = { out: console.log, error: consol
       } };
       else if (group === "goal" && action === "progress") {
         if (args.has("stage")) throw new Error("工序已移除；请直接写清当前实际结果和下一步");
-        command = { type: "goal.progress", goalId: target!, summary: args.one("summary")!, next: args.one("next"), actor: actor ?? args.one("owner") };
+        command = {
+          type: "goal.progress", goalId: target!, summary: args.one("summary")!,
+          next: args.one("next"), title: args.one("title"),
+          actor: actor ?? args.one("owner"),
+        };
       }
       else if (group === "goal" && action === "message") {
         const message = textArg(args.one("text"), "--text");
@@ -685,35 +753,51 @@ export async function run(argv: string[], io = { out: console.log, error: consol
           ? await jsonFile(args.one("evidence-file"), "交付证据")
           : undefined;
         if (evidence !== undefined && !Array.isArray(evidence))
-          throw new Error("交付证据文件必须是数组");
+          throw new Error("交付证据文件必须是 JSON 数组；每项至少包含 id、kind、label、result。运行 atte goal review --help 查看完整 schema");
         const revision = args.one("candidate-revision");
-        command = {
-          type: "goal.review",
-          goalId: target!,
-          delivery: {
-            summary: args.one("summary")!,
-            location: args.one("location"),
-            url: args.one("url"),
-            checks: checks(args.all("check")),
-            ...(revision
-              ? {
-                  candidate: {
-                    revision,
-                    digest: args.one("candidate-digest"),
-                    version: args.one("candidate-version"),
-                  },
-                }
-              : {}),
-            ...(evidence ? { evidence: evidence as import("../../packages/core/src/index.js").Evidence[] } : {}),
-          },
-          actor,
-        };
+        command = args.has("amend")
+          ? {
+              type: "goal.review.amend",
+              goalId: target!,
+              deliveryId: textArg(args.one("delivery-id"), "--delivery-id"),
+              note: textArg(args.one("note"), "--note"),
+              title: args.one("title"),
+              summary: args.one("summary"),
+              location: args.one("location"),
+              url: args.one("url"),
+              ...(args.all("check").length ? { checks: checks(args.all("check")) } : {}),
+              ...(evidence ? { evidence: evidence as import("../../packages/core/src/index.js").Evidence[] } : {}),
+              actor,
+            }
+          : {
+              type: "goal.review",
+              goalId: target!,
+              title: args.one("title"),
+              delivery: {
+                summary: args.one("summary")!,
+                location: args.one("location"),
+                url: args.one("url"),
+                checks: checks(args.all("check")),
+                ...(revision
+                  ? {
+                      candidate: {
+                        revision,
+                        digest: args.one("candidate-digest"),
+                        version: args.one("candidate-version"),
+                      },
+                    }
+                  : {}),
+                ...(evidence ? { evidence: evidence as import("../../packages/core/src/index.js").Evidence[] } : {}),
+              },
+              actor,
+            };
       }
       else if (group === "goal" && action === "rework")
         command = {
           type: "goal.rework",
           goalId: target!,
           note: textArg(args.one("note"), "--note"),
+          title: args.one("title"),
           actor,
         };
       else if (group === "goal" && ["accept", "complete", "drop"].includes(action ?? "")) {
@@ -814,7 +898,8 @@ export async function run(argv: string[], io = { out: console.log, error: consol
           ? `\nHook 观测异常：${Object.entries(report.hookDiagnostics.counts)
             .map(([reason, count]) => `${reason} ${count}`).join(" · ")}`
           : "") +
-        (report.deadScenes.length ? `\n不可达现场 ${report.deadScenes.length} 个：${report.deadScenes.map(item => item.goalId).join(", ")}` : "\n没有已标记不可达的现场") +
+        (report.deadScenes.length ? `\n需核对现场 ${report.deadScenes.length} 个：${report.deadScenes.map(item => `${item.goalId}(${item.status})`).join(", ")}` : "\n没有需核对的现场") +
+        (report.hints.length ? `\n诊断建议：\n${report.hints.map(item => `- ${item}`).join("\n")}` : "") +
         (report.issues.length ? `\n最近问题：\n${report.issues.map(item => `- ${item.kind} ${item.goalId} ${item.detail}`).join("\n")}` : ""));
     }
     else if (group === "event" && action === "herdr") {

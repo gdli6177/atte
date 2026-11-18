@@ -209,6 +209,11 @@ export class CoordinatorInbox {
     }
   }
 
+  /** Waits for queued inbox mutations and writes the current snapshot. */
+  flush() {
+    return this.runExclusive(() => this.persist());
+  }
+
   enqueue(input: {
     goalId: string;
     requestId: string;

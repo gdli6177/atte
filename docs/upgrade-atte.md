@@ -1,6 +1,6 @@
 # Atte 升级、迁移与回滚
 
-本文说明 Atte 0.14.2 的工作区升级、Hook 更新和回滚边界，并保留旧 Crewvane 标识
+本文说明 Atte 0.14.3 的工作区升级、Hook 更新和回滚边界，并保留旧 Crewvane 标识
 迁移的历史说明。当前产品能力见[使用说明](atte.md)。
 
 ## 升级前
@@ -12,6 +12,29 @@
 
 升级会保留旧目录，不会删除原工作区、附件或决定记录。不要只备份
 `state.json` 而忽略附件、事件和决定账本。
+
+## 0.14.3：安全重绑、自动更新与 Hook 加固
+
+0.14.3 保持工作区 v5，不新增快照迁移。第一次从 0.14.2 升级仍需手动下载安装，
+因为 0.14.2 没有内置更新器。
+
+本版变更：
+
+- 运行时 generation 改变时，只有同一 Pane、进程组和负责人进程身份经两次稳定采样
+  一致才自动 `scene.reanchor`；不重绑、不重建、不重发。
+- 没有稳定归属证据的旧现场进入显式人工确认；确认只退休旧 attempt，不关闭或杀死
+  旧 Pane。仍有新鲜 Hook/语义写回或现场仍可达时拒绝确认。
+- 看门狗改为 30 分钟提醒、5 分钟失败重试、连续 3 次失败才升级；`stale` 只做后台
+  核对，单纯时间流逝不会直接打扰人。
+- 同一候选成果只补检查/证据时使用 `goal review --amend`，不增加审查轮次；成果
+  实际改变仍需重新交付。
+- OMP 受管 extension 升级到 revision 4；后台更新会刷新受管 extension，但用户
+  同名文件、符号链接和其他 extension 仍不会被覆盖。
+- 正式包使用固定自签名证书，并提供后台检查/下载更新；安装与重启必须由人点击。
+  更新前会协调式退出本地界面，不关闭 Herdr 或 Agent。
+
+升级后建议在“设置 → 高级与维护”重新安装 Atte CLI 和 Atte Skill，并重启正在运行的
+OMP 会话以加载 revision 4。已有事项、现场和交付无需重建。
 
 ## 0.14.2：现场续做与写回协议
 
@@ -101,12 +124,12 @@ Atte 不会覆盖不匹配的旧备份，也不会自动归档或创建空工作
 不会自动把整个目录改名为 `.atte.backup-*`，也不会重建空工作区。请先保留现场并
 检查原因。
 
-## OMP Hook revision 3
+## OMP Hook revision 4
 
-0.14.0 把受管 OMP extension 升级到 revision 3，修复子进程提前退出时
+0.14.3 把受管 OMP extension 升级到 revision 4，继续修复子进程提前退出时
 `child.stdin` 没有错误监听而产生未处理 `EPIPE`、进而杀死 OMP 会话的问题。
 
-revision 3 的行为：
+revision 4 的行为：
 
 - 在写 stdin 之前安装 child 与流的错误处理器；
 - 不安装全局 `EPIPE` 吞错；
@@ -118,7 +141,7 @@ revision 3 的行为：
 
 受管 extension 使用规范文件 `~/.omp/agent/extensions/atte.js`。如果旧安装留下了由
 Atte 标记管理的 `crewvane.js`，升级会安全收敛该旧文件；用户同名文件、符号链接、
-其他 OMP extension 和已停用配置不会被删除或覆盖。安装器可重复运行，revision 3
+其他 OMP extension 和已停用配置不会被删除或覆盖。安装器可重复运行，revision 4
 不会因重启反复改写。
 
 已经运行的 OMP 进程可能继续持有旧 extension 代码。升级后请关闭并重启相应 OMP
@@ -130,7 +153,7 @@ Atte 标记管理的 `crewvane.js`，升级会安全收敛该旧文件；用户�
 atte doctor --json
 ```
 
-旧会话已经发生但未由 revision 3 记录的崩溃不会被追溯补写；diagnostics 只反映新的
+旧会话已经发生但未由 revision 4 记录的崩溃不会被追溯补写；diagnostics 只反映新的
 受管失败。
 
 ## 回滚
@@ -181,6 +204,6 @@ atte doctor --json
   停止、幂等读取、旧交付/实验事项/Orca 只读映射。
 - `cli/test/hook-input.test.ts` 与 `cli/test/hook-ingest.test.ts`：超限、超时、
   排空、正常投递、spool 与 fail-open。
-- `apps/desktop/test/agent-hook-manager.test.ts`：revision 3、提前退出、部分读取、
+- `apps/desktop/test/agent-hook-manager.test.ts`：revision 4、提前退出、部分读取、
   spawn 失败与受管 extension 收敛。
 - `pnpm test` 与 `./scripts/workspace-verify full`：仓库级回归。

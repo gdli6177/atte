@@ -3,21 +3,30 @@ import { Bell, Bot, Copy, Download, Folder, HardDrive, RefreshCw, Settings2, Squ
 import type { AgentPreferences, Project, ShipPolicy, WorkspaceState } from "../../../../../packages/core/src/types.js";
 import type { AgentHookAdapterStatus, ManagedAdapterId } from "../../../electron/agent-hook-manager.js";
 import type { WebhookSettings } from "../../../electron/webhook-notifications.js";
+import type { ApplicationUpdateStatus } from "../../../electron/application-updater.js";
 import { api } from "../../api.js";
 import { BrandMark, Button, ChoiceGroup, Field, LoadingState, Select, SettingsGroup, SettingsSection, TextInput } from "../../ui/index.js";
 import { time } from "../goals/goalPresentation.js";
 import { AppearanceSettings } from "./AppearanceSettings.js";
+import { ApplicationUpdateSettings } from "./ApplicationUpdateSettings.js";
 
 type HerdrStatus = Awaited<ReturnType<typeof api.herdrStatus>>;
 type CliStatus = Awaited<ReturnType<typeof api.cliStatus>>;
 type SkillsStatus = Awaited<ReturnType<typeof api.skillsStatus>>;
 type AgentChoice = Awaited<ReturnType<typeof api.agentChoices>>[number];
-export type SettingsAction = "herdr-check" | "herdr-install" | "cli" | "skills";
+export type SettingsAction =
+  | "herdr-check"
+  | "herdr-install"
+  | "cli"
+  | "skills"
+  | "update-check"
+  | "update-install";
 
 export function Settings({
   busy, state, herdr, cli, skills, agentHooks, onAgentHooksChange, notify,
   theme, setTheme, onAction, workspace, pickWorkspace, agentOptions,
   webhook, saveAgents, savePolicy, openWebhook, version,
+  applicationUpdate, setApplicationUpdateBackground,
 }: {
   busy: boolean;
   state: WorkspaceState;
@@ -30,6 +39,8 @@ export function Settings({
   theme: string;
   setTheme: (theme: string) => void;
   onAction: (action: SettingsAction) => Promise<void>;
+  applicationUpdate: ApplicationUpdateStatus;
+  setApplicationUpdateBackground: (enabled: boolean) => Promise<void>;
   workspace: string;
   pickWorkspace: () => void;
   agentOptions: AgentChoice[];
@@ -66,7 +77,7 @@ export function Settings({
   }
   const groups = [
     ["general", "工作区与外观"], ["agents", "Agent"], ["scenes", "执行现场"],
-    ["notifications", "通知"], ["authority", "上线策略与决定"], ["maintenance", "高级与维护"],
+    ["updates", "应用更新"], ["maintenance", "高级与维护"],
   ];
   return (
     <div className="content settings">
@@ -103,20 +114,26 @@ export function Settings({
         <SettingsGroup id="settings-scenes" title="执行现场" description="Herdr 承载管家和负责人，真实终端为默认打开方式。">
           <SceneSettingsEditor busy={busy} notify={notify} />
         </SettingsGroup>
-        <SettingsGroup id="settings-notifications" title="通知" description="需要你处理时提醒，普通进展留在事项记录中。">
-          <SettingsSection wide icon={<Bell />} title="需要你时，主动通知"
-            description="系统通知默认开启，在需要决定、等待验收、到期跟进或 Agent 需要介入时提醒你。">
-            <p className="ui-field__hint">点击系统通知回到对应事项。Webhook 通知可在“高级与维护”中配置。</p>
-          </SettingsSection>
-        </SettingsGroup>
-        <SettingsGroup id="settings-authority" title="上线策略与决定" description="默认外部审批，按需配置项目例外；已记录的决定可展开查看。">
-          <GovernanceEditor key={workspace} projects={state.projects} decisions={state.decisions ?? []}
-            busy={busy || !workspace} onSave={savePolicy} />
+        <SettingsGroup id="settings-updates" title="应用更新"
+          description="后台检查和下载应用更新；安装与重启只在明确操作后执行。">
+          <ApplicationUpdateSettings
+            status={applicationUpdate}
+            busy={busy}
+            onCheck={() => onAction("update-check")}
+            onInstall={() => onAction("update-install")}
+            onBackgroundChange={setApplicationUpdateBackground}
+          />
         </SettingsGroup>
         <details id="settings-maintenance" className="manual-tools settings-disclosure settings-maintenance">
           <summary>高级与维护</summary>
-          <p>Herdr 运行时、CLI 与 Skills 安装、缓存清理、诊断和 Webhook；仅在需要时展开。</p>
+          <p>系统通知、上线策略、Herdr 运行时、CLI 与 Skills 安装、缓存清理、诊断和 Webhook；仅在需要时展开。</p>
           <div className="ui-settings-grid">
+          <SettingsSection wide icon={<Bell />} title="需要你时，主动通知"
+            description="系统通知默认开启，在需要决定、等待验收、到期跟进或 Agent 需要介入时提醒你。">
+            <p className="ui-field__hint">点击系统通知回到对应事项。普通进展只留在事项记录中。</p>
+          </SettingsSection>
+          <GovernanceEditor key={workspace} projects={state.projects} decisions={state.decisions ?? []}
+            busy={busy || !workspace} onSave={savePolicy} />
           <SettingsSection wide icon={<SquareTerminal />} title="Herdr 运行时"
             description="Herdr 负责工作现场与全局管家。更新会保留现有事项；检查更新不会替换正在运行的版本。">
             <div className="settings-facts">

@@ -69,6 +69,30 @@ test("the executable presents Atte while keeping the public atte command", async
   assert.doesNotMatch(stdout, /--handling [^\n]*self|--self/);
   assert.doesNotMatch(stdout, /\bcrewvane (?:status|attention|board|goal|owner|skill)\b/);
 });
+test("version flags are side-effect free and review help documents the evidence contract", async () => {
+  const runPlain = async (argv: string[]) => {
+    let stdout = "", stderr = "";
+    const code = await run(argv, {
+      out: text => { stdout += text; },
+      error: text => { stderr += text; },
+    });
+    return { code, stdout, stderr };
+  };
+  const version = await runPlain(["--version"]);
+  assert.equal(version.code, 0);
+  assert.match(version.stdout, /^(?:\d+\.\d+\.\d+|0\.0\.0-dev)$/);
+  assert.equal(version.stderr, "");
+  assert.equal((await runPlain(["-v"])).stdout, version.stdout);
+  const invalid = await runPlain(["--version=0.14.3"]);
+  assert.equal(invalid.code, 2);
+  assert.match(invalid.stderr, /不接受值/);
+  const helpWithLateId = await runPlain(["goal", "review", "goal_example", "--help"]);
+  assert.equal(helpWithLateId.code, 0);
+  assert.match(helpWithLateId.stdout, /--evidence-file/);
+  assert.match(helpWithLateId.stdout, /"id": "ev_tests"/);
+  assert.match(helpWithLateId.stdout, /kind：command \| artifact/);
+  assert.match(helpWithLateId.stdout, /--title TEXT/);
+});
 async function callProcess(
   root: string,
   environment: Record<string, string>,
@@ -353,6 +377,47 @@ test("real CLI keeps review evidence while retired verification is rejected", as
   assert.match(rejected.stderr, /^atte: feature_removed: /);
   const saved = (await new WorkspaceService(root).read()).goals[0]!;
   assert.deepEqual(saved.delivery, reviewed.json.delivery);
+});
+test("CLI amends the same review round and reports malformed evidence precisely", async () => {
+  const root = await fixture("atte-cli-review-amend-");
+  const goal = (await call(root, ["goal", "create", "--title", "同轮补证"])).json as Goal;
+  const reviewed = await call(root, [
+    "goal", "review", goal.id,
+    "--title", "保留范围的标题",
+    "--summary", "候选成果一。",
+    "--check", "真实检查::true::passed",
+  ]);
+  assert.equal(reviewed.code, 0, reviewed.stderr);
+  const amended = await call(root, [
+    "goal", "review", goal.id,
+    "--amend",
+    "--delivery-id", reviewed.json.delivery.id,
+    "--title", "同轮补证后的范围",
+    "--note", "补充同一候选的复查记录。",
+    "--check", "补证::true::passed::同一构建",
+  ]);
+  assert.equal(amended.code, 0, amended.stderr);
+  assert.equal(amended.json.status, "review");
+  assert.equal(amended.json.title, "同轮补证后的范围");
+  assert.equal(amended.json.reviewRounds, reviewed.json.reviewRounds);
+  assert.equal(amended.json.delivery.id, reviewed.json.delivery.id);
+  assert.equal(amended.json.delivery.amendments.length, 1);
+  assert.equal(amended.json.activities.at(-1).kind, "delivery_amend");
+
+  const malformed = join(root, "malformed-evidence.json");
+  await writeFile(malformed, JSON.stringify({ evidence: [] }));
+  const failed = await call(root, [
+    "goal", "review", goal.id,
+    "--amend",
+    "--delivery-id", reviewed.json.delivery.id,
+    "--note", "不应部分写入。",
+    "--evidence-file", malformed,
+  ]);
+  assert.equal(failed.code, 1);
+  assert.match(failed.stderr, /JSON 数组/);
+  assert.match(failed.stderr, /id、kind、label、result/);
+  const unchanged = (await new WorkspaceService(root).read()).goals[0]!;
+  assert.deepEqual(unchanged.delivery, amended.json.delivery);
 });
 test("CLI caps review submissions at three rounds and a human can extend the limit", async () => {
   const root = await fixture("atte-cli-review-rounds-");

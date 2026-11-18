@@ -102,6 +102,73 @@ export class SessionRuntime {
       throw new SessionError("scene_identity_mismatch", "操作目标不属于当前工作区中已登记的真实现场。");
     return { goal, role: goal ? "owner" as const : "concierge" as const };
   }
+  private goalIdForScene(state: WorkspaceState, scene: SceneReferenceV1) {
+    return state.goals.find(item => item.scene?.bindingId === scene.bindingId)?.id;
+  }
+  /** Auto re-anchor only on two stable ownership samples from the adapter.
+   * Everything else stays put; a human must resolve an old or uncertain scene. */
+  private async refreshSceneObservation(scene: SceneReferenceV1, goalId?: string) {
+    const { adapter } = await this.adapter();
+    let current = scene;
+    let observation = await adapter.inspect(current);
+    if (observation.identity === "match") return { scene: current, observation };
+    if (observation.ownership === "live" && observation.reanchor) {
+      const next = await adapter.reanchor?.(current);
+      if (next) {
+        await this.service.execute({
+          type: "scene.reanchor", goalId,
+          bindingId: current.bindingId, attemptId: current.attemptId, scene: next,
+        });
+        current = next;
+        observation = await adapter.inspect(current);
+      }
+    }
+    return { scene: current, observation };
+  }
+  private async recoverScene(scene: SceneReferenceV1, goalId?: string,
+    options: { allowEnded?: boolean } = {}) {
+    const recovered = await this.refreshSceneObservation(scene, goalId);
+    if (recovered.observation.identity !== "match") {
+      if (recovered.observation.ownership === "legacy")
+        throw new SessionError("legacy_confirmation_required",
+          "旧现场没有稳定的进程归属证据；请在目标详情确认原负责人已经退出，不能静默重绑、发送或关闭。");
+      if (recovered.observation.ownership === "uncertain")
+        throw new SessionError("scene_identity_mismatch",
+          "运行时归属暂时无法稳定确认；原现场保持不变，请稍后重试或打开终端核对。");
+      throw new SessionError("scene_identity_mismatch",
+        "现场身份已改变且没有连续稳定的归属证据；原现场保持不变，未自动重绑。");
+    }
+    if (recovered.observation.state === "exited" && !options.allowEnded)
+      throw new SessionError("scene_ended", "原负责人现场已结束；请恢复负责人或重新启动。");
+    return recovered;
+  }
+  private async confirmEndedScene(scene: SceneReferenceV1, goalId?: string) {
+    if (!scene.ownership) return;
+    const before = await this.service.read();
+    this.assertScene(before, scene, await this.options.control.status());
+    const goal = before.goals.find(item => item.id === goalId);
+    const expectedActivity = {
+      lastEventAt: goal?.agentRuntime?.lastEventAt,
+      lastSemanticWriteAt: goal?.agentRuntime?.lastSemanticWriteAt,
+    };
+    const { adapter } = await this.adapter();
+    const first = await adapter.inspect(scene);
+    if (first.identity !== "match" || first.state !== "exited" ||
+      first.reachable || first.ownership === "legacy") return;
+    const sampledAt = Date.now();
+    await delay(2_000);
+    const second = await adapter.inspect(scene);
+    if (second.identity !== "match" || second.state !== "exited" ||
+      second.reachable || second.ownership === "legacy") return;
+    const after = await this.service.read();
+    this.assertScene(after, scene, await this.options.control.status());
+    const current = after.goals.find(item => item.id === goalId);
+    if (current?.agentRuntime?.lastEventAt !== expectedActivity.lastEventAt ||
+      current?.agentRuntime?.lastSemanticWriteAt !== expectedActivity.lastSemanticWriteAt) return;
+    const live = goalId ? current?.live : after.concierge.live;
+    if (live?.state === "working" && Date.parse(live.checkedAt) >= sampledAt) return;
+    return expectedActivity;
+  }
   private async adapter(startIfMissing = false) {
     const control = await this.options.control.status();
     if (control.selected !== "herdr")
@@ -262,12 +329,15 @@ export class SessionRuntime {
         // A verified exit is a failed launch, not an uncertain delivery. Clean
         // this attempt up so a retry cannot deadlock on its own dead scene; the
         // retired attempt stays visible in attemptHistory.
+        const expectedActivity = await this.confirmEndedScene(created.scene, goalId);
+        if (!expectedActivity)
+          throw new SessionError("launch_unconfirmed", "退出核对期间现场或写回发生变化；已保留原现场，未退休或重复创建。");
         if (goalId && launch.intent.role === "owner")
           await this.service.execute({ type: "scene.retire", goalId,
-            bindingId: created.scene.bindingId, attemptId: created.scene.attemptId }).catch(() => {});
+            bindingId: created.scene.bindingId, attemptId: created.scene.attemptId, expectedActivity });
         else if (launch.intent.role === "concierge")
           await this.service.execute({ type: "scene.release",
-            bindingId: created.scene.bindingId }).catch(() => {});
+            bindingId: created.scene.bindingId });
         throw new SessionError("launch_failed",
           `${launch.intent.role === "concierge" ? "管家" : "负责人"}启动后立即退出（可能是 Agent CLI 崩溃，例如 EPIPE）。本次现场已清理，可直接重试。`);
       }
@@ -353,13 +423,21 @@ export class SessionRuntime {
     this.assertWorkspace(state, await this.options.control.status());
     if (state.concierge.scene) {
       this.assertScene(state, state.concierge.scene, await this.options.control.status());
-      const { adapter } = await this.adapter();
-      const observation = await adapter.inspect(state.concierge.scene);
+      const { scene, observation } = await this.refreshSceneObservation(state.concierge.scene);
+      if (observation.identity !== "match" && !scene.ownership)
+        throw new SessionError("legacy_confirmation_required",
+          "旧管家现场缺少稳定的进程归属证据；请先确认原管家已经退出，不能静默重绑或启动第二位管家。");
       if (observation.identity !== "match") throw new SessionError("scene_identity_mismatch", "管家运行时已改变，请重新核实现场。");
-      if (observation.state !== "exited") return this.initializeConcierge(state.concierge.scene);
-      await this.service.execute({ type: "scene.release", bindingId: state.concierge.scene.bindingId });
+      if (observation.state !== "exited") return this.initializeConcierge(scene);
+      if (!state.concierge.scene.ownership)
+        throw new SessionError("legacy_confirmation_required",
+          "旧管家现场没有稳定的进程归属证据；请先确认原管家已经退出，不能静默启动第二位管家。");
+      if (!await this.confirmEndedScene(scene))
+        throw new SessionError("scene_identity_mismatch", "原管家尚未连续确认退出；已保留原现场，未启动第二位管家。");
+      await this.service.execute({ type: "scene.release", bindingId: scene.bindingId });
     } else if (state.concierge.legacyScene)
-      throw new SessionError("scene_identity_mismatch", "旧管家现场尚未核实；不能静默创建第二位管家。");
+      throw new SessionError("legacy_confirmation_required",
+        "旧管家现场尚未核实；请先确认原管家已经退出，不能静默创建第二位管家。");
     if (state.concierge.launch && !state.concierge.scene && state.concierge.launch.status !== "rejected")
       return this.initializeConcierge(await this.recoverIntent(state.concierge.launch));
     const { adapter, control } = await this.adapter(true);
@@ -395,13 +473,19 @@ export class SessionRuntime {
       // A dead terminal keeps its reference on purpose: it is evidence until
       // someone verifies that the process is gone. Re-verify here so a crashed
       // owner can be replaced by a new attempt without hand-editing state.
-      const { adapter: current } = await this.adapter();
-      const observed = await current.inspect(goal.scene);
+      const { scene: currentScene, observation: observed } =
+        await this.refreshSceneObservation(goal.scene, goal.id);
       if (observed.identity !== "match" || observed.state !== "exited")
         throw new Error("目标已有负责人现场；请使用 owner send 联系原负责人。若原负责人已退出，请先在目标详情恢复现场。");
+      if (!goal.scene.ownership || observed.ownership === "legacy")
+        throw new SessionError("legacy_confirmation_required",
+          "旧负责人现场没有稳定的进程归属证据；请先在目标详情确认原负责人已经退出，不能静默退休或另建负责人。");
+      const expectedActivity = await this.confirmEndedScene(currentScene, goal.id);
+      if (!expectedActivity)
+        throw new SessionError("scene_identity_mismatch", "原负责人尚未连续确认退出，或退出核对期间收到新写回；未创建第二位负责人。");
       await this.service.execute({
         type: "scene.retire", goalId: goal.id,
-        bindingId: goal.scene.bindingId, attemptId: goal.scene.attemptId,
+        bindingId: currentScene.bindingId, attemptId: currentScene.attemptId, expectedActivity,
       });
       delete goal.scene;
       delete goal.sceneLaunch;
@@ -447,6 +531,10 @@ export class SessionRuntime {
       });
       if (host.handled) return host.result as SendReceipt;
     }
+    scene = (await this.recoverScene(scene, goal?.id)).scene;
+    if (!scene.ownership)
+      throw new SessionError("legacy_confirmation_required",
+        "旧现场没有稳定的进程归属证据；请先核实原负责人，不会向未经核实的旧现场发送消息。");
     // Watchdog correlation IDs can include ISO timestamps. Keep a bounded,
     // stable encoding for filesystem and control-operation keys.
     if (!/^[a-zA-Z0-9_-]{1,140}$/.test(deliveryId))
@@ -458,7 +546,8 @@ export class SessionRuntime {
     }) as SendReceipt | undefined;
     const payloadSha256 = createHash("sha256").update(text).digest("hex");
     if (previous) {
-      if (previous.payloadSha256 !== payloadSha256 || !isDeepStrictEqual(previous.scene, scene))
+      if (previous.payloadSha256 !== payloadSha256 ||
+        previous.scene.bindingId !== scene.bindingId || previous.scene.attemptId !== scene.attemptId)
         throw new SessionError("scene_identity_mismatch", "原投递不能更换正文或现场。");
       return previous;
     }
@@ -490,7 +579,9 @@ export class SessionRuntime {
     return { scene, receipt };
   }
   async focus(scene: SceneReferenceV1) {
-    this.assertScene(await this.service.read(), scene, await this.options.control.status());
+    const state = await this.service.read();
+    const registered = this.assertScene(state, scene, await this.options.control.status());
+    scene = (await this.recoverScene(scene, registered.goal?.id)).scene;
     const { adapter } = await this.adapter();
     const result = await adapter.focus(scene);
     if (result.status !== "focused" || !result.navigated) throw new SessionError("focus_failed", result.detail ?? "未能定位原现场。");
@@ -506,24 +597,38 @@ export class SessionRuntime {
       throw new Error("该事项当前不能恢复现场。");
     this.assertGoal(goal);
     const scene = goal.scene;
+    if (!scene && goal.legacyScene)
+      throw new SessionError("legacy_confirmation_required",
+        "旧负责人现场尚未核实；请先确认原负责人已经退出，不能静默创建新负责人。");
     if (scene) {
       this.assertScene(state, scene, control);
-      const { adapter } = await this.adapter();
-      const observed = await adapter.inspect(scene);
+      const recovered = await this.refreshSceneObservation(scene, goal.id);
+      const observed = recovered.observation;
       if (observed.identity === "match" && observed.reachable && observed.state !== "exited")
-        return { scene };
+        return { scene: recovered.scene };
       if (observed.identity !== "match" || observed.state !== "exited")
         throw new SessionError("scene_identity_mismatch", "原现场尚未确认停止；未创建新负责人，请重新连接或核实原现场。");
+      if (!scene.ownership || observed.ownership === "legacy")
+        throw new SessionError("legacy_confirmation_required",
+          "旧负责人现场没有稳定的进程归属证据；请先确认原负责人已经退出，不能静默退休或另建负责人。");
+      const expectedActivity = await this.confirmEndedScene(recovered.scene, goalId);
+      if (!expectedActivity)
+        throw new SessionError("scene_identity_mismatch", "原负责人尚未连续确认退出，或退出核对期间收到新写回；未创建第二位负责人。");
       await this.service.execute({ type: "scene.retire", goalId,
-        bindingId: scene.bindingId, attemptId: scene.attemptId });
+        bindingId: recovered.scene.bindingId, attemptId: recovered.scene.attemptId, expectedActivity });
     }
     return this.launchOwner({ goalId, name: `owner-${goalId.replace(/[^a-z0-9]/gi, "").slice(-8).toLowerCase()}`,
       consultationOnly: true });
   }
   async close(scene: SceneReferenceV1, goalId?: string) {
-    const registered = this.assertScene(await this.service.read(), scene, await this.options.control.status(), "execute");
+    const state = await this.service.read();
+    const registered = this.assertScene(state, scene, await this.options.control.status(), "execute");
     if (goalId && registered.goal?.id !== goalId)
       throw new SessionError("scene_identity_mismatch", "关闭目标与登记的负责人现场不一致。");
+    scene = (await this.recoverScene(scene, registered.goal?.id, { allowEnded: true })).scene;
+    if (!scene.ownership)
+      throw new SessionError("legacy_confirmation_required",
+        "旧现场没有稳定的进程归属证据；不会自动关闭。请先在目标详情确认原负责人已经退出。");
     const { adapter } = await this.adapter();
     const receipt = await this.options.control.operation({
       workspace: this.options.workspace, requestId: `close-${scene.bindingId}-${randomUUID()}`, kind: "close",
@@ -542,6 +647,7 @@ export class SessionRuntime {
     const registered = this.assertScene(state, scene, await this.options.control.status());
     if (registered.goal?.id !== goalId)
       throw new SessionError("scene_identity_mismatch", "恢复记录与登记的负责人现场不一致。");
+    scene = (await this.recoverScene(scene, goalId, { allowEnded: true })).scene;
     const { adapter } = await this.adapter();
     const result = await adapter.captureResume(scene);
     if (result.status !== "supported") return undefined;
@@ -572,6 +678,65 @@ export class SessionRuntime {
     const state = await this.service.read(), control = await this.options.control.status();
     for (const scene of scenes) this.assertScene(state, scene, control);
     const { adapter } = await this.adapter();
-    return adapter.inspectMany(scenes);
+    const initial = await adapter.inspectMany(scenes);
+    const refreshed = [...scenes];
+    let changed = false;
+    for (const observation of initial) {
+      if (observation.identity === "match" || observation.ownership !== "live" || !observation.reanchor) continue;
+      const index = scenes.findIndex(scene => scene.bindingId === observation.bindingId);
+      if (index < 0) continue;
+      const scene = scenes[index]!;
+      const next = await adapter.reanchor?.(scene);
+      if (!next) continue;
+      await this.service.execute({
+        type: "scene.reanchor", goalId: this.goalIdForScene(state, scene),
+        bindingId: scene.bindingId, attemptId: scene.attemptId, scene: next,
+      });
+      refreshed[index] = next;
+      changed = true;
+    }
+    return changed ? adapter.inspectMany(refreshed) : initial;
+  }
+  /** Explicit human confirmation for a v1 scene without stable ownership, or
+   * a migrated v0 reference. Never closes or kills the old pane. */
+  async confirmLegacyScene(goalId: string | undefined, reason: string) {
+    const state = await this.service.read(), control = await this.options.control.status();
+    this.assertWorkspace(state, control);
+    const entry = reason.trim();
+    if (entry.length < 4) throw new Error("请写明确认旧现场已退出的原因。");
+    let scene: SceneReferenceV1 | undefined;
+    if (goalId) {
+      const goal = state.goals.find(item => item.id === goalId);
+      if (!goal) throw new Error("目标不存在。");
+      this.assertGoal(goal);
+      scene = goal.scene;
+      if (!scene && !goal.legacyScene) throw new Error("目标没有待确认的旧现场。");
+      if (!scene) {
+        await this.service.execute({ type: "scene.legacy.clear", goalId, reason: entry });
+        return true;
+      }
+    } else {
+      scene = state.concierge.scene;
+      if (!scene && !state.concierge.legacyScene) throw new Error("管家没有待确认的旧现场。");
+      if (!scene) {
+        await this.service.execute({ type: "scene.legacy.clear", reason: entry });
+        return true;
+      }
+    }
+    this.assertScene(state, scene, control);
+    if (scene.ownership)
+      throw new SessionError("scene_identity_mismatch",
+        "该现场已有稳定进程证据；请使用安全重绑，不应按旧现场退休。");
+    const { adapter } = await this.adapter();
+    const observed = await adapter.inspect(scene);
+    if (observed.ownership === "live" ||
+      (observed.identity === "match" && observed.reachable && observed.state !== "exited"))
+      throw new SessionError("scene_identity_mismatch",
+        "原现场仍可连接；请先核对原负责人，不能判定其已退出。");
+    await this.service.execute({
+      type: "scene.legacy.confirm", goalId,
+      bindingId: scene.bindingId, attemptId: scene.attemptId, reason: entry,
+    });
+    return true;
   }
 }

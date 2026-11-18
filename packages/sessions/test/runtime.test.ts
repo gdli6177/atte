@@ -31,6 +31,13 @@ async function fixture(t: test.TestContext) {
       const scene: SceneReferenceV1 = {
         version: 1, backend: "herdr", installationId: input.installationId, backendEpoch: input.backendEpoch,
         bindingId: input.bindingId, attemptId: input.attemptId, runtimeId: "runtime", runtimeGeneration: "generation",
+        ownership: {
+          version: 1, samples: 2, capturedAt: new Date().toISOString(),
+          shell: { pid: 1000 + created.length, bornAt: "2026-11-17T00:00:00.000Z" },
+          launcher: { pid: 2000 + created.length, bornAt: "2026-11-17T00:00:00.000Z" },
+          foreground: { pid: 3000 + created.length, bornAt: "2026-11-17T00:00:00.000Z" },
+          processGroupId: 2000 + created.length,
+        },
         locator: { kind: "herdr", session: "test", workspaceId: "w1", tabId: `t${created.length}`, paneId: `p${created.length}` },
       };
       return { status: "created", requestId: input.requestId, scene, mayHaveCreated: true, recoveryId: input.requestId };
@@ -80,7 +87,9 @@ test("rechecking an initialized concierge restores readiness without erasing pre
   const current = (await f.service.read()).concierge;
   assert.equal(current.status, "ready");
   assert.equal(current.detail, undefined);
-  assert.deepEqual(current.live, live);
+  assert.equal(current.live?.state, live.state);
+  assert.equal(current.live?.reachable, live.reachable);
+  assert.equal(current.live?.checkedAt, live.checkedAt);
   assert.equal(f.created.length, 1);
   assert.equal(f.sent.length, 1);
 });
@@ -495,3 +504,181 @@ for (const terminalCommand of ["goal.drop", "goal.complete"] as const) {
     assert.equal(goalCanExecute(restarted), true);
   });
 }
+
+test("inspection re-anchors only after a stable live ownership sample", async t => {
+  const f = await fixture(t);
+  const { scene } = await f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-live" });
+  const next = { ...scene, runtimeId: "runtime-2", runtimeGeneration: "generation-2" };
+  f.adapter.inspect = async current => ({
+    bindingId: current.bindingId,
+    identity: current.runtimeGeneration === "generation-2" ? "match" : "mismatch",
+    reachable: true,
+    state: "idle",
+    ownership: "live",
+    ...(current.runtimeGeneration === "generation-2" ? {} : { reanchor: next }),
+    observedAt: new Date().toISOString(),
+    source: "backend",
+  });
+  f.adapter.inspectMany = async scenes => Promise.all(scenes.map(current => f.adapter.inspect(current)));
+  f.adapter.reanchor = async () => next;
+  const [observation] = await f.runtime.inspect([scene]);
+  assert.equal(observation?.identity, "match");
+  const goal = (await f.service.read()).goals[0]!;
+  assert.equal(goal.scene?.runtimeGeneration, "generation-2");
+  assert.equal(goal.agentRuntime?.attempt.scene?.runtimeGeneration, "generation-2");
+  assert.equal(f.created.length, 1, "the stable pane is reused, not recreated");
+  assert.deepEqual(f.stopped, []);
+});
+
+test("a changed runtime is safely re-anchored before delivery", async t => {
+  const f = await fixture(t);
+  const { scene } = await f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-live" });
+  const next = { ...scene, runtimeId: "runtime-2", runtimeGeneration: "generation-2" };
+  f.adapter.inspect = async current => ({
+    bindingId: current.bindingId,
+    identity: current.runtimeGeneration === "generation-2" ? "match" : "mismatch",
+    reachable: true,
+    state: "idle",
+    ownership: "live",
+    ...(current.runtimeGeneration === "generation-2" ? {} : { reanchor: next }),
+    observedAt: new Date().toISOString(),
+    source: "backend",
+  });
+  f.adapter.inspectMany = async scenes => Promise.all(scenes.map(current => f.adapter.inspect(current)));
+  f.adapter.reanchor = async () => next;
+  const receipt = await f.runtime.send(scene, "after-reanchor", "继续推进");
+  assert.equal(receipt.status, "started");
+  assert.equal(receipt.scene.runtimeGeneration, "generation-2");
+  assert.equal((await f.service.read()).goals[0]!.scene?.runtimeGeneration, "generation-2");
+  assert.equal(f.created.length, 1);
+  assert.deepEqual(f.stopped, []);
+});
+
+test("legacy exit requires explicit confirmation and never closes the old pane", async t => {
+  const f = await fixture(t);
+  const { scene } = await f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-legacy" });
+  await f.service.store.update("test.legacy-scene", state => {
+    const goal = state.goals.find(item => item.id === f.goal.id)!;
+    delete goal.scene!.ownership;
+    delete goal.agentRuntime!.attempt.scene!.ownership;
+    goal.agentRuntime!.lastEventAt = "2026-11-17T00:00:00.000Z";
+    delete goal.agentRuntime!.lastSemanticWriteAt;
+    delete goal.live;
+  });
+  f.adapter.inspect = async current => ({
+    bindingId: current.bindingId, identity: "match", reachable: false, state: "exited",
+    ownership: "legacy", observedAt: new Date().toISOString(), source: "backend",
+  });
+  f.adapter.inspectMany = async scenes => Promise.all(scenes.map(current => f.adapter.inspect(current)));
+  await assert.rejects(f.runtime.recoverOwnerForConsultation(f.goal.id),
+    error => error instanceof Error && /legacy_confirmation_required/.test(error.message));
+  await f.runtime.confirmLegacyScene(f.goal.id, "旧终端窗口已由人确认关闭");
+  const goal = (await f.service.read()).goals[0]!;
+  assert.equal(goal.scene, undefined);
+  assert.equal(goal.attemptHistory?.at(-1)?.attemptId, scene.attemptId);
+  assert.equal(goal.attemptHistory?.at(-1)?.reason, "superseded");
+  assert.equal(f.created.length, 1, "confirmation does not create a replacement");
+  assert.deepEqual(f.stopped, [], "confirmation does not close or kill the old pane");
+});
+
+test("a completed legacy owner stays in history and is never closed without confirmation", async t => {
+  const f = await fixture(t);
+  const { scene } = await f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-legacy-complete" });
+  await f.service.store.update("test.legacy-completed-scene", state => {
+    const goal = state.goals.find(item => item.id === f.goal.id)!;
+    delete goal.scene!.ownership;
+    delete goal.agentRuntime!.attempt.scene!.ownership;
+    goal.agentRuntime!.lastEventAt = "2026-11-17T00:00:00.000Z";
+    delete goal.agentRuntime!.lastSemanticWriteAt;
+    delete goal.live;
+  });
+  const legacyScene = (await f.service.read()).goals[0]!.scene!;
+  f.adapter.inspect = async current => ({
+    bindingId: current.bindingId, identity: "match", reachable: false, state: "exited",
+    ownership: "legacy", observedAt: new Date().toISOString(), source: "backend",
+  });
+  f.adapter.inspectMany = async scenes => Promise.all(scenes.map(current => f.adapter.inspect(current)));
+
+  await f.service.execute({ type: "goal.complete", goalId: f.goal.id, note: "用户确认目标已经完成" });
+  await assert.rejects(f.runtime.close(legacyScene, f.goal.id),
+    error => error instanceof Error && /legacy_confirmation_required/.test(error.message));
+
+  const completed = (await f.service.read()).goals[0]!;
+  assert.equal(completed.status, "completed");
+  assert.equal(completed.scene?.bindingId, legacyScene.bindingId,
+    "completion preserves the unverified scene instead of retiring it silently");
+  assert.deepEqual(f.stopped, [], "completion never closes an unverified legacy pane");
+
+  await f.runtime.confirmLegacyScene(f.goal.id, "旧负责人已由人现场确认退出");
+  const confirmed = (await f.service.read()).goals[0]!;
+  assert.equal(confirmed.status, "completed");
+  assert.equal(confirmed.scene, undefined);
+  assert.equal(confirmed.attemptHistory?.at(-1)?.attemptId, scene.attemptId);
+  assert.equal(confirmed.attemptHistory?.at(-1)?.reason, "superseded");
+  assert.deepEqual(f.stopped, [], "explicit confirmation still does not close the old pane");
+});
+
+test("a legacy concierge with changed identity offers explicit recovery without creating a second concierge", async t => {
+  const f = await fixture(t);
+  const scene = await f.runtime.prepareConcierge();
+  await f.service.store.update("test.legacy-concierge", state => {
+    delete state.concierge.scene!.ownership;
+  });
+  f.adapter.inspect = async current => ({
+    bindingId: current.bindingId, identity: "mismatch", reachable: false, state: "unknown",
+    ownership: "legacy", observedAt: new Date().toISOString(), source: "backend",
+  });
+  await assert.rejects(f.runtime.prepareConcierge(), /legacy_confirmation_required/);
+  assert.equal((await f.service.read()).concierge.scene?.bindingId, scene.bindingId);
+  await f.runtime.confirmLegacyScene(undefined, "原管家终端已由人确认结束");
+  assert.equal((await f.service.read()).concierge.scene, undefined);
+  assert.equal(f.created.length, 1);
+  assert.equal(f.sent.length, 1);
+  assert.deepEqual(f.stopped, []);
+});
+
+test("a new semantic write between two exit samples preserves the original owner", async t => {
+  const f = await fixture(t);
+  const { scene } = await f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-exit-race" });
+  let exitSamples = 0, firstSampleAt = 0, secondSampleAt = 0;
+  f.adapter.inspect = async current => {
+    exitSamples++;
+    if (exitSamples === 2) firstSampleAt = Date.now();
+    if (exitSamples === 3) {
+      secondSampleAt = Date.now();
+      await f.service.execute({
+        type: "goal.progress", goalId: f.goal.id, actor: "owner-exit-race",
+        summary: "负责人仍在执行，退出核对期间补交真实结果。",
+      });
+    }
+    return {
+      bindingId: current.bindingId, identity: "match", reachable: false, state: "exited",
+      ownership: "ended", observedAt: new Date().toISOString(), source: "backend",
+    };
+  };
+  await assert.rejects(f.runtime.recoverOwnerForConsultation(f.goal.id), /退出核对期间收到新写回/);
+  const current = (await f.service.read()).goals[0]!;
+  assert(secondSampleAt - firstSampleAt >= 2_000);
+  assert.equal(current.scene?.bindingId, scene.bindingId);
+  assert.equal(current.attemptHistory?.length ?? 0, 0);
+  assert.equal(f.created.length, 1);
+  assert.deepEqual(f.stopped, []);
+});
+
+test("an uncertain runtime neither re-anchors, sends, retires, nor creates a replacement", async t => {
+  const f = await fixture(t);
+  const { scene } = await f.runtime.launchOwner({ goalId: f.goal.id, name: "owner-uncertain" });
+  const before = await f.service.read();
+  const sentBefore = f.sent.length;
+  f.adapter.inspect = async current => ({
+    bindingId: current.bindingId, identity: "mismatch", reachable: false, state: "unknown",
+    ownership: "uncertain", observedAt: new Date().toISOString(), source: "backend",
+  });
+  f.adapter.inspectMany = async scenes => Promise.all(scenes.map(current => f.adapter.inspect(current)));
+  await assert.rejects(f.runtime.send(scene, "uncertain-send", "不应发送"), /无法稳定确认|身份已改变/);
+  await assert.rejects(f.runtime.recoverOwnerForConsultation(f.goal.id), /尚未确认停止|无法稳定确认/);
+  assert.deepEqual(await f.service.read(), before);
+  assert.equal(f.sent.length, sentBefore, "no message reaches an unverified scene");
+  assert.equal(f.created.length, 1, "no replacement is created");
+  assert.deepEqual(f.stopped, []);
+});

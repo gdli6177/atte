@@ -38,13 +38,20 @@ test("review offers one message entry and independent acceptance in both detail 
     const markup = renderToStaticMarkup(createElement(GoalActionDock, props));
     assert.equal((markup.match(/>给管家发消息<\/span>/g) ?? []).length, 1);
     assert.match(markup, /验收通过<\/span>/);
-    assert.equal((markup.match(/<button\b/g) ?? []).length, 2);
-    assert.doesNotMatch(markup, /问管家|退回修改/);
+    assert.match(markup, /补充要求，退回继续<\/span>/);
+    assert.equal((markup.match(/<button\b/g) ?? []).length, 3);
+    assert.doesNotMatch(markup, /问管家/);
     const composer = renderToStaticMarkup(createElement(GoalActionDock, { ...props, replyMode: "message" }));
     assert.match(composer, /发给管家的消息/);
     assert.match(composer, /发送后保留待验收状态/);
     assert.match(composer, /普通提问发送后保留待验收状态/);
-    assert.match(composer, /需要修改成果时，请明确说明，由管家退回并继续推进/);
+    assert.match(composer, /补充要求，退回继续/);
+    const rework = renderToStaticMarkup(createElement(GoalActionDock, { ...props, replyMode: "rework" }));
+    assert.match(rework, /补充要求，退回继续/);
+    assert.match(rework, /更新目标标题（可选）/);
+    assert.match(rework, /原始需求不会改写/);
+    assert.match(rework, /退回并继续/);
+    assert.match(rework, /同一轮补证不增加审查轮次/);
     const failingComposer = renderToStaticMarkup(createElement(GoalActionDock, {
       ...props, replyMode: "message", error: "发送失败",
     }));

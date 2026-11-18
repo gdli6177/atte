@@ -23,10 +23,12 @@ export const statusLabel = {
 export const activityKindLabel: Record<Activity["kind"], string> = {
   created: "目标",
   message: "消息",
+  metadata: "元数据",
   progress: "答复",
   waiting: "等待",
   decision: "决定",
   delivery: "交付",
+  delivery_amend: "补充验收",
   accepted: "验收",
   rework: "返工",
   dropped: "放弃",
@@ -141,6 +143,14 @@ export function sceneSyncPresentation(goal: Goal) {
 }
 
 function executionPresentation(goal: Goal): Pick<GoalPresentation, "label" | "detail" | "tone"> {
+  // A fresh working observation outranks an older reconciliation request.
+  // The next watchdog pass clears the request; the panel should not keep
+  // asking the user to check a scene that is visibly executing again.
+  if (goal.live?.reachable !== false && goal.live?.state === "working" &&
+    Date.now() - Date.parse(goal.live.checkedAt) <= 2 * 60_000) return {
+    label: "执行中", tone: "running",
+    detail: "负责人正在执行；暂时不需要你处理。",
+  };
   if (goal.watchdog?.contactedAt) return {
     label: "已请管家核对", tone: "waiting",
     detail: "核对请求已送达管家，尚未收到新的处理结果；这不表示管家此刻仍在执行。",

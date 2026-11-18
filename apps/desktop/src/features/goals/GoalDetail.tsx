@@ -254,6 +254,9 @@ export function GoalDetail({
                   {goal.status === "review" && (
                     <span>第 {goal.reviewRounds ?? 1} 轮审查</span>
                   )}
+                  {goal.status === "review" && !!goal.delivery?.amendments?.length && (
+                    <span>同轮补证 {goal.delivery.amendments.length} 次</span>
+                  )}
                   {readOnly && <span>只读历史 · 不再执行或打开运行现场</span>}
                   <time>{time(goal.updatedAt)} 更新</time>
                 </div>
@@ -345,7 +348,7 @@ export function GoalDetail({
                 <header>
                   <span>
                     <FileText size={14} />
-                    目标说明
+                    原始需求
                   </span>
                   {descriptionCanCollapse && (
                     <button

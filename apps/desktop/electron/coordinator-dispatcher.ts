@@ -24,6 +24,7 @@ export interface CoordinatorDispatcherHooks {
 export class CoordinatorDispatcher {
   private draining?: Promise<void>;
   private wakeRequested = false;
+  private paused = false;
 
   constructor(
     readonly inbox: CoordinatorInbox,
@@ -47,6 +48,7 @@ export class CoordinatorDispatcher {
 
   drain() {
     if (this.draining) return this.draining;
+    if (this.paused) return Promise.resolve();
     const draining = this.drainOnce()
       .finally(async () => {
         if (this.draining === draining) this.draining = undefined;
@@ -56,12 +58,21 @@ export class CoordinatorDispatcher {
     return draining;
   }
 
+  pause() {
+    this.paused = true;
+    return this.draining ?? Promise.resolve();
+  }
+
   private async drainOnce() {
-    while (true) {
+    while (!this.paused) {
       this.wakeRequested = false;
       const item = await this.inbox.claimNext();
       if (!item) {
         if (this.wakeRequested) continue;
+        return;
+      }
+      if (this.paused) {
+        await this.inbox.defer(item.id);
         return;
       }
       let result: CoordinatorExecutionResult;

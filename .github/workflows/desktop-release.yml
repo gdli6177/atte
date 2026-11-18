@@ -37,11 +37,60 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Import release signing certificate
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          ATTE_MACOS_CERTIFICATE_P12: ${{ secrets.ATTE_MACOS_CERTIFICATE_P12 }}
+          ATTE_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.ATTE_MACOS_CERTIFICATE_PASSWORD }}
+          ATTE_MACOS_SIGN_IDENTITY: ${{ secrets.ATTE_MACOS_SIGN_IDENTITY }}
+          ATTE_MACOS_SIGN_FINGERPRINT: ${{ secrets.ATTE_MACOS_SIGN_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          : "${ATTE_MACOS_CERTIFICATE_P12:?Missing ATTE_MACOS_CERTIFICATE_P12 secret}"
+          : "${ATTE_MACOS_CERTIFICATE_PASSWORD:?Missing ATTE_MACOS_CERTIFICATE_PASSWORD secret}"
+          : "${ATTE_MACOS_SIGN_IDENTITY:?Missing ATTE_MACOS_SIGN_IDENTITY secret}"
+          : "${ATTE_MACOS_SIGN_FINGERPRINT:?Missing ATTE_MACOS_SIGN_FINGERPRINT secret}"
+
+          KEYCHAIN="$RUNNER_TEMP/atte-release-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          P12="$RUNNER_TEMP/atte-release-signing.p12"
+          printf '%s' "$ATTE_MACOS_CERTIFICATE_P12" | /usr/bin/base64 -D > "$P12"
+          chmod 600 "$P12"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$P12" -k "$KEYCHAIN" -P "$ATTE_MACOS_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security find-certificate -c "$ATTE_MACOS_SIGN_IDENTITY" -p "$KEYCHAIN" \
+            > "$RUNNER_TEMP/atte-release-signing.pem"
+          sudo -n security add-trusted-cert -d -r trustRoot -p codeSign \
+            -k "$KEYCHAIN" "$RUNNER_TEMP/atte-release-signing.pem"
+
+          keychains=()
+          while read -r line; do
+            line="${line#\"}"
+            line="${line%\"}"
+            keychains+=("$line")
+          done < <(security list-keychains -d user)
+          security list-keychains -d user -s "$KEYCHAIN" "${keychains[@]}"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+          rm -f "$P12"
       - name: Build and sign desktop installers
         run: pnpm desktop:dist
         env:
           # Avoid the shared, unauthenticated GitHub API quota on hosted runners.
           GITHUB_TOKEN: ${{ github.token }}
+          ATTE_RELEASE_SIGNING: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
+          ATTE_MACOS_SIGN_IDENTITY: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.ATTE_MACOS_SIGN_IDENTITY || '' }}
+          ATTE_MACOS_SIGN_FINGERPRINT: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.ATTE_MACOS_SIGN_FINGERPRINT || '' }}
+      - name: Remove release signing keychain
+        if: always() && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          security delete-keychain "$RUNNER_TEMP/atte-release-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/atte-release-signing.p12" "$RUNNER_TEMP/atte-release-signing.pem"
       - run: pnpm test:first-launch
       - run: pnpm test:diagnostics
       - name: Run semantic write notification smoke
@@ -105,8 +154,8 @@ jobs:
           if gh release view "$RELEASE_TAG" --json isDraft > existing.json; then
             test "$(jq -r .isDraft existing.json)" = true || { echo 'Published release is immutable to this workflow'; exit 1; }
             gh release upload "$RELEASE_TAG" installers/* --clobber
-            gh release edit "$RELEASE_TAG" --title "Atte ${RELEASE_TAG#v}" --notes-file "$NOTES_FILE"
+            gh release edit "$RELEASE_TAG" --prerelease=false --title "Atte ${RELEASE_TAG#v}" --notes-file "$NOTES_FILE"
           else
-            gh release create "$RELEASE_TAG" installers/* --draft --prerelease --verify-tag \
+            gh release create "$RELEASE_TAG" installers/* --draft --verify-tag \
               --title "Atte ${RELEASE_TAG#v}" --notes-file "$NOTES_FILE"
           fi
