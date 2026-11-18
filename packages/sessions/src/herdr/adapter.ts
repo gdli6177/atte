@@ -426,6 +426,19 @@ export class HerdrAdapter implements SessionAdapter {
           ...(!agentsAvailable ? { detail: "agent_list_unavailable" } : {}),
         };
       }
+      // A custom Agent launcher can be gone while its Pane shell remains. Once
+      // both the launcher and its foreground child are verifiably absent, the
+      // old scene is ended even if the Pane was reused by a manual process.
+      // Keep this narrower than the all-absent branch below: an unverifiable
+      // shell is never enough evidence to retire a scene.
+      if (sameGeneration && paneKnown && probes[0].status !== "unverifiable" &&
+        probes[1].status !== "unverifiable" && probes[2].status === "absent") {
+        return {
+          ...observation, identity: "match", reachable: false,
+          state: "exited", ownership: "ended",
+          detail: "confirmed_scene_exit_with_reused_pane",
+        };
+      }
       if (sameGeneration && paneKnown && paneMissing && allAbsent(probes)) {
         return {
           ...observation, identity: "match", state: "exited", ownership: "ended",

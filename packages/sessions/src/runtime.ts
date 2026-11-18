@@ -418,7 +418,8 @@ export class SessionRuntime {
     await this.service.execute({ type: "scene.concierge.status", status: "ready", initializedAttemptId: scene.attemptId });
     return scene;
   }
-  async prepareConcierge() {
+  async prepareConcierge(options: { recover?: boolean } = {}) {
+    const recover = options.recover !== false;
     const state = await this.service.read();
     this.assertWorkspace(state, await this.options.control.status());
     if (state.concierge.scene) {
@@ -429,6 +430,9 @@ export class SessionRuntime {
           "旧管家现场缺少稳定的进程归属证据；请先确认原管家已经退出，不能静默重绑或启动第二位管家。");
       if (observation.identity !== "match") throw new SessionError("scene_identity_mismatch", "管家运行时已改变，请重新核实现场。");
       if (observation.state !== "exited") return this.initializeConcierge(scene);
+      if (!recover)
+        throw new SessionError("scene_ended",
+          "管家现场已结束；已保留原现场，等待你确认恢复后再创建新的管家。");
       if (!state.concierge.scene.ownership)
         throw new SessionError("legacy_confirmation_required",
           "旧管家现场没有稳定的进程归属证据；请先确认原管家已经退出，不能静默启动第二位管家。");

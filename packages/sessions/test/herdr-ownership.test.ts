@@ -26,6 +26,8 @@ async function fixture(t: test.TestContext) {
   ]);
   let generation = "generation-one";
   let alive = true;
+  let shellAlive = true;
+  let launcherAlive = true;
   let panePresent = true;
   let processUnverifiable = false;
   let foregroundPid = 500;
@@ -43,7 +45,9 @@ async function fixture(t: test.TestContext) {
     ): Promise<ProcessProbe> => {
       if (processUnverifiable)
         return { status: "unverifiable", detail: "process_table_unavailable" };
-      if (!alive) return { status: "absent" };
+      if (!shellAlive && identity.pid === 100) return { status: "absent" };
+      if (!launcherAlive && identity.pid === 400) return { status: "absent" };
+      if (!alive && identity.pid === 500) return { status: "absent" };
       if (identity.bornAt !== births.get(identity.pid)) return { status: "absent" };
       if (identity.pid === 400 && processGroupId !== undefined)
         return { status: "absent", detail: "launcher_process_group_is_distinct" };
@@ -115,7 +119,8 @@ async function fixture(t: test.TestContext) {
   return {
     adapter, create, commands,
     restart: () => { generation = "generation-two"; },
-    exit: () => { alive = false; panePresent = false; },
+    exit: () => { alive = false; shellAlive = false; launcherAlive = false; panePresent = false; },
+    foregroundExit: () => { alive = false; },
     unverifiable: () => { processUnverifiable = true; },
     failWorkspace: (workspace: string) => { failedWorkspaces.add(workspace); },
     failProcessInfo: (pane: string) => { failedProcessInfo.add(pane); },
@@ -192,6 +197,17 @@ test("a same-runtime pane and all process identities gone is a confirmed end", a
   assert.equal(observed.ownership, "ended");
   assert.equal(observed.state, "exited");
   assert.equal(observed.reanchor, undefined);
+});
+
+test("a foreground exit with a reused pane is a confirmed ended scene", async t => {
+  const f = await fixture(t), scene = await f.create();
+  f.foregroundExit();
+  const observed = await f.adapter.inspect(scene);
+  assert.equal(observed.identity, "match");
+  assert.equal(observed.state, "exited");
+  assert.equal(observed.ownership, "ended");
+  assert.equal(observed.reachable, false);
+  assert.equal(observed.detail, "confirmed_scene_exit_with_reused_pane");
 });
 
 test("unverifiable process sampling is uncertain, never a confirmed exit", async t => {

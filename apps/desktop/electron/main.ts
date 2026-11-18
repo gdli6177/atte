@@ -750,6 +750,8 @@ async function executeCoordinatorItem(
     } catch (error) {
       if (error instanceof SessionError && error.code === "backend_busy")
         return { status: "deferred", detail: error.message };
+      if (isConciergeUnavailable(error))
+        return { status: "deferred", detail: error instanceof Error ? error.message : String(error) };
       throw error;
     }
   }
@@ -791,6 +793,8 @@ async function executeCoordinatorItem(
     } catch (error) {
       if (error instanceof SessionError && error.code === "backend_busy")
         return { status: "deferred", detail: error.message };
+      if (isConciergeUnavailable(error))
+        return { status: "deferred", detail: error instanceof Error ? error.message : String(error) };
       const detail = error instanceof Error ? error.message : String(error);
       await target.execute({
         type: "watchdog.report",
@@ -871,6 +875,8 @@ async function executeCoordinatorItem(
   } catch (error) {
     if (error instanceof SessionError && error.code === "backend_busy")
       return { status: "deferred", detail: error.message };
+    if (isConciergeUnavailable(error))
+      return { status: "deferred", detail: error instanceof Error ? error.message : String(error) };
     const detail = error instanceof Error ? error.message : String(error);
     const latest = (await target.read()).goals.find(goal => goal.id === item.goalId);
     if (latest && !isReadOnlyGoal(latest) &&
@@ -905,7 +911,7 @@ async function resetCoordinatorContextIfNeeded(target: WorkspaceService) {
     status: "not_ready",
     detail: "正在轮换管家上下文，已完成案卷仍保存在工作区。",
   });
-  await prepareConcierge(target);
+  await prepareConcierge(target, true);
   await inbox.markContextReset();
   broadcastCoordinatorStatus(await inbox.status());
 }
@@ -998,14 +1004,23 @@ async function restartOwnerSession(target: WorkspaceService, goal: Goal) {
     task: restartOwnerTask(goal),
   });
 }
-async function prepareConcierge(target = activeService()) {
+function isConciergeUnavailable(error: unknown) {
+  if (error instanceof SessionError)
+    return ["scene_identity_mismatch", "scene_ended", "legacy_confirmation_required", "launch_unconfirmed"]
+      .includes(error.code);
+  if (error instanceof Error && error.cause instanceof SessionError)
+    return ["scene_identity_mismatch", "scene_ended", "legacy_confirmation_required", "launch_unconfirmed"]
+      .includes(error.cause.code);
+  return false;
+}
+async function prepareConcierge(target = activeService(), recover = false) {
   const pending = preparations.get(target.root);
   if (pending) return pending;
-  const preparing = doPrepareConcierge(target);
+  const preparing = doPrepareConcierge(target, recover);
   preparations.set(target.root, preparing);
   try { return await preparing; } finally { preparations.delete(target.root); }
 }
-async function doPrepareConcierge(target: WorkspaceService) {
+async function doPrepareConcierge(target: WorkspaceService, recover: boolean) {
   await installCli(target.root);
   await installDetectedAgentHooks();
   const status = await herdrInstallation.ensure();
@@ -1022,7 +1037,7 @@ async function doPrepareConcierge(target: WorkspaceService) {
       detail: "正在准备全局管家…",
     });
   try {
-    const scene = await sessionRuntime(target.root).prepareConcierge();
+    const scene = await sessionRuntime(target.root).prepareConcierge({ recover });
     // The runtime owns initialization/readiness. Reusing a verified concierge
     // must not clear its presence or generate another identity handshake.
     return scene;
@@ -1034,8 +1049,13 @@ async function doPrepareConcierge(target: WorkspaceService) {
       .split(/\r?\n/).find(line => line.trim())?.trim() ?? "";
     const detail = reported.slice(0, 800) ||
       "管家初始化尚未确认；请打开原现场核对，Atte 不会重复创建或重发。";
-    await target.execute({ type: "concierge.status", status: "error", reference: (await target.read()).concierge, detail });
-    throw new Error(`管家尚未准备好：${detail}`);
+    await target.execute({
+      type: "concierge.status",
+      status: recover ? "error" : "not_ready",
+      reference: (await target.read()).concierge,
+      detail,
+    });
+    throw new Error(`管家尚未准备好：${detail}`, { cause: error });
   }
 }
 async function openHerdr(reference?: HerdrReference, goalId?: string) {
@@ -1154,7 +1174,7 @@ async function herdrInstallationStatusBinary() {
 async function sceneForGoal(target: WorkspaceService, goalId?: string) {
   const state = await target.read();
   if (!goalId) {
-    return prepareConcierge(target);
+    return prepareConcierge(target, true);
   }
   const item = state.goals.find(goal => goal.id === goalId);
   if (!item) throw new Error("目标不存在");
@@ -1169,7 +1189,7 @@ async function sceneForGoal(target: WorkspaceService, goalId?: string) {
       throw new Error("原现场已结束，请在目标详情点击“恢复并进入现场”。未自动创建新负责人。");
     return (await target.read()).goals.find(goal => goal.id === goalId)?.scene ?? item.scene;
   }
-  return prepareConcierge(target);
+  return prepareConcierge(target, true);
 }
 async function diagnosticsReport(): Promise<string> {
   const facts: string[] = [];
@@ -1804,7 +1824,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("atte:prepare-concierge", (event) => {
     sender(event);
     sessionPoller.reset();
-    return prepareConcierge();
+    return prepareConcierge(activeService(), true);
   });
   ipcMain.handle("atte:coordinator-status", async event => {
     sender(event);
@@ -1900,7 +1920,7 @@ app.whenReady().then(async () => {
   const saved = await readFile(join(app.getPath("userData"), "workspaces.json"), "utf8").then(JSON.parse).catch(() => null), workspace = environmentValue(process.env, "TEST_WORKSPACE") ?? saved?.selected;
   if (workspace) await openWorkspace(workspace).catch((error) => window.webContents.send("atte:event", { type: "diagnostic", message: String(error) }));
   if (environmentValue(process.env, "TEST_PREPARE_CONCIERGE") === "1") {
-    void prepareConcierge().catch((error) => window.webContents.send("atte:event", { type: "diagnostic", message: String(error) }));
+    void prepareConcierge(activeService(), true).catch((error) => window.webContents.send("atte:event", { type: "diagnostic", message: String(error) }));
   }
   synchronizeTimer = setInterval(() => void synchronize(), 10_000);
   void synchronize();

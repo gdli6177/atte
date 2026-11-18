@@ -169,6 +169,23 @@ test("an exited concierge is recreated once while an unverifiable occupant is pr
   assert.equal(f.created.length, 2, "A replacement occupant is never closed or duplicated.");
 });
 
+test("background concierge preparation preserves an ended scene until explicit recovery", async t => {
+  const f = await fixture(t);
+  const original = await f.runtime.prepareConcierge();
+  const inspect = f.adapter.inspect;
+  f.adapter.inspect = async scene => scene.bindingId === original.bindingId
+    ? { ...await inspect(scene), state: "exited", reachable: false, ownership: "ended" }
+    : inspect(scene);
+  await assert.rejects(f.runtime.prepareConcierge({ recover: false }), /scene_ended/);
+  const preserved = (await f.service.read()).concierge;
+  assert.equal(preserved.scene?.bindingId, original.bindingId);
+  assert.equal(f.created.length, 1);
+  assert.deepEqual(f.stopped, []);
+  const replacement = await f.runtime.prepareConcierge();
+  assert.notEqual(replacement.attemptId, original.attemptId);
+  assert.equal(f.created.length, 2);
+});
+
 test("a scoped concierge launches a separate owner and cannot launch for another case", async t => {
   const f = await fixture(t);
   await f.runtime.prepareConcierge();
