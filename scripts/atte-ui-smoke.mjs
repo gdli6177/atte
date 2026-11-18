@@ -220,7 +220,7 @@ try {
     await capture(`detail-${value}`);
     await page.getByRole("button", { name: "关闭", exact: true }).click();
     await page.getByRole("button", { name: "设置", exact: true }).click();
-    await expect(page.getByRole("navigation", { name: "设置分组" }).getByRole("link")).toHaveCount(6);
+    await expect(page.getByRole("navigation", { name: "设置分组" }).getByRole("link")).toHaveCount(5);
     const settings = page.locator(".settings");
     const maintenance = page.locator("#settings-maintenance");
     const maintenanceSummary = maintenance.locator(":scope > summary");
@@ -231,6 +231,9 @@ try {
     await expect(settings.getByRole("button", { name: "打开内嵌轻现场", exact: true })).toHaveCount(0);
     await expect(settings.locator(".policy-row")).toHaveCount(0);
     const policyBefore = (await service.read()).projects.map(project => ({ id: project.id, policy: project.policy }));
+    await page.getByRole("link", { name: "高级与维护", exact: true }).click();
+    await expect(maintenance).toHaveJSProperty("open", true);
+    await expect(maintenanceSummary).toBeFocused();
     const projectPolicies = settings.locator(".settings-policy");
     await expect(projectPolicies).toHaveJSProperty("open", false);
     await projectPolicies.locator(":scope > summary").focus();
@@ -247,7 +250,9 @@ try {
     await expect(settings.locator(".policy-row")).toHaveCount(0);
     assert.deepEqual((await service.read()).projects.map(project => ({ id: project.id, policy: project.policy })),
       policyBefore, "expanding, cancelling and collapsing project exceptions must not change authorization");
-    await expect(settings.locator("#settings-authority details").last()).toHaveJSProperty("open", false);
+    await maintenanceSummary.focus();
+    await page.keyboard.press("Space");
+    await expect(maintenance).toHaveJSProperty("open", false);
     await maintenanceSummary.focus();
     await page.keyboard.press("Enter");
     await expect(maintenance).toHaveJSProperty("open", true);
